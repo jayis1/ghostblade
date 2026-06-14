@@ -912,6 +912,167 @@ static const struct file_operations apex_bridge_fops = {
 };
 
 /* ========================================================================
+ * Sysfs Attributes for Telemetry and Status
+ * ======================================================================== */
+
+/*
+ * These sysfs attributes expose telemetry and device status information
+ * through /sys/class/apex/apex_bridge0/ for userspace monitoring tools
+ * and shell scripts. This complements the ioctl interface which is
+ * better suited for high-frequency programmatic access.
+ *
+ * Available attributes:
+ *   rssi_dbm_x10    - SDR RSSI in dBm × 10
+ *   temp_c_x10      - MCU die temperature in °C × 10
+ *   vbat_mv         - Battery voltage in mV
+ *   cc1101_rssi_x10 - CC1101 sub-GHz RSSI in dBm × 10
+ *   nfc_field_mv    - NFC field strength in mV
+ *   mcu_flags       - MCU status flags (hex)
+ *   uptime_ms       - MCU uptime in milliseconds
+ *   driver_status   - Driver status flags (hex)
+ *   spi_errors      - Cumulative SPI error count
+ */
+
+static ssize_t rssi_dbm_x10_show(struct device *dev,
+                                  struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint16_t val;
+
+    spin_lock(&adev->rx_lock);
+    val = adev->last_telem.rssi_dbm_x10;
+    spin_unlock(&adev->rx_lock);
+
+    return sprintf(buf, "%d\n", (int16_t)le16_to_cpu(val));
+}
+static DEVICE_ATTR_RO(rssi_dbm_x10);
+
+static ssize_t temp_c_x10_show(struct device *dev,
+                                 struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint16_t val;
+
+    spin_lock(&adev->rx_lock);
+    val = adev->last_telem.temp_c_x10;
+    spin_unlock(&adev->rx_lock);
+
+    return sprintf(buf, "%d\n", (int16_t)le16_to_cpu(val));
+}
+static DEVICE_ATTR_RO(temp_c_x10);
+
+static ssize_t vbat_mv_show(struct device *dev,
+                              struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint16_t val;
+
+    spin_lock(&adev->rx_lock);
+    val = adev->last_telem.vbat_mv;
+    spin_unlock(&adev->rx_lock);
+
+    return sprintf(buf, "%u\n", le16_to_cpu(val));
+}
+static DEVICE_ATTR_RO(vbat_mv);
+
+static ssize_t cc1101_rssi_x10_show(struct device *dev,
+                                      struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint16_t val;
+
+    spin_lock(&adev->rx_lock);
+    val = adev->last_telem.cc1101_rssi_x10;
+    spin_unlock(&adev->rx_lock);
+
+    return sprintf(buf, "%d\n", (int16_t)le16_to_cpu(val));
+}
+static DEVICE_ATTR_RO(cc1101_rssi_x10);
+
+static ssize_t nfc_field_mv_show(struct device *dev,
+                                   struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint16_t val;
+
+    spin_lock(&adev->rx_lock);
+    val = adev->last_telem.nfc_field_mv;
+    spin_unlock(&adev->rx_lock);
+
+    return sprintf(buf, "%u\n", le16_to_cpu(val));
+}
+static DEVICE_ATTR_RO(nfc_field_mv);
+
+static ssize_t mcu_flags_show(struct device *dev,
+                               struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint16_t val;
+
+    spin_lock(&adev->rx_lock);
+    val = adev->last_telem.flags;
+    spin_unlock(&adev->rx_lock);
+
+    return sprintf(buf, "0x%04x\n", le16_to_cpu(val));
+}
+static DEVICE_ATTR_RO(mcu_flags);
+
+static ssize_t uptime_ms_show(struct device *dev,
+                                struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint32_t val;
+
+    spin_lock(&adev->rx_lock);
+    val = adev->last_telem.uptime_ms;
+    spin_unlock(&adev->rx_lock);
+
+    return sprintf(buf, "%u\n", le32_to_cpu(val));
+}
+static DEVICE_ATTR_RO(uptime_ms);
+
+static ssize_t driver_status_show(struct device *dev,
+                                    struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint32_t status = 0;
+
+    if (test_bit(APEX_FLAG_MCU_READY, &adev->flags))
+        status |= BIT(0);
+    if (test_bit(APEX_FLAG_MCU_RESET, &adev->flags))
+        status |= BIT(1);
+    if (test_bit(APEX_FLAG_SPI_ERROR, &adev->flags))
+        status |= BIT(2);
+
+    return sprintf(buf, "0x%08x\n", status);
+}
+static DEVICE_ATTR_RO(driver_status);
+
+static ssize_t spi_errors_show(struct device *dev,
+                                 struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+
+    return sprintf(buf, "%lu\n",
+                   test_bit(APEX_FLAG_SPI_ERROR, &adev->flags) ? 1UL : 0UL);
+}
+static DEVICE_ATTR_RO(spi_errors);
+
+static struct attribute *apex_bridge_attrs[] = {
+    &dev_attr_rssi_dbm_x10.attr,
+    &dev_attr_temp_c_x10.attr,
+    &dev_attr_vbat_mv.attr,
+    &dev_attr_cc1101_rssi_x10.attr,
+    &dev_attr_nfc_field_mv.attr,
+    &dev_attr_mcu_flags.attr,
+    &dev_attr_uptime_ms.attr,
+    &dev_attr_driver_status.attr,
+    &dev_attr_spi_errors.attr,
+    NULL,
+};
+ATTRIBUTE_GROUPS(apex_bridge);
+
+/* ========================================================================
  * SPI Driver Probe & Remove
  * ======================================================================== */
 
@@ -1009,9 +1170,10 @@ static int apex_bridge_probe(struct spi_device *spi)
         goto err_del_cdev;
     }
 
-    /* Create device node */
-    dev->dev = device_create(dev->class, &spi->dev, dev->devt,
-                              dev, DEVICE_NAME "0");
+    /* Create device node (with sysfs telemetry attributes) */
+    dev->dev = device_create_with_groups(dev->class, &spi->dev, dev->devt,
+                                          dev, apex_bridge_groups,
+                                          DEVICE_NAME "0");
     if (IS_ERR(dev->dev)) {
         ret = PTR_ERR(dev->dev);
         dev_err(&spi->dev, "Failed to create device: %d\n", ret);
