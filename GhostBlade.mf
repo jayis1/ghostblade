@@ -1,6 +1,6 @@
 [Manifest.Metadata]
-DeviceName        = "Apex One"
-Codename          = "Project Cyber-Swiss"
+DeviceName        = "GhostBlade"
+Codename          = "Project NullSpectre"
 TargetClass       = "Advanced Mobile Pentesting Lab"
 Author            = "Hardware/Software Co-Design Engine"
 Date              = "2026-06-14"

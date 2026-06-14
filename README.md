@@ -1,8 +1,8 @@
 <div align="center">
 
-# Apex One
+# GhostBlade
 
-### Project Cyber-Swiss
+### Project NullSpectre
 
 **Advanced Mobile Pentesting Lab**
 
@@ -11,11 +11,11 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 [![License: CERN-OHL-S v2](https://img.shields.io/badge/Hardware-CERN--OHL--S%20v2-blue)](LICENSE)
 [![License: GPL-2.0+](https://img.shields.io/badge/Firmware-GPL--2.0--or--later-green)](LICENSE)
 [![License: CC-BY-SA 4.0](https://img.shields.io/badge/Docs-CC--BY--SA%204.0-orange)](LICENSE)
-[![GitHub commit activity](https://img.shields.io/github/commit-activity/t/jayis1/apex-one)](https://github.com/jayis1/apex-one/commits/main)
-[![GitHub last commit](https://img.shields.io/github/last-commit/jayis1/apex-one)](https://github.com/jayis1/apex-one/commits/main)
-[![GitHub repo size](https://img.shields.io/github/repo-size/jayis1/apex-one)](https://github.com/jayis1/apex-one)
-[![GitHub issues](https://img.shields.io/github/issues/jayis1/apex-one)](https://github.com/jayis1/apex-one/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/jayis1/apex-one)](https://github.com/jayis1/apex-one/pulls)
+[![GitHub commit activity](https://img.shields.io/github/commit-activity/t/jayis1/ghostblade)](https://github.com/jayis1/ghostblade/commits/main)
+[![GitHub last commit](https://img.shields.io/github/last-commit/jayis1/ghostblade)](https://github.com/jayis1/ghostblade/commits/main)
+[![GitHub repo size](https://img.shields.io/github/repo-size/jayis1/ghostblade)](https://github.com/jayis1/ghostblade)
+[![GitHub issues](https://img.shields.io/github/issues/jayis1/ghostblade)](https://github.com/jayis1/ghostblade/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/jayis1/ghostblade)](https://github.com/jayis1/ghostblade/pulls)
 
 </div>
 
@@ -23,7 +23,7 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 
 ## What Is This?
 
-Apex One is a pocket-sized penetration testing device that combines a powerful Linux SoC with a real-time coprocessor to deliver wideband SDR, sub-GHz radio, NFC, and Wi-Fi 6E — all in a form factor that fits in your hand.
+GhostBlade is a pocket-sized penetration testing device that combines a powerful Linux SoC with a real-time coprocessor to deliver wideband SDR, sub-GHz radio, NFC, and Wi-Fi 6E — all in a form factor that fits in your hand.
 
 The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling) while the RK3576 runs a full Linux distribution with pentesting tools.
 
@@ -33,7 +33,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Apex One Board                        │
+│                  GhostBlade Board                     │
 │                                                          │
 │  ┌──────────────┐  SPI0 @ 50 MHz  ┌──────────────┐     │
 │  │   RK3576     │◄──────────────►│   RP2350B     │     │
@@ -250,4 +250,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. In short:
 
 ---
 
-*Apex One — Project Cyber-Swiss. Designed for those who build, test, and secure.*
+*GhostBlade — Project NullSpectre. Designed for those who build, test, and secure.*
