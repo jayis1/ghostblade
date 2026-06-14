@@ -1,0 +1,88 @@
+name: CI — Build & Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check markdown files exist
+        run: |
+          for f in \
+            docs/phase1-conceptual/architecture-and-requirements.md \
+            docs/phase2-schematics/component-selection-and-schematics.md \
+            docs/phase3-pcb/pcb-blueprints-and-layout.md \
+            docs/phase4-software/boot-process-and-mmio.md \
+            docs/hardware-test-procedures.md \
+            CONTRIBUTING.md \
+            LICENSE \
+            README.md; do
+            if [ ! -f "$f" ]; then echo "MISSING: $f" && exit 1; fi
+            echo "OK: $f"
+          done
+
+  check-bom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate CSV BOM
+        run: |
+          if [ ! -f hardware/bom/apex-one-bom.csv ]; then
+            echo "BOM CSV missing" && exit 1
+          fi
+          LINES=$(tail -n +2 hardware/bom/apex-one-bom.csv | wc -l)
+          echo "BOM has $LINES components"
+          if [ "$LINES" -lt 10 ]; then
+            echo "BOM seems too small" && exit 1
+          fi
+
+  check-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check C source files exist
+        run: |
+          for f in \
+            software/linux-drivers/src/apex_bridge.c \
+            software/linux-drivers/include/apex_bridge_regs.h \
+            firmware/rp2350b/src/rp2350b_init.c \
+            firmware/rp2350b/include/board_pins.h \
+            software/dts/apex-one-rk3576.dts; do
+            if [ ! -f "$f" ]; then echo "MISSING: $f" && exit 1; fi
+            echo "OK: $f"
+          done
+
+  check-kicad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check KiCad files exist
+        run: |
+          for f in \
+            hardware/kicad/apex-one.kicad_pro \
+            hardware/kicad/symbols/apex-one-symbols.kicad_sym \
+            hardware/kicad/footprints/apex-one-footprints.pretty/apex-one-footprints.kicad_mod \
+            hardware/kicad/apex-one.net; do
+            if [ ! -f "$f" ]; then echo "MISSING: $f" && exit 1; fi
+            echo "OK: $f"
+          done
+
+  stats-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check stats.json is not stale
+        run: |
+          if [ ! -f stats.json ]; then echo "stats.json missing" && exit 1; fi
+          UPDATED=$(python3 -c "import json; print(json.load(open('stats.json'))['last_updated'])")
+          TODAY=$(date +%Y-%m-%d)
+          echo "Stats last updated: $UPDATED (today: $TODAY)"
+          # Warn if more than 7 days old (don't fail — just warn)
+          if [ "$UPDATED" != "$TODAY" ]; then
+            echo "::warning::stats.json is from $UPDATED, not today ($TODAY). Run the update-stats workflow."
+          fi

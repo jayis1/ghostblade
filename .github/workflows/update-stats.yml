@@ -1,0 +1,104 @@
+name: Update Repo Stats
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight UTC
+  workflow_dispatch:
+
+jobs:
+  update-stats:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Count C code lines
+        id: c_lines
+        run: |
+          C_LINES=0
+          if find . -name '*.c' -not -path './.git/*' -print0 | grep -qz .; then
+            C_LINES=$(find . -name '*.c' -not -path './.git/*' -print0 | xargs -0 cat | wc -l)
+          fi
+          echo "count=$C_LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Count header lines
+        id: h_lines
+        run: |
+          H_LINES=0
+          if find . -name '*.h' -not -path './.git/*' -print0 | grep -qz .; then
+            H_LINES=$(find . -name '*.h' -not -path './.git/*' -print0 | xargs -0 cat | wc -l)
+          fi
+          echo "count=$H_LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Count DTS lines
+        id: dts_lines
+        run: |
+          DTS_LINES=0
+          if find . -name '*.dts' -not -path './.git/*' -print0 | grep -qz .; then
+            DTS_LINES=$(find . -name '*.dts' -not -path './.git/*' -print0 | xargs -0 cat | wc -l)
+          fi
+          echo "count=$DTS_LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Count documentation lines
+        id: doc_lines
+        run: |
+          DOC_LINES=0
+          if find . -name '*.md' -not -path './.git/*' -print0 | grep -qz .; then
+            DOC_LINES=$(find . -name '*.md' -not -path './.git/*' -print0 | xargs -0 cat | wc -l)
+          fi
+          echo "count=$DOC_LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Count BOM components
+        id: bom_count
+        run: |
+          BOM_COUNT=0
+          if [ -f hardware/bom/apex-one-bom.csv ]; then
+            BOM_COUNT=$(tail -n +2 hardware/bom/apex-one-bom.csv | wc -l)
+          fi
+          echo "count=$BOM_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Count total files
+        id: total_files
+        run: |
+          TOTAL_FILES=$(find . -type f -not -path './.git/*' | wc -l)
+          echo "count=$TOTAL_FILES" >> "$GITHUB_OUTPUT"
+
+      - name: Count total lines
+        id: total_lines
+        run: |
+          TOTAL_LINES=0
+          # Count all text files (exclude binary, html for line count accuracy)
+          TOTAL_LINES=$(find . -type f -not -path './.git/*' \( -name '*.c' -o -name '*.h' -o -name '*.md' -o -name '*.dts' -o -name '*.py' -o -name '*.csv' -o -name '*.sh' -o -name '*.net' -o -name '*.mf' -o -name 'Makefile' -o -name 'LICENSE' -o -name '.gitignore' -o -name '*.kicad_pro' -o -name '*.kicad_sym' -o -name '*.kicad_mod' \) -print0 | xargs -0 cat 2>/dev/null | wc -l)
+          echo "count=$TOTAL_LINES" >> "$GITHUB_OUTPUT"
+
+      - name: Get current date
+        id: date
+        run: echo "today=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Update stats.json
+        run: |
+          cat > stats.json << EOF
+          {
+            "C": ${{ steps.c_lines.outputs.count }},
+            "headers": ${{ steps.h_lines.outputs.count }},
+            "dts": ${{ steps.dts_lines.outputs.count }},
+            "docs": ${{ steps.doc_lines.outputs.count }},
+            "bom_components": ${{ steps.bom_count.outputs.count }},
+            "total_files": ${{ steps.total_files.outputs.count }},
+            "total_lines": ${{ steps.total_lines.outputs.count }},
+            "last_updated": "${{ steps.date.outputs.today }}"
+          }
+          EOF
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet stats.json || git add stats.json && git commit -m "chore: update repo stats [skip ci]" && git push
