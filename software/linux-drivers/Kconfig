@@ -1,0 +1,55 @@
+# Kconfig — GhostBlade SPI Bridge Driver
+#
+# Copyright (C) 2026 GhostBlade Project
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Add this file to drivers/spi/Kconfig in the kernel tree, or load
+# the module out-of-tree using the provided Makefile.
+
+config APEX_BRIDGE
+	tristate "GhostBlade SPI Bridge driver (RK3576 <-> RP2350B)"
+	depends on SPI && GPIOLIB
+	select CRC32
+	help
+	  Driver for the GhostBlade SPI Bridge connecting the RK3576 SoC
+	  (Linux host) to the RP2350B coprocessor (real-time MCU).
+
+	  The driver provides a character device (/dev/apex_bridge0) with
+	  read/write/ioctl operations for sending commands and receiving
+	  telemetry from the MCU. It supports:
+
+	    - SPI protocol framing with CRC-64 header and CRC-32 payload
+	    - Interrupt-driven reception (MCU asserts INT_REQ GPIO)
+	    - DMA scatter-gather mode for high-throughput SDR IQ streaming
+	    - Sysfs telemetry attributes under /sys/class/apex/apex_bridge0/
+	    - Power management (runtime suspend/resume)
+	    - mmap() for zero-copy IQ data access
+
+	  Supported ioctl commands:
+	    APEX_IOC_SDR_TUNE      - Tune SDR frequency/bandwidth/gain
+	    APEX_IOC_SDR_STREAM    - Start/stop SDR IQ streaming
+	    APEX_IOC_ANT_SELECT    - Select antenna (MIMO TX/RX, sub-GHz, terminated)
+	    APEX_IOC_CC1101_CFG    - Configure CC1101 sub-GHz radio registers
+	    APEX_IOC_NFC_TRANSACT  - Perform NFC transaction (ISO 14443 A/B)
+	    APEX_IOC_GET_TELEMETRY - Read MCU telemetry (RSSI, temp, battery, flags)
+	    APEX_IOC_MCU_RESET     - Assert/deassert MCU reset
+	    APEX_IOC_GET_STATUS    - Read driver status flags
+	    APEX_IOC_SG_START     - Start DMA scatter-gather streaming
+	    APEX_IOC_SG_STOP      - Stop DMA scatter-gather streaming
+	    APEX_IOC_SG_GET_STATUS - Get scatter-gather engine status
+
+	  To compile this driver as a module, choose M here. The module
+	  will be called apex_bridge.
+
+	  If unsure, say N.
+
+config APEX_BRIDGE_DEBUG
+	bool "GhostBlade SPI Bridge debug messages"
+	depends on APEX_BRIDGE
+	help
+	  Enable verbose debug messages in the GhostBlade SPI Bridge driver.
+	  This includes per-frame logging, SPI transfer dumps, and DMA
+	  buffer state tracking. Useful for development and debugging but
+	  will produce significant kernel log output at high data rates.
+
+	  If unsure, say N.
