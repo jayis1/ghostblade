@@ -112,7 +112,7 @@ typedef struct {
     uint8_t  cmd;               /* NFC command (ISO 14443 A/B type) */
     uint8_t  flags;             /* Transaction flags */
     uint16_t data_len;          /* TX data length */
-    uint8_t  data[256];         /* TX/RX data buffer */
+    uint8_t  data[256];         /* TX/RX data buffer (in/out) */
 } apex_nfc_transact_t;
 
 /* Device status */

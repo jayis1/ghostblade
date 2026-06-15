@@ -369,7 +369,7 @@ int st25r3916_init(void) {
     /* Step 16: Configure General Purpose Timers */
     st25r3916_write_reg(ST25R3916_REG_TIMER1, 0x0A);
     st25r3916_write_reg(ST25R3916_REG_TIMER2, 0x0A);
-    st25R3916_write_reg(ST25R3916_REG_TIMER3, 0x21);
+    st25r3916_write_reg(ST25R3916_REG_TIMER3, 0x21);
 
     /* Step 17: Configure Wake-up and Sleep Timers */
     st25r3916_write_reg(ST25R3916_REG_WUP_TIMER, 0x00);

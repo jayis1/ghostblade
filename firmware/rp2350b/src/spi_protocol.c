@@ -23,6 +23,21 @@
 #include <stdbool.h>
 #include <string.h>
 
+/* Forward declarations from other modules */
+extern void watchdog_feed(void);
+
+/**
+ * secure_wipe — Securely clear sensitive data from memory
+ *
+ * Uses volatile pointer to prevent compiler optimization
+ * from removing the memset.
+ */
+static void secure_wipe(void *ptr, size_t len) {
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len--)
+        *p++ = 0;
+}
+
 /* ========================================================================
  * Protocol Constants (must match apex_bridge_regs.h on RK3576 side)
  * ======================================================================== */
@@ -507,6 +522,11 @@ static void handle_cmd_cc1101_cfg(const uint8_t *payload, uint16_t len) {
 
     cfg = (struct cc1101_cfg_cmd *)payload;
 
+    /* Validate register address range (0x00-0x2E config, 0x30-0x3D command/status) */
+    if (cfg->reg_addr > 0x3D)
+        return;
+
+    /* Validate reg_len does not exceed remaining payload */
     if (len < (uint16_t)(2 + cfg->reg_len))
         return;
 
@@ -531,6 +551,10 @@ static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
 
     nfc = (struct nfc_transact_cmd *)payload;
     uint16_t data_len = read_le16((const uint8_t *)&nfc->data_len);
+
+    /* Cap data_len to prevent buffer overrun (max 256 bytes) */
+    if (data_len > 256)
+        return;
 
     if (len < (uint16_t)(4 + data_len))
         return;
@@ -630,6 +654,12 @@ static void dispatch_frame(void) {
         /* Unknown command — ignore */
         break;
     }
+
+    /* Securely wipe payload buffer after dispatch to prevent
+     * residual sensitive data (RF config, NFC keys) from
+     * persisting in SRAM between frames. */
+    if (len > 0)
+        secure_wipe(rx_ctx.payload_buf, len);
 }
 
 /* ========================================================================
@@ -881,9 +911,12 @@ void spi_protocol_update_telemetry(uint16_t rssi_dbm_x10,
 /**
  * spi_protocol_tick — 1 ms system tick
  *
- * Call from a timer interrupt or main loop to update uptime
- * and trigger periodic telemetry.
+ * Call from a timer interrupt or main loop to update uptime,
+ * trigger periodic telemetry, and feed the hardware watchdog.
  */
 void spi_protocol_tick(void) {
     device_state.uptime_ms++;
+
+    /* Feed the hardware watchdog to prevent reset */
+    watchdog_feed();
 }

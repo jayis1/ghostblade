@@ -256,6 +256,7 @@ struct apex_sdr_tune_cmd {
 #define APEX_ANT_TERMINATED 3   /* PE42422 RF4 → 50Ω load */
 
 /* CC1101 configuration payload (variable length) */
+#define APEX_CC1101_MAX_REG_LEN   64    /* Maximum consecutive register writes */
 struct apex_cc1101_cfg {
     __u8  reg_addr;            /* CC1101 register address */
     __u8  reg_len;             /* Number of consecutive registers to write */
@@ -263,6 +264,7 @@ struct apex_cc1101_cfg {
 } __packed;
 
 /* NFC transaction payload (variable length) */
+#define APEX_NFC_MAX_DATA_LEN     256   /* Maximum NFC transaction data bytes */
 struct apex_nfc_transact {
     __u8  cmd;                 /* NFC command (ISO 14443 A/B, etc.) */
     __u8  flags;               /* Transaction flags */
