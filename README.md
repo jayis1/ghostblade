@@ -33,19 +33,19 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  GhostBlade Board                     │
+│                  GhostBlade Board                        │
 │                                                          │
-│  ┌──────────────┐  SPI0 @ 50 MHz  ┌──────────────┐     │
-│  │   RK3576     │◄──────────────►│   RP2350B     │     │
-│  │  4xA72+4xA53 │  (framed CRC)  │ 2xM33/Hazard3 │     │
-│  │  6 TOPS NPU  │                 │                │     │
-│  │              │  INT_REQ ──────►│  RF Manager    │     │
-│  │  Linux Host  │  HOST_RDY ◄────│  Real-time     │     │
-│  └──────┬───────┘  MCU_RESET ────►└──┬──┬──┬──┬───┘     │
-│         │                          │  │  │  │           │
-│    MIPI-CSI-2               SPI1   │  │  │  PIO          │
-│         │                    ┌──────┘  │  └───┐           │
-│  ┌──────▼──────┐            │    ┌────┘      │           │
+│  ┌──────────────┐  SPI0 @ 50 MHz  ┌──────────────┐      │
+│  │   RK3576     │◄──────────────►│   RP2350B     │      │
+│  │  4xA72+4xA53 │  (framed CRC)  │ 2xM33/Hazard3 │      │
+│  │  6 TOPS NPU  │                 │                │      │
+│  │              │  INT_REQ ──────►│  RF Manager    │      │
+│  │  Linux Host  │  HOST_RDY ◄────│  Real-time     │      │
+│  └──────┬───────┘  MCU_RESET ────►└──┬──┬──┬──┬───┘      │
+│         │                          │  │  │  │            │
+│    MIPI-CSI-2               SPI1   │  │  │  PIO           │
+│         │                    ┌──────┘  │  └───┐          │
+│  ┌──────▼──────┐            │    ┌────┘      │          │
 │  │  LMS7002M   │    ┌───────▼┐  ┌▼──────┐ ┌▼────────┐  │
 │  │  SDR 100kHz │    │ CC1101 │  │ST25R  │ │ PE42422  │  │
 │  │  – 3.8 GHz  │    │ Sub-GHz│  │ 3916  │ │ Antenna  │  │
@@ -56,7 +56,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 │         │               │                      │         │
 │  ┌──────▼───────────────▼──────────────────────▼──┐     │
 │  │          MT7922 Wi-Fi 6E / BT 5.4               │     │
-│  │    [J5 SMA 2.4G]  [J6 SMA 5/6G]  [BT]           │     │
+│  │    [J5 SMA 2.4G]  [J6 SMA 5/6G]  [BT]          │     │
 │  └─────────────────────────────────────────────────┘     │
 │                                                          │
 │  ┌──────┐ 8GB LPDDR5  ┌────────┐ 32GB eMMC  ┌──────┐   │
@@ -153,32 +153,44 @@ sequenceDiagram
 
 ```
 ghostblade/
-├── .github/workflows/
-│   ├── driver-build.yml                    # CI: kernel driver build & lint
-│   ├── firmware-build.yml                 # CI: RP2350B firmware build
-│   ├── docs-lint.yml                      # CI: markdownlint & spellcheck
-│   └── netlist-check.yml                  # CI: DTS/netlist consistency check
 ├── docs/
-│   ├── getting-started.md                  # Dev environment setup & build guide
-│   ├── flashing-guide.md                  # Firmware flashing & driver loading
-│   ├── faq-troubleshooting.md             # Frequently asked questions
+│   ├── getting-started.md                      # Dev environment setup & build guide
+│   ├── flashing-guide.md                      # Firmware flashing & driver loading
+│   ├── faq-troubleshooting.md                 # Frequently asked questions
+│   ├── power-tree.md                          # Power tree diagram & rails
+│   ├── spi-protocol-timing.md                # SPI bridge timing diagrams
+│   ├── hardware-test-procedures.md             # 17-section test plan
 │   ├── phase1-conceptual/
 │   │   └── architecture-and-requirements.md
 │   ├── phase2-schematics/
 │   │   └── component-selection-and-schematics.md
 │   ├── phase3-pcb/
 │   │   └── pcb-blueprints-and-layout.md
-│   ├── phase4-software/
-│   │   └── boot-process-and-mmio.md
-│   ├── spi-protocol-timing.md              # SPI bridge timing diagrams
-│   └── hardware-test-procedures.md         # 17-section test plan
+│   └── phase4-software/
+│       └── boot-process-and-mmio.md
+├── firmware/
+│   └── rp2350b/
+│       ├── CMakeLists.txt                      # CMake build (Pico SDK)
+│       ├── pico_sdk_import.cmake               # Pico SDK import
+│       ├── rp2350b_memmap.ld                   # Linker script (memory map)
+│       ├── include/
+│       │   └── board_pins.h                    # MCU pin definitions
+│       └── src/
+│           ├── main.c                          # Entry point & init dispatch
+│           ├── rp2350b_init.c                  # Clocks, GPIO, SPI, PIO, ADC init
+│           ├── spi_protocol.c                  # SPI bridge protocol handler
+│           ├── cc1101_init.c                   # CC1101 sub-GHz radio init
+│           ├── st25r3916_init.c                # ST25R3916 NFC controller init
+│           ├── sdr_dma.c                       # SDR DMA ring buffer manager
+│           ├── battery_monitor.c               # ADC battery/temperature monitor
+│           └── watchdog.c                      # Hardware watchdog handler
 ├── hardware/
 │   ├── bom/
-│   │   ├── ghostblade-bom.csv              # Full BOM (80+ parts, MPN, price)
-│   │   └── ghostblade-bom-interactive.html # Interactive HTML BOM
+│   │   ├── ghostblade-bom.csv                  # Full BOM (80+ parts, MPN, price)
+│   │   └── ghostblade-bom-interactive.html     # Interactive HTML BOM
 │   └── kicad/
-│       ├── ghostblade.kicad_pro            # KiCad 8 project file
-│       ├── ghostblade.net                  # Schematic netlist (150+ nets)
+│       ├── ghostblade.kicad_pro                # KiCad 8 project file
+│       ├── ghostblade.net                      # Schematic netlist (150+ nets)
 │       ├── symbols/
 │       │   └── ghostblade-symbols.kicad_sym
 │       ├── footprints/
@@ -186,43 +198,36 @@ ghostblade/
 │       │       └── ghostblade-footprints.kicad_mod
 │       └── 3dmodels/
 │           └── README.md
-├── firmware/
-│   └── rp2350b/
-│       ├── include/
-│       │   └── board_pins.h                # MCU pin definitions
-│       └── src/
-│           ├── rp2350b_init.c              # Clocks, GPIO, SPI, PIO, ADC init
-│           ├── spi_protocol.c              # SPI bridge protocol handler
-│           ├── cc1101_init.c               # CC1101 sub-GHz radio init
-│           ├── st25r3916_init.c            # ST25R3916 NFC controller init
-│           ├── sdr_dma.c                  # SDR DMA ring buffer manager
-│           ├── battery_monitor.c           # ADC battery/temperature monitor
-│           └── watchdog.c                 # Hardware watchdog handler
 ├── software/
 │   ├── linux-drivers/
 │   │   ├── include/
-│   │   │   └── apex_bridge_regs.h          # Register defs, ioctl, protocol
+│   │   │   └── apex_bridge_regs.h              # Register defs, ioctl, protocol
 │   │   ├── src/
-│   │   │   └── apex_bridge.c              # Kernel SPI driver (char dev)
-│   │   └── Makefile                        # Cross-compile Makefile
+│   │   │   └── apex_bridge.c                  # Kernel SPI driver (char dev)
+│   │   ├── Kconfig                             # Kernel menuconfig entry
+│   │   └── Makefile                            # Cross-compile Makefile
 │   ├── libapex/
 │   │   ├── include/
-│   │   │   └── libapex.h                  # Userspace C API
+│   │   │   └── libapex.h                      # Userspace C API
 │   │   ├── src/
-│   │   │   ├── libapex.c                  # C library implementation
-│   │   │   └── pyapex.c                   # Python bindings
+│   │   │   ├── libapex.c                      # C library implementation
+│   │   │   └── pyapex.c                        # Python bindings
+│   │   ├── libapex.pc.in                       # pkg-config template
 │   │   ├── Makefile
 │   │   ├── setup.py
 │   │   └── README.md
 │   └── dts/
-│       ├── ghostblade-rk3576.dts          # Device tree source
-│       └── ghostblade-options.dts          # Optional hardware overlay
+│       ├── ghostblade-rk3576.dts              # Device tree source
+│       └── ghostblade-options.dts              # Optional hardware overlay
 ├── tests/
-│   └── test_spi_protocol.c                # SPI protocol unit tests
+│   └── test_spi_protocol.c                    # SPI protocol unit tests
 ├── tools/
-│   └── generate_gerbers.py                # Gerber/fab-note generation script
-├── GhostBlade.mf                           # System Manifest
-├── stats.json                              # Dynamic badge data (auto-updated)
+│   └── generate_gerbers.py                    # Gerber/fab-note generation script
+├── .clang-format                               # Linux kernel-style formatting config
+├── .markdownlint.json                          # Markdown linting rules
+├── .codespell.ignore                           # Project-specific spellcheck ignore list
+├── GhostBlade.mf                               # System Manifest
+├── stats.json                                  # Dynamic badge data (auto-updated)
 ├── CONTRIBUTING.md
 ├── LICENSE
 └── README.md

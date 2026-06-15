@@ -98,6 +98,36 @@
 #define VBAT_MV_PER_LSB_X1000   3249   /* mV × 1000 per LSB */
 
 /* ========================================================================
+ * Brownout Detection Constants
+ * ======================================================================== */
+
+/*
+ * Brownout detection thresholds:
+ *
+ * BROWNOUT_THRESHOLD_MV:  Voltage below which a brownout condition is detected.
+ *                          Set to 2800 mV (below 3.0V critical, above RP2350B
+ *                          minimum 1.8V operating voltage) to catch deep sags
+ *                          caused by high-current bursts (SDR TX, NFC field).
+ *
+ * BROWNOUT_HYSTERESIS_MV: Voltage hysteresis to prevent brownout flag chatter.
+ *                          A brownout condition clears only when VBAT rises
+ *                          above (2800 + 200) = 3000 mV.
+ */
+#define BROWNOUT_THRESHOLD_MV    2800  /* Brownout detection threshold in mV */
+#define BROWNOUT_HYSTERESIS_MV   200   /* Brownout recovery hysteresis in mV */
+
+/* ========================================================================
+ * Power State Machine
+ * ======================================================================== */
+
+enum power_state {
+    POWER_STATE_ACTIVE,    /* Full operation — all subsystems powered */
+    POWER_STATE_IDLE,      /* Reduced clock — waiting for activity */
+    POWER_STATE_SLEEP,     /* Deep sleep — SPI0 wakeup only */
+    POWER_STATE_SHUTDOWN,  /* Controlled shutdown — peripherals off */
+};
+
+/* ========================================================================
  * Temperature Sensor Constants
  * ======================================================================== */
 
@@ -381,8 +411,132 @@ void battery_monitor_read(uint16_t *vbat_mv, int16_t *temp_dc10,
     if (temperature_is_overtemp(temp)) f |= (1 << 2);
     if (temperature_is_critical(temp)) f |= (1 << 3);
 
+    /* Brownout detection */
+    if (vbat < BROWNOUT_THRESHOLD_MV) f |= (1 << 4);
+
     if (vbat_mv)    *vbat_mv   = vbat;
     if (temp_dc10)  *temp_dc10 = temp;
     if (batt_pct)   *batt_pct  = pct;
     if (flags)      *flags     = f;
+}
+
+/* ========================================================================
+ * Brownout Detection
+ * ======================================================================== */
+
+/**
+ * battery_is_brownout — Check if battery voltage indicates brownout condition
+ *
+ * A brownout is detected when VBAT drops below BROWNOUT_THRESHOLD_MV (2800 mV).
+ * This threshold is below the critical battery level (3000 mV) to filter out
+ * transient voltage sags during high-current bursts (SDR TX, NFC field).
+ *
+ * Hysteresis: The brownout condition clears only when VBAT rises above
+ * BROWNOUT_THRESHOLD_MV + BROWNOUT_HYSTERESIS_MV (3000 mV).
+ *
+ * @vbat_mv: Current battery voltage in mV
+ * @brownout_active: Pointer to persistent brownout state (true if in brownout)
+ * Returns: true if brownout condition is active
+ */
+bool battery_is_brownout(uint16_t vbat_mv, bool *brownout_active) {
+    if (*brownout_active) {
+        /* Brownout is active — clear only when voltage recovers with hysteresis */
+        if (vbat_mv >= BROWNOUT_THRESHOLD_MV + BROWNOUT_HYSTERESIS_MV)
+            *brownout_active = false;
+    } else {
+        /* Not in brownout — detect when voltage drops below threshold */
+        if (vbat_mv < BROWNOUT_THRESHOLD_MV)
+            *brownout_active = true;
+    }
+
+    return *brownout_active;
+}
+
+/* ========================================================================
+ * Power State Machine
+ * ======================================================================== */
+
+/* Persistent power state */
+static enum power_state current_power_state = POWER_STATE_ACTIVE;
+static bool brownout_flag = false;
+
+/**
+ * power_state_update — Update the power state machine based on battery/thermal
+ *
+ * State transitions:
+ *   ACTIVE  → IDLE:     No commands for >5 seconds (future: idle timeout)
+ *   ACTIVE  → SLEEP:    Battery low (< 3300 mV) and no active streams
+ *   ACTIVE  → SHUTDOWN: Battery critical (< 3000 mV) or brownout or overtemp critical
+ *   IDLE    → ACTIVE:   New command received
+ *   IDLE    → SLEEP:    Battery low and idle timeout expired
+ *   IDLE    → SHUTDOWN: Battery critical or overtemp critical
+ *   SLEEP   → ACTIVE:   Wake event (SPI activity or INT_REQ assertion)
+ *   SLEEP   → SHUTDOWN: Battery critical or overtemp critical
+ *
+ * @vbat_mv: Current battery voltage
+ * @temp_dc10: Current die temperature
+ * @has_activity: true if SPI or radio activity detected since last call
+ *
+ * Returns: Current power state
+ */
+enum power_state power_state_update(uint16_t vbat_mv, int16_t temp_dc10,
+                                      bool has_activity) {
+    bool is_brownout = battery_is_brownout(vbat_mv, &brownout_flag);
+    bool is_critical = battery_is_critical(vbat_mv);
+    bool is_overtemp_crit = temperature_is_critical(temp_dc10);
+    bool is_low_batt = battery_is_low(vbat_mv);
+
+    switch (current_power_state) {
+    case POWER_STATE_ACTIVE:
+        if (is_critical || is_brownout || is_overtemp_crit) {
+            current_power_state = POWER_STATE_SHUTDOWN;
+        } else if (is_low_batt && !has_activity) {
+            current_power_state = POWER_STATE_SLEEP;
+        } else if (!has_activity) {
+            /* Could transition to IDLE after a timeout, stay ACTIVE for now */
+        }
+        break;
+
+    case POWER_STATE_IDLE:
+        if (is_critical || is_brownout || is_overtemp_crit) {
+            current_power_state = POWER_STATE_SHUTDOWN;
+        } else if (is_low_batt) {
+            current_power_state = POWER_STATE_SLEEP;
+        } else if (has_activity) {
+            current_power_state = POWER_STATE_ACTIVE;
+        }
+        break;
+
+    case POWER_STATE_SLEEP:
+        if (is_critical || is_brownout || is_overtemp_crit) {
+            current_power_state = POWER_STATE_SHUTDOWN;
+        } else if (has_activity) {
+            current_power_state = POWER_STATE_ACTIVE;
+        }
+        break;
+
+    case POWER_STATE_SHUTDOWN:
+        /* Once in shutdown, stay there until power cycle or watchdog reset */
+        break;
+    }
+
+    return current_power_state;
+}
+
+/**
+ * power_state_get — Get the current power state without updating
+ *
+ * Returns: Current power state
+ */
+enum power_state power_state_get(void) {
+    return current_power_state;
+}
+
+/**
+ * power_state_set — Force a power state transition
+ *
+ * @state: Target power state
+ */
+void power_state_set(enum power_state state) {
+    current_power_state = state;
 }

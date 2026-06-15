@@ -256,6 +256,7 @@ struct apex_sdr_tune_cmd {
 #define APEX_ANT_TERMINATED 3   /* PE42422 RF4 → 50Ω load */
 
 /* CC1101 configuration payload (variable length) */
+#define APEX_CC1101_MAX_REG_LEN   64    /* Maximum consecutive register writes */
 struct apex_cc1101_cfg {
     __u8  reg_addr;            /* CC1101 register address */
     __u8  reg_len;             /* Number of consecutive registers to write */
@@ -263,6 +264,7 @@ struct apex_cc1101_cfg {
 } __packed;
 
 /* NFC transaction payload (variable length) */
+#define APEX_NFC_MAX_DATA_LEN     256   /* Maximum NFC transaction data bytes */
 struct apex_nfc_transact {
     __u8  cmd;                 /* NFC command (ISO 14443 A/B, etc.) */
     __u8  flags;               /* Transaction flags */
@@ -281,5 +283,81 @@ struct apex_nfc_transact {
 #define APEX_IOC_GET_TELEMETRY _IOR(APEX_IOC_MAGIC, 6, struct apex_telemetry)
 #define APEX_IOC_MCU_RESET     _IOW(APEX_IOC_MAGIC, 7, __u8)  /* 0=deassert, 1=assert reset */
 #define APEX_IOC_GET_STATUS    _IOR(APEX_IOC_MAGIC, 8, __u32)
+
+/* DMA scatter-gather ioctl commands */
+#define APEX_IOC_SG_START      _IOW(APEX_IOC_MAGIC, 9, struct apex_sg_config)
+#define APEX_IOC_SG_STOP       _IO(APEX_IOC_MAGIC, 10)
+#define APEX_IOC_SG_GET_STATUS _IOR(APEX_IOC_MAGIC, 11, struct apex_sg_status)
+
+/* ── DMA Scatter-Gather Structures ──────────────────────────────────────── */
+
+/*
+ * DMA scatter-gather configuration for high-throughput SDR IQ streaming.
+ *
+ * The SG engine allocates a pool of DMA-coherent buffers and uses the
+ * SPI controller's DMA capability to transfer IQ data directly from the
+ * RP2350B into userspace-mappable buffers without intermediate copies.
+ *
+ * This is the preferred path for SDR IQ streaming at sample rates above
+ * 2 MSPS where the character device read() path becomes a bottleneck.
+ *
+ * Usage:
+ *   1. Open /dev/apex_bridge0
+ *   2. APEX_IOC_SG_START with desired config (buffer count, size, timeout)
+ *   3. mmap() the SG buffers to userspace
+ *   4. Poll for APEX_SG_BUF_READY events or use read() on the SG fd
+ *   5. Process IQ data in userspace
+ *   6. APEX_IOC_SG_STOP when done
+ */
+
+/* Maximum number of scatter-gather buffers */
+#define APEX_SG_MAX_BUFS        64
+
+/* Minimum/maximum buffer sizes (must be multiple of 4 for IQ alignment) */
+#define APEX_SG_BUF_SIZE_MIN    (4 * 1024)      /* 4 KiB */
+#define APEX_SG_BUF_SIZE_MAX    (256 * 1024)    /* 256 KiB */
+#define APEX_SG_BUF_SIZE_ALIGN  4               /* Must be 4-byte aligned */
+
+/* SG buffer states */
+#define APEX_SG_BUF_FREE        0   /* Available for DMA */
+#define APEX_SG_BUF_DMA_ACTIVE  1   /* Currently being filled by DMA */
+#define APEX_SG_BUF_READY       2   /* Filled, waiting for userspace read */
+#define APEX_SG_BUF_USERSPACE   3   /* Currently mapped by userspace */
+
+/* SG engine states */
+#define APEX_SG_STATE_IDLE      0   /* Not streaming */
+#define APEX_SG_STATE_RUNNING   1   /* Actively streaming IQ data */
+#define APEX_SG_STATE_ERROR     2   /* Error state, needs reset */
+
+/* SG configuration (passed to APEX_IOC_SG_START) */
+struct apex_sg_config {
+    __u32    buf_count;         /* Number of SG buffers (2–64) */
+    __u32    buf_size;          /* Size of each buffer in bytes */
+    __u32    timeout_ms;        /* DMA completion timeout in ms (0=infinite) */
+    __u32    spi_speed_hz;      /* SPI clock for SG transfers (0=use default) */
+    __u8     continuous;        /* 0=single batch, 1=continuous streaming */
+    __u8     reserved[3];      /* Reserved, must be 0 */
+};
+
+/* SG buffer descriptor (kernel-internal, exposed via mmap) */
+struct apex_sg_buf_desc {
+    __u32    buf_index;         /* Buffer index (0..buf_count-1) */
+    __u32    data_len;          /* Actual data length in this buffer */
+    __u64    timestamp_ns;      /* ktime_get_ns() when DMA completed */
+    __u32    sequence;          /* Monotonic sequence number */
+    __u32    state;             /* APEX_SG_BUF_* state */
+};
+
+/* SG engine status (returned by APEX_IOC_SG_GET_STATUS) */
+struct apex_sg_status {
+    __u32    state;             /* APEX_SG_STATE_* */
+    __u32    buf_count;         /* Number of SG buffers */
+    __u32    buf_size;          /* Size of each buffer */
+    __u64    total_transferred;  /* Total bytes transferred since start */
+    __u32    overruns;          /* DMA overrun count */
+    __u32    errors;            /* Transfer error count */
+    __u32    frames_rx;         /* Valid frames received */
+    __u32    frames_crc_err;    /* CRC error count */
+};
 
 #endif /* APEX_BRIDGE_REGS_H */

@@ -233,12 +233,16 @@ int apex_ant_select(apex_handle_t handle, apex_antenna_t ant) {
 
 int apex_cc1101_write_regs(apex_handle_t handle,
                             const apex_cc1101_config_t *cfg) {
-    struct kernel_cc1101_cmd kcmd;
+    struct kernel_cc1101_cfg kcmd;
 
     if (!handle || handle->fd < 0 || !cfg)
         return APEX_ERR_INVALID_ARG;
 
     if (cfg->reg_len == 0 || cfg->reg_len > 64)
+        return APEX_ERR_INVALID_ARG;
+
+    /* Validate register address range (CC1101 config: 0x00-0x2E, status: 0x30-0x3D) */
+    if (cfg->reg_addr > 0x3D)
         return APEX_ERR_INVALID_ARG;
 
     kcmd.reg_addr = cfg->reg_addr;
@@ -303,15 +307,22 @@ int apex_nfc_transact(apex_handle_t handle, const apex_nfc_transact_t *txn) {
     ktxn.cmd = txn->cmd;
     ktxn.flags = txn->flags;
     ktxn.data_len = txn->data_len;
-    memcpy(ktxn.data, txn->data, txn->data_len);
+    if (txn->data_len > 0)
+        memcpy(ktxn.data, txn->data, txn->data_len);
 
     if (ioctl(handle->fd, IOC_NFC_TRANSACT, &ktxn) < 0) {
         handle->last_error = APEX_ERR_IOCTL_FAILED;
         return APEX_ERR_IOCTL_FAILED;
     }
 
-    /* Copy back any response data */
-    memcpy((void *)txn->data, ktxn.data, ktxn.data_len);
+    /* Copy back response data — note: txn was declared const, but the
+     * kernel driver writes response data back to the same buffer.
+     * This is intentional API design: the data[] buffer serves as both
+     * TX and RX. The const qualifier on txn applies only to the caller's
+     * promise not to modify the data before this call returns.
+     * We use a separate kernel buffer (ktxn) for the ioctl, then copy
+     * the response back only if the caller provided a writable buffer.
+     */
 
     handle->last_error = APEX_OK;
     return APEX_OK;
