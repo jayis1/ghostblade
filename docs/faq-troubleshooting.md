@@ -271,10 +271,8 @@ Open an issue at https://github.com/jayis1/ghostblade/issues with:
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contribution guide.
 In short: fork, branch, commit, push, open a PR.
 
-### CI is failing on my PR
+### My PR isn't getting reviewed
 
-Check the CI workflow outputs:
-- **Driver build**: Ensure code compiles for all supported kernel versions (6.1, 6.5, 6.8)
-- **Firmware build**: Ensure Pico SDK paths resolve correctly
-- **Docs lint**: Run `markdownlint` and `codespell` locally
-- **Netlist check**: Verify DTS node names match schematic net names
+Be patient — maintainers review PRs as time permits. You can bump by
+adding a polite comment after a few days. Make sure your branch is
+up-to-date with `main` and that all local checks pass.

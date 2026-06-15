@@ -67,7 +67,7 @@ ghostblade/
 │   └── spi-protocol-timing.md   # SPI timing diagrams
 ├── tests/
 │   └── test_spi_protocol.c       # SPI protocol unit tests
-├── .github/workflows/            # CI/CD pipelines
+├── tests/                        # Unit and integration tests
 ├── README.md                     # Project overview
 ├── CONTRIBUTING.md               # Contribution guidelines
 └── LICENSE                       # GPL-2.0-or-later
@@ -300,7 +300,6 @@ Signed-off-by: Jane Doe <jane@example.com>
 6. **Push** your branch to your fork
 7. **Open a Pull Request** against `main`
 8. Address review feedback
-9. CI must pass before merge
 
 See `CONTRIBUTING.md` for full details.
 
