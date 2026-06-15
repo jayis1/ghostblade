@@ -1,7 +1,7 @@
 # PHASE 1: Conceptual Architecture & Requirements
 
-**Device:** Apex One  
-**Codename:** Project Cyber-Swiss  
+**Device:** GhostBlade  
+**Codename:** Project NullSpectre  
 **Date:** 2026-06-14  
 **Revision:** 1.0  
 

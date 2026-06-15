@@ -1,0 +1,51 @@
+# Codespell ignore words file
+# These are valid technical terms used in the GhostBlade project
+# that codespell would otherwise flag as misspellings.
+
+# Component names and part numbers
+RK3576
+RP2350B
+LMS7002M
+CC1101
+ST25R3916
+MT7922
+PE42422
+RK817
+
+# Technical terms
+dout
+dout->
+ser
+ser->
+miso
+MISO
+mosi
+MOSI
+CSn
+csn
+CSN
+ACKed
+ack
+NACKed
+nack
+prempt
+premptive
+
+# Hex and register names
+iomux
+iomux0
+GRF
+GRF_SOC
+gpio1
+
+# Project-specific terms
+GhostBlade
+NullSpectre
+pentest
+pentesting
+
+# File format terms
+gerber
+Gerber
+kicad
+KiCad

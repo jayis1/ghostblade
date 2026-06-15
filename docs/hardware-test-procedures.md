@@ -1,6 +1,6 @@
-# Apex One — Hardware Test Procedures
+# GhostBlade — Hardware Test Procedures
 
-**Project:** Apex One (Project Cyber-Swiss)  
+**Project:** GhostBlade (Project NullSpectre)  
 **Revision:** 1.0  
 **Date:** 2026-06-14  
 **License:** CC-BY-SA 4.0  
@@ -554,4 +554,4 @@ cat /sys/class/thermal/thermal_zone1/temp  # LMS7002M
 
 ---
 
-*Document generated for Apex One Project Cyber-Swiss. All measurements at 25°C ambient unless otherwise noted.*
+*Document generated for GhostBlade Project NullSpectre. All measurements at 25°C ambient unless otherwise noted.*

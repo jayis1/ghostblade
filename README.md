@@ -71,53 +71,77 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 ## Repository Structure
 
 ```
-apex-one/
+ghostblade/
 ├── .github/workflows/
-│   ├── ci.yml                                    # CI: lint, BOM check, source check
-│   └── update-stats.yml                          # Auto-update stats.json for badges
+│   ├── driver-build.yml                    # CI: kernel driver build & lint
+│   ├── firmware-build.yml                 # CI: RP2350B firmware build
+│   ├── docs-lint.yml                      # CI: markdownlint & spellcheck
+│   └── netlist-check.yml                  # CI: DTS/netlist consistency check
 ├── docs/
+│   ├── getting-started.md                  # Dev environment setup & build guide
+│   ├── flashing-guide.md                  # Firmware flashing & driver loading
+│   ├── faq-troubleshooting.md             # Frequently asked questions
 │   ├── phase1-conceptual/
-│   │   └── architecture-and-requirements.md       # Power, data flow, boot, security
+│   │   └── architecture-and-requirements.md
 │   ├── phase2-schematics/
-│   │   └── component-selection-and-schematics.md  # Netlists, BOM, decoupling
+│   │   └── component-selection-and-schematics.md
 │   ├── phase3-pcb/
-│   │   └── pcb-blueprints-and-layout.md          # Stackup, impedance, thermal, DFM
+│   │   └── pcb-blueprints-and-layout.md
 │   ├── phase4-software/
-│   │   └── boot-process-and-mmio.md              # Boot chain, register maps
-│   └── hardware-test-procedures.md                # 17-section test procedure
+│   │   └── boot-process-and-mmio.md
+│   ├── spi-protocol-timing.md              # SPI bridge timing diagrams
+│   └── hardware-test-procedures.md         # 17-section test plan
 ├── hardware/
 │   ├── bom/
-│   │   ├── apex-one-bom.csv                       # Full BOM (80+ parts, MPN, price)
-│   │   └── apex-one-bom-interactive.html          # Interactive HTML BOM
+│   │   ├── ghostblade-bom.csv              # Full BOM (80+ parts, MPN, price)
+│   │   └── ghostblade-bom-interactive.html # Interactive HTML BOM
 │   └── kicad/
-│       ├── apex-one.kicad_pro                     # KiCad project (6-layer stackup)
-│       ├── apex-one.net                            # Schematic netlist (150+ nets)
+│       ├── ghostblade.kicad_pro            # KiCad 8 project file
+│       ├── ghostblade.net                  # Schematic netlist (150+ nets)
 │       ├── symbols/
-│       │   └── apex-one-symbols.kicad_sym          # All 9 IC symbols
+│       │   └── ghostblade-symbols.kicad_sym
 │       ├── footprints/
-│       │   └── apex-one-footprints.pretty/           # All 11 footprints
+│       │   └── ghostblade-footprints.pretty/
+│       │       └── ghostblade-footprints.kicad_mod
 │       └── 3dmodels/
-│           └── README.md                           # STEP model references
+│           └── README.md
 ├── firmware/
 │   └── rp2350b/
 │       ├── include/
-│       │   └── board_pins.h                        # MCU pin definitions
+│       │   └── board_pins.h                # MCU pin definitions
 │       └── src/
-│           └── rp2350b_init.c                      # Clocks, GPIO, SPI, PIO, radio init
+│           ├── rp2350b_init.c              # Clocks, GPIO, SPI, PIO, ADC init
+│           ├── spi_protocol.c              # SPI bridge protocol handler
+│           ├── cc1101_init.c               # CC1101 sub-GHz radio init
+│           ├── st25r3916_init.c            # ST25R3916 NFC controller init
+│           ├── sdr_dma.c                  # SDR DMA ring buffer manager
+│           ├── battery_monitor.c           # ADC battery/temperature monitor
+│           └── watchdog.c                 # Hardware watchdog handler
 ├── software/
 │   ├── linux-drivers/
 │   │   ├── include/
-│   │   │   └── apex_bridge_regs.h                  # Register defs, ioctl, protocol
+│   │   │   └── apex_bridge_regs.h          # Register defs, ioctl, protocol
 │   │   ├── src/
-│   │   │   └── apex_bridge.c                       # Kernel SPI driver (char dev)
-│   │   └── Makefile                                # Cross-compile Makefile
-│   ├── bootloader/                                 # U-Boot SPL and board config
+│   │   │   └── apex_bridge.c              # Kernel SPI driver (char dev)
+│   │   └── Makefile                        # Cross-compile Makefile
+│   ├── libapex/
+│   │   ├── include/
+│   │   │   └── libapex.h                  # Userspace C API
+│   │   ├── src/
+│   │   │   ├── libapex.c                  # C library implementation
+│   │   │   └── pyapex.c                   # Python bindings
+│   │   ├── Makefile
+│   │   ├── setup.py
+│   │   └── README.md
 │   └── dts/
-│       └── apex-one-rk3576.dts                     # Device tree source
+│       ├── ghostblade-rk3576.dts          # Device tree source
+│       └── ghostblade-options.dts          # Optional hardware overlay
+├── tests/
+│   └── test_spi_protocol.c                # SPI protocol unit tests
 ├── tools/
-│   └── generate_gerbers.py                         # Gerber/fab-note generation script
-├── Apex_One.mf                                     # System Manifest
-├── stats.json                                      # Dynamic badge data (auto-updated)
+│   └── generate_gerbers.py                # Gerber/fab-note generation script
+├── GhostBlade.mf                           # System Manifest
+├── stats.json                              # Dynamic badge data (auto-updated)
 ├── CONTRIBUTING.md
 ├── LICENSE
 └── README.md
@@ -147,12 +171,12 @@ apex-one/
 
 | Metric | Value |
 |--------|-------|
-| ![Lines of C Code](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20C%20Code&query=%24.C&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fapex-one%2Fmain%2Fstats.json&color=blue) | Firmware + kernel driver |
-| ![Lines of Headers](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20Headers&query=%24.headers&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fapex-one%2Fmain%2Fstats.json&color=blue) | Register defs + pin maps |
-| ![Lines of DTS](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20DTS&query=%24.dts&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fapex-one%2Fmain%2Fstats.json&color=green) | Device tree source |
-| ![Lines of Docs](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20Docs&query=%24.docs&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fapex-one%2Fmain%2Fstats.json&color=orange) | Markdown documentation |
-| ![BOM Components](https://img.shields.io/badge/dynamic/json?label=BOM%20Components&query=%24.bom_components&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fapex-one%2Fmain%2Fstats.json&color=red) | Unique parts in bill of materials |
-| ![Total Files](https://img.shields.io/badge/dynamic/json?label=Total%20Files&query=%24.total_files&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fapex-one%2Fmain%2Fstats.json&color=9cf) | All project files |
+| ![Lines of C Code](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20C%20Code&query=%24.C&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fghostblade%2Fmain%2Fstats.json&color=blue) | Firmware + kernel driver |
+| ![Lines of Headers](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20Headers&query=%24.headers&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fghostblade%2Fmain%2Fstats.json&color=blue) | Register defs + pin maps |
+| ![Lines of DTS](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20DTS&query=%24.dts&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fghostblade%2Fmain%2Fstats.json&color=green) | Device tree source |
+| ![Lines of Docs](https://img.shields.io/badge/dynamic/json?label=Lines%20of%20Docs&query=%24.docs&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fghostblade%2Fmain%2Fstats.json&color=orange) | Markdown documentation |
+| ![BOM Components](https://img.shields.io/badge/dynamic/json?label=BOM%20Components&query=%24.bom_components&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fghostblade%2Fmain%2Fstats.json&color=red) | Unique parts in bill of materials |
+| ![Total Files](https://img.shields.io/badge/dynamic/json?label=Total%20Files&query=%24.total_files&url=https%3A%2F%2Fraw.githubusercontent.com%2Fjayis1%2Fghostblade%2Fmain%2Fstats.json&color=9cf) | All project files |
 
 ---
 
@@ -171,12 +195,12 @@ apex-one/
 
 | File | Description |
 |------|-------------|
-| [apex-one.kicad_pro](hardware/kicad/apex-one.kicad_pro) | KiCad 8 project file (6-layer stackup, net classes) |
-| [apex-one-symbols.kicad_sym](hardware/kicad/symbols/apex-one-symbols.kicad_sym) | Symbol library (RK3576, RP2350B, LMS7002M, CC1101, ST25R3916, PE42422, MT7922, RK817, LPDDR5) |
-| [apex-one-footprints.kicad_mod](hardware/kicad/footprints/apex-one-footprints.pretty/apex-one-footprints.kicad_mod) | Footprint library (FCBGA-732, QFN-60, QFN-64, all packages) |
-| [apex-one.net](hardware/kicad/apex-one.net) | Schematic netlist (150+ nets, all IC connections) |
-| [apex-one-bom.csv](hardware/bom/apex-one-bom.csv) | Full bill of materials (80+ line items, MPN, price) |
-| [apex-one-bom-interactive.html](hardware/bom/apex-one-bom-interactive.html) | Interactive HTML BOM (search, filter, sort, cost calc) |
+| [ghostblade.kicad_pro](hardware/kicad/ghostblade.kicad_pro) | KiCad 8 project file (6-layer stackup, net classes) |
+| [ghostblade-symbols.kicad_sym](hardware/kicad/symbols/ghostblade-symbols.kicad_sym) | Symbol library (RK3576, RP2350B, LMS7002M, CC1101, ST25R3916, PE42422, MT7922, RK817, LPDDR5) |
+| [ghostblade-footprints.kicad_mod](hardware/kicad/footprints/ghostblade-footprints.pretty/ghostblade-footprints.kicad_mod) | Footprint library (FCBGA-732, QFN-60, QFN-64, all packages) |
+| [ghostblade.net](hardware/kicad/ghostblade.net) | Schematic netlist (150+ nets, all IC connections) |
+| [ghostblade-bom.csv](hardware/bom/ghostblade-bom.csv) | Full bill of materials (80+ line items, MPN, price) |
+| [ghostblade-bom-interactive.html](hardware/bom/ghostblade-bom-interactive.html) | Interactive HTML BOM (search, filter, sort, cost calc) |
 | [3D models README](hardware/kicad/3dmodels/README.md) | STEP model references and parametric generation scripts |
 
 ---

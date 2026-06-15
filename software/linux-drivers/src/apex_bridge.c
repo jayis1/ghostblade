@@ -1,7 +1,7 @@
 /*
- * apex_bridge.c — Linux Kernel Driver for Apex One SPI Bridge
+ * apex_bridge.c — Linux Kernel Driver for GhostBlade SPI Bridge
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This driver implements a character device interface for the SPI bridge
@@ -53,6 +53,10 @@
 #include <linux/jiffies.h>
 #include <linux/pm_runtime.h>
 #include <linux/atomic.h>
+#include <linux/pm.h>
+#include <linux/scatterlist.h>
+#include <linux/dma-mapping.h>
+#include <linux/highmem.h>
 
 #include "apex_bridge_regs.h"
 
@@ -97,6 +101,7 @@ struct apex_bridge_dev {
     struct kfifo       tx_fifo;       /* TX data FIFO */
     struct apex_telemetry last_telem; /* Last telemetry snapshot */
     unsigned long      flags;         /* Driver state flags */
+    struct apex_sg_engine sg_engine;  /* Scatter-gather DMA engine */
 };
 
 static struct apex_bridge_dev *apex_dev;
@@ -519,6 +524,8 @@ static int apex_bridge_open(struct inode *inode, struct file *filp)
     /* Use atomic cmpxchg to ensure only one opener at a time */
     if (atomic_cmpxchg(&dev->open_count, 0, 1) != 0)
         return -EBUSY;  /* Only one user at a time */
+    /* Resume device from runtime suspend */
+    pm_runtime_get_sync(&dev->spi->dev);
 
     return 0;
 }
@@ -527,6 +534,8 @@ static int apex_bridge_release(struct inode *inode, struct file *filp)
 {
     struct apex_bridge_dev *dev = filp->private_data;
 
+    /* Allow device to runtime suspend */
+    pm_runtime_put_autosuspend(&dev->spi->dev);
     atomic_set(&dev->open_count, 0);
     filp->private_data = NULL;
 
@@ -562,7 +571,7 @@ static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
 }
 
 static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
-                                  size_t count, loff_t *f_pos)
+                                 size_t count, loff_t *f_pos)
 {
     struct apex_bridge_dev *dev = filp->private_data;
     uint8_t *kbuf;
@@ -636,6 +645,7 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
     ret = count;  /* Report full write as consumed */
 
 out:
+    /* Securely wipe buffers that may contain protocol data before freeing */
     kfree_sensitive(kbuf);
     kfree_sensitive(frame);
     kfree_sensitive(rx_buf);
@@ -823,7 +833,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         frame_len = apex_build_frame(APEX_CMD_NFC_TRANSACT, nfc_buf,
                                       nfc_total, frame,
                                       APEX_SPI_FRAME_SIZE_MAX);
-        kfree(nfc_buf);
+        kfree_sensitive(nfc_buf);
 
         if (frame_len < 0) {
             ret = frame_len;
@@ -890,6 +900,50 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         break;
     }
 
+    case APEX_IOC_SG_START: {
+        struct apex_sg_config config;
+
+        if (copy_from_user(&config, (struct apex_sg_config __user *)arg,
+                           sizeof(config))) {
+            ret = -EFAULT;
+            break;
+        }
+
+        ret = apex_sg_engine_start(dev, &config);
+        break;
+    }
+
+    case APEX_IOC_SG_STOP: {
+        ret = apex_sg_engine_stop(dev);
+        break;
+    }
+
+    case APEX_IOC_SG_GET_STATUS: {
+        struct apex_sg_status status;
+
+        memset(&status, 0, sizeof(status));
+
+        spin_lock(&dev->rx_lock);
+        status.state = dev->sg_engine.state;
+        status.buf_count = dev->sg_engine.buf_count;
+        status.buf_size = dev->sg_engine.buf_size;
+        status.total_transferred = dev->sg_engine.total_transferred;
+        status.overruns = dev->sg_engine.overruns;
+        status.errors = dev->sg_engine.errors;
+        status.frames_rx = dev->sg_engine.frames_rx;
+        status.frames_crc_err = dev->sg_engine.frames_crc_err;
+        spin_unlock(&dev->rx_lock);
+
+        if (copy_to_user((struct apex_sg_status __user *)arg,
+                         &status, sizeof(status))) {
+            ret = -EFAULT;
+            break;
+        }
+
+        ret = 0;
+        break;
+    }
+
     default:
         ret = -ENOTTY;
         break;
@@ -934,6 +988,7 @@ static const struct file_operations apex_bridge_fops = {
     .write          = apex_bridge_write,
     .unlocked_ioctl = apex_bridge_ioctl,
     .poll           = apex_bridge_poll,
+    .mmap           = apex_bridge_mmap,
 };
 
 /* ========================================================================
@@ -1084,7 +1139,7 @@ static ssize_t spi_errors_show(struct device *dev,
 static DEVICE_ATTR_RO(spi_errors);
 
 static ssize_t rx_fifo_count_show(struct device *dev,
-                                    struct device_attribute *attr, char *buf)
+                                   struct device_attribute *attr, char *buf)
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
     unsigned int count;
@@ -1111,6 +1166,81 @@ static ssize_t tx_fifo_count_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(tx_fifo_count);
 
+/* ── Scatter-Gather DMA sysfs attributes ──────────────────────────────────── */
+
+static ssize_t sg_state_show(struct device *dev,
+                               struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    const char *state_str;
+
+    switch (adev->sg_engine.state) {
+    case APEX_SG_STATE_IDLE:
+        state_str = "idle";
+        break;
+    case APEX_SG_STATE_RUNNING:
+        state_str = "running";
+        break;
+    case APEX_SG_STATE_ERROR:
+        state_str = "error";
+        break;
+    default:
+        state_str = "unknown";
+        break;
+    }
+
+    return sprintf(buf, "%s\n", state_str);
+}
+static DEVICE_ATTR_RO(sg_state);
+
+static ssize_t sg_total_bytes_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    return sprintf(buf, "%llu\n", adev->sg_engine.total_transferred);
+}
+static DEVICE_ATTR_RO(sg_total_bytes);
+
+static ssize_t sg_overruns_show(struct device *dev,
+                                  struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    return sprintf(buf, "%u\n", adev->sg_engine.overruns);
+}
+static DEVICE_ATTR_RO(sg_overruns);
+
+static ssize_t sg_errors_show(struct device *dev,
+                                struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    return sprintf(buf, "%u\n", adev->sg_engine.errors);
+}
+static DEVICE_ATTR_RO(sg_errors);
+
+static ssize_t sg_frames_rx_show(struct device *dev,
+                                   struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    return sprintf(buf, "%u\n", adev->sg_engine.frames_rx);
+}
+static DEVICE_ATTR_RO(sg_frames_rx);
+
+static ssize_t sg_buf_count_show(struct device *dev,
+                                   struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    return sprintf(buf, "%u\n", adev->sg_engine.buf_count);
+}
+static DEVICE_ATTR_RO(sg_buf_count);
+
+static ssize_t sg_buf_size_show(struct device *dev,
+                                  struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    return sprintf(buf, "%u\n", adev->sg_engine.buf_size);
+}
+static DEVICE_ATTR_RO(sg_buf_size);
+
 static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_rssi_dbm_x10.attr,
     &dev_attr_temp_c_x10.attr,
@@ -1123,9 +1253,475 @@ static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_spi_errors.attr,
     &dev_attr_rx_fifo_count.attr,
     &dev_attr_tx_fifo_count.attr,
+    /* Scatter-gather DMA attributes */
+    &dev_attr_sg_state.attr,
+    &dev_attr_sg_total_bytes.attr,
+    &dev_attr_sg_overruns.attr,
+    &dev_attr_sg_errors.attr,
+    &dev_attr_sg_frames_rx.attr,
+    &dev_attr_sg_buf_count.attr,
+    &dev_attr_sg_buf_size.attr,
     NULL,
 };
 ATTRIBUTE_GROUPS(apex_bridge);
+
+/* ========================================================================
+ * DMA Scatter-Gather Engine for High-Throughput SDR IQ Streaming
+ * ========================================================================
+ *
+ * The SG engine provides zero-copy IQ data streaming from the RP2350B to
+ * userspace. It allocates DMA-coherent buffers and uses the SPI controller
+ * in DMA mode with scatter-gather to fill them directly, avoiding the
+ * intermediate kfifo copy path used by the character device read().
+ *
+ * Architecture:
+ *   1. User calls APEX_IOC_SG_START with buffer count/size config
+ *   2. Driver allocates DMA-coherent buffers and sets up scatterlist
+ *   3. SPI transfers fill buffers in round-robin order
+ *   4. Each completed buffer transitions: FREE -> DMA_ACTIVE -> READY
+ *   5. Userspace mmaps buffers and reads data directly
+ *   6. APEX_IOC_SG_STOP tears down the engine and frees buffers
+ *
+ * The engine runs as a workqueue that continuously schedules SPI DMA
+ * transfers. When a buffer is filled, it's marked READY and userspace
+ * is notified via the poll()/epoll interface.
+ */
+
+#define APEX_SG_DESC_SIZE      sizeof(struct apex_sg_buf_desc)
+
+struct apex_sg_buf {
+    void               *dma_virt;       /* DMA-coherent virtual address */
+    dma_addr_t          dma_phys;        /* DMA bus address */
+    struct apex_sg_buf_desc desc;        /* Buffer descriptor */
+};
+
+struct apex_sg_engine {
+    struct apex_sg_buf  *bufs;           /* Array of SG buffers */
+    struct scatterlist  *sgl;            /* Scatterlist for DMA mapping */
+    uint32_t             buf_count;      /* Number of buffers */
+    uint32_t             buf_size;       /* Size of each buffer */
+    uint32_t             current_idx;    /* Next buffer to fill */
+    uint32_t             state;          /* APEX_SG_STATE_* */
+    uint64_t             total_transferred;
+    uint32_t             overruns;
+    uint32_t             errors;
+    uint32_t             frames_rx;
+    uint32_t             frames_crc_err;
+    uint32_t             sequence;       /* Monotonic sequence counter */
+    uint32_t             timeout_ms;    /* DMA completion timeout */
+    struct work_struct   sg_work;        /* Work item for SG processing */
+    struct completion    sg_buf_complete; /* DMA completion signal */
+    wait_queue_head_t   sg_waitq;        /* Userspace wait queue for READY bufs */
+    struct mutex         sg_lock;        /* Protect SG engine state */
+    bool                 continuous;     /* Continuous streaming mode */
+    struct device        *dma_dev;       /* Device for DMA mapping */
+};
+
+/* ── SG Engine Helper Functions ────────────────────────────────────────── */
+
+static void apex_sg_buf_set_state(struct apex_sg_engine *eng,
+                                   uint32_t idx, uint32_t state)
+{
+    if (idx < eng->buf_count) {
+        eng->bufs[idx].desc.state = state;
+        if (state == APEX_SG_BUF_READY)
+            wake_up_interruptible(&eng->sg_waitq);
+    }
+}
+
+/*
+ * apex_sg_dma_callback — DMA transfer completion callback
+ *
+ * Called from interrupt context when a SPI DMA transfer completes.
+ * Marks the buffer as READY and schedules the next transfer.
+ */
+static void apex_sg_dma_callback(void *context)
+{
+    struct apex_sg_engine *eng = context;
+    uint32_t idx = eng->current_idx;
+    uint32_t buf_size = eng->buf_size;
+
+    /* Mark current buffer as ready */
+    eng->bufs[idx].desc.data_len = buf_size;
+    eng->bufs[idx].desc.timestamp_ns = ktime_get_real_ns();
+    eng->bufs[idx].desc.sequence = eng->sequence++;
+    eng->bufs[idx].desc.state = APEX_SG_BUF_READY;
+
+    eng->total_transferred += buf_size;
+    eng->frames_rx++;
+
+    /* Advance to next buffer (round-robin) */
+    eng->current_idx = (eng->current_idx + 1) % eng->buf_count;
+
+    /* Signal completion so the work function schedules the next transfer */
+    complete(&eng->sg_buf_complete);
+}
+
+/*
+ * apex_sg_work_handler — Workqueue handler for SG DMA processing
+ *
+ * Continuously schedules SPI DMA transfers in round-robin order
+ * through the SG buffers. In continuous mode, it keeps cycling
+ * until explicitly stopped. In single-batch mode, it stops when
+ * all buffers have been filled once.
+ */
+static void apex_sg_work_handler(struct work_struct *work)
+{
+    struct apex_sg_engine *eng =
+        container_of(work, struct apex_sg_engine, sg_work);
+    struct apex_bridge_dev *adev =
+        container_of(eng, struct apex_bridge_dev, sg_engine);
+
+    while (eng->state == APEX_SG_STATE_RUNNING) {
+        uint32_t idx = eng->current_idx;
+        struct apex_sg_buf *buf = &eng->bufs[idx];
+        struct spi_transfer xfer;
+        struct spi_message msg;
+        int ret;
+
+        /* Skip buffers still in use by userspace */
+        if (buf->desc.state == APEX_SG_BUF_USERSPACE) {
+            eng->overruns++;
+            /* Try next buffer */
+            eng->current_idx = (idx + 1) % eng->buf_count;
+            continue;
+        }
+
+        /* Mark buffer as DMA active */
+        apex_sg_buf_set_state(eng, idx, APEX_SG_BUF_DMA_ACTIVE);
+
+        /* Prepare SPI DMA transfer */
+        memset(&xfer, 0, sizeof(xfer));
+        xfer.rx_buf = buf->dma_virt;
+        xfer.len = eng->buf_size;
+        xfer.speed_hz = eng->state == APEX_SG_STATE_RUNNING ?
+                         spi_speed_hz : spi_speed_hz;
+
+        spi_message_init_with_transfers(&msg, &xfer, 1);
+
+        /* Set DMA completion callback */
+        msg.complete = apex_sg_dma_callback;
+        msg.context = eng;
+
+        /* Submit SPI transfer with DMA */
+        mutex_lock(&adev->lock);
+        ret = spi_async(adev->spi, &msg);
+        mutex_unlock(&adev->lock);
+
+        if (ret < 0) {
+            dev_err(&adev->spi->dev,
+                    "SG DMA transfer failed: %d\n", ret);
+            eng->errors++;
+            apex_sg_buf_set_state(eng, idx, APEX_SG_BUF_FREE);
+
+            if (eng->errors > 100) {
+                eng->state = APEX_SG_STATE_ERROR;
+                break;
+            }
+
+            /* Brief delay before retry */
+            msleep(1);
+            continue;
+        }
+
+        /* Wait for DMA completion with timeout */
+        if (eng->timeout_ms > 0) {
+            ret = wait_for_completion_timeout(&eng->sg_buf_complete,
+                    msecs_to_jiffies(eng->timeout_ms));
+            if (ret == 0) {
+                dev_warn(&adev->spi->dev,
+                         "SG DMA timeout on buffer %u\n", idx);
+                eng->errors++;
+                apex_sg_buf_set_state(eng, idx, APEX_SG_BUF_FREE);
+            }
+        } else {
+            wait_for_completion(&eng->sg_buf_complete);
+        }
+
+        /* Re-initialize completion for next buffer */
+        reinit_completion(&eng->sg_buf_complete);
+
+        /* In single-batch mode, stop after filling all buffers once */
+        if (!eng->continuous && eng->sequence >= eng->buf_count) {
+            eng->state = APEX_SG_STATE_IDLE;
+            break;
+        }
+    }
+
+    dev_info(&adev->spi->dev, "SG engine stopped: %u frames, %llu bytes, %u errors\n",
+             eng->frames_rx, eng->total_transferred, eng->errors);
+}
+
+/* ── SG Engine Lifecycle ────────────────────────────────────────────────── */
+
+/*
+ * apex_sg_engine_init — Initialize SG engine state (called at probe)
+ */
+static void apex_sg_engine_init(struct apex_bridge_dev *dev)
+{
+    struct apex_sg_engine *eng = &dev->sg_engine;
+
+    memset(eng, 0, sizeof(*eng));
+    eng->state = APEX_SG_STATE_IDLE;
+    mutex_init(&eng->sg_lock);
+    init_waitqueue_head(&eng->sg_waitq);
+    init_completion(&eng->sg_buf_complete);
+}
+
+/*
+ * apex_sg_engine_start — Allocate buffers and start SG DMA streaming
+ *
+ * @dev: Bridge device
+ * @config: SG configuration from userspace
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+static int apex_sg_engine_start(struct apex_bridge_dev *dev,
+                                 struct apex_sg_config *config)
+{
+    struct apex_sg_engine *eng = &dev->sg_engine;
+    uint32_t i;
+    int ret;
+
+    if (config->buf_count < 2 || config->buf_count > APEX_SG_MAX_BUFS)
+        return -EINVAL;
+
+    if (config->buf_size < APEX_SG_BUF_SIZE_MIN ||
+        config->buf_size > APEX_SG_BUF_SIZE_MAX)
+        return -EINVAL;
+
+    if (config->buf_size % APEX_SG_BUF_SIZE_ALIGN != 0)
+        return -EINVAL;
+
+    mutex_lock(&eng->sg_lock);
+
+    if (eng->state != APEX_SG_STATE_IDLE) {
+        mutex_unlock(&eng->sg_lock);
+        return -EBUSY;
+    }
+
+    /* Allocate buffer array */
+    eng->bufs = kcalloc(config->buf_count, sizeof(*eng->bufs), GFP_KERNEL);
+    if (!eng->bufs) {
+        mutex_unlock(&eng->sg_lock);
+        return -ENOMEM;
+    }
+
+    /* Allocate scatterlist */
+    eng->sgl = kcalloc(config->buf_count, sizeof(*eng->sgl), GFP_KERNEL);
+    if (!eng->sgl) {
+        kfree(eng->bufs);
+        eng->bufs = NULL;
+        mutex_unlock(&eng->sg_lock);
+        return -ENOMEM;
+    }
+
+    sg_init_table(eng->sgl, config->buf_count);
+
+    /* Allocate DMA-coherent buffers */
+    for (i = 0; i < config->buf_count; i++) {
+        eng->bufs[i].dma_virt = dma_alloc_coherent(&dev->spi->dev,
+                                    config->buf_size,
+                                    &eng->bufs[i].dma_phys,
+                                    GFP_KERNEL);
+        if (!eng->bufs[i].dma_virt) {
+            /* Rollback: free all previously allocated buffers */
+            while (i > 0) {
+                i--;
+                dma_free_coherent(&dev->spi->dev, config->buf_size,
+                                  eng->bufs[i].dma_virt,
+                                  eng->bufs[i].dma_phys);
+            }
+            kfree(eng->sgl);
+            kfree(eng->bufs);
+            eng->bufs = NULL;
+            eng->sgl = NULL;
+            mutex_unlock(&eng->sg_lock);
+            return -ENOMEM;
+        }
+
+        /* Initialize buffer descriptor */
+        eng->bufs[i].desc.buf_index = i;
+        eng->bufs[i].desc.data_len = 0;
+        eng->bufs[i].desc.timestamp_ns = 0;
+        eng->bufs[i].desc.sequence = 0;
+        eng->bufs[i].desc.state = APEX_SG_BUF_FREE;
+
+        /* Set up scatterlist entry */
+        sg_set_buf(&eng->sgl[i], eng->bufs[i].dma_virt, config->buf_size);
+    }
+
+    eng->buf_count = config->buf_count;
+    eng->buf_size = config->buf_size;
+    eng->timeout_ms = config->timeout_ms;
+    eng->continuous = config->continuous ? true : false;
+    eng->current_idx = 0;
+    eng->total_transferred = 0;
+    eng->overruns = 0;
+    eng->errors = 0;
+    eng->frames_rx = 0;
+    eng->frames_crc_err = 0;
+    eng->sequence = 0;
+    eng->dma_dev = &dev->spi->dev;
+
+    /* Override SPI speed if requested */
+    if (config->spi_speed_hz > 0 && config->spi_speed_hz <= 50000000)
+        spi_speed_hz = config->spi_speed_hz;
+
+    /* Initialize work item */
+    INIT_WORK(&eng->sg_work, apex_sg_work_handler);
+    reinit_completion(&eng->sg_buf_complete);
+
+    /* Start the engine */
+    eng->state = APEX_SG_STATE_RUNNING;
+
+    /* Send SDR stream start command to MCU */
+    {
+        uint8_t enable = 1;
+        uint8_t *frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+        uint8_t *rx = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+        int frame_len;
+
+        if (frame && rx) {
+            frame_len = apex_build_frame(APEX_CMD_SDR_STREAM, &enable,
+                                          sizeof(enable), frame,
+                                          APEX_SPI_FRAME_SIZE_MAX);
+            if (frame_len > 0)
+                apex_spi_xfer(dev, frame, frame_len, rx,
+                              APEX_SPI_FRAME_SIZE_MAX);
+        }
+        kfree(frame);
+        kfree(rx);
+    }
+
+    /* Schedule the SG work */
+    schedule_work(&eng->sg_work);
+
+    mutex_unlock(&eng->sg_lock);
+
+    dev_info(&dev->spi->dev,
+             "SG engine started: %u buffers × %u bytes, continuous=%u\n",
+             config->buf_count, config->buf_size, config->continuous);
+
+    return 0;
+}
+
+/*
+ * apex_sg_engine_stop — Stop SG DMA streaming and free buffers
+ *
+ * @dev: Bridge device
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
+{
+    struct apex_sg_engine *eng = &dev->sg_engine;
+    uint32_t i;
+
+    mutex_lock(&eng->sg_lock);
+
+    if (eng->state == APEX_SG_STATE_IDLE) {
+        mutex_unlock(&eng->sg_lock);
+        return 0;  /* Already stopped */
+    }
+
+    /* Signal the engine to stop */
+    eng->state = APEX_SG_STATE_IDLE;
+
+    /* Cancel pending work */
+    cancel_work_sync(&eng->sg_work);
+
+    /* Send SDR stream stop command to MCU */
+    {
+        uint8_t disable = 0;
+        uint8_t *frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+        uint8_t *rx = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+        int frame_len;
+
+        if (frame && rx) {
+            frame_len = apex_build_frame(APEX_CMD_SDR_STREAM, &disable,
+                                          sizeof(disable), frame,
+                                          APEX_SPI_FRAME_SIZE_MAX);
+            if (frame_len > 0)
+                apex_spi_xfer(dev, frame, frame_len, rx,
+                              APEX_SPI_FRAME_SIZE_MAX);
+        }
+        kfree(frame);
+        kfree(rx);
+    }
+
+    /* Free DMA-coherent buffers */
+    if (eng->bufs) {
+        for (i = 0; i < eng->buf_count; i++) {
+            if (eng->bufs[i].dma_virt)
+                dma_free_coherent(&dev->spi->dev, eng->buf_size,
+                                  eng->bufs[i].dma_virt,
+                                  eng->bufs[i].dma_phys);
+        }
+        kfree(eng->bufs);
+        eng->bufs = NULL;
+    }
+
+    kfree(eng->sgl);
+    eng->sgl = NULL;
+
+    dev_info(&dev->spi->dev,
+             "SG engine stopped: %u frames, %llu bytes, %u overruns, %u errors\n",
+             eng->frames_rx, eng->total_transferred, eng->overruns, eng->errors);
+
+    mutex_unlock(&eng->sg_lock);
+    return 0;
+}
+
+/* ── SG mmap support ───────────────────────────────────────────────────── */
+
+/*
+ * apex_sg_mmap — Map SG buffers to userspace
+ *
+ * Allows userspace to mmap the SG buffer pool as a contiguous region.
+ * Each buffer's descriptor is placed at the start of the buffer region,
+ * allowing userspace to determine which buffers contain valid data.
+ */
+static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+    struct apex_bridge_dev *dev = filp->private_data;
+    struct apex_sg_engine *eng = &dev->sg_engine;
+    unsigned long vsize = vma->vm_end - vma->vm_start;
+    unsigned long psize;
+    uint32_t i;
+    int ret;
+
+    if (eng->state == APEX_SG_STATE_IDLE)
+        return -ENODEV;
+
+    psize = eng->buf_count * eng->buf_size;
+    if (vsize > psize)
+        return -EINVAL;
+
+    /* Map each buffer as a separate page range */
+    for (i = 0; i < eng->buf_count; i++) {
+        unsigned long offset = i * eng->buf_size;
+        unsigned long nr_pages = eng->buf_size / PAGE_SIZE;
+        unsigned long j;
+
+        if (offset >= vsize)
+            break;
+
+        for (j = 0; j < nr_pages && (offset + j * PAGE_SIZE) < vsize; j++) {
+            ret = remap_pfn_range(vma,
+                    vma->vm_start + offset + j * PAGE_SIZE,
+                    page_to_pfn(virt_to_page(eng->bufs[i].dma_virt + j * PAGE_SIZE)),
+                    PAGE_SIZE, vma->vm_page_prot);
+            if (ret)
+                return ret;
+        }
+    }
+
+    /* Mark as DMA-coherent mapping (no cache flush needed) */
+    vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+
+    return 0;
+}
 
 /* ========================================================================
  * SPI Driver Probe & Remove
@@ -1136,7 +1732,7 @@ static int apex_bridge_probe(struct spi_device *spi)
     struct apex_bridge_dev *dev;
     int ret;
 
-    dev_info(&spi->dev, "Apex One SPI Bridge driver probing\n");
+    dev_info(&spi->dev, "GhostBlade SPI Bridge driver probing\n");
 
     dev = kzalloc(sizeof(*dev), GFP_KERNEL);
     if (!dev)
@@ -1145,9 +1741,9 @@ static int apex_bridge_probe(struct spi_device *spi)
     dev->spi = spi;
     spi_set_drvdata(spi, dev);
 
+    atomic_set(&dev->open_count, 0);
     mutex_init(&dev->lock);
     spin_lock_init(&dev->rx_lock);
-    atomic_set(&dev->open_count, 0);
     init_waitqueue_head(&dev->rx_waitq);
     init_waitqueue_head(&dev->tx_waitq);
     init_completion(&dev->xfer_done);
@@ -1245,8 +1841,11 @@ static int apex_bridge_probe(struct spi_device *spi)
     pm_runtime_enable(&spi->dev);
     pm_runtime_get_sync(&spi->dev);  /* Hold active during probe */
 
+    /* Initialize scatter-gather DMA engine */
+    apex_sg_engine_init(dev);
+
     apex_dev = dev;
-    dev_info(&spi->dev, "Apex One SPI Bridge driver initialized\n");
+    dev_info(&spi->dev, "GhostBlade SPI Bridge driver initialized\n");
     dev_info(&spi->dev, "Device: /dev/%s0, Major: %d, Minor: %d\n",
              DEVICE_NAME, MAJOR(dev->devt), MINOR(dev->devt));
 
@@ -1286,6 +1885,9 @@ static void apex_bridge_remove(struct spi_device *spi)
     /* Cancel pending work */
     cancel_work_sync(&dev->rx_work);
 
+    /* Stop scatter-gather engine if running */
+    apex_sg_engine_stop(dev);
+
     /* Destroy device node */
     device_destroy(dev->class, dev->devt);
     class_destroy(dev->class);
@@ -1299,7 +1901,7 @@ static void apex_bridge_remove(struct spi_device *spi)
     kfifo_free(&dev->rx_fifo);
     kfifo_free(&dev->tx_fifo);
 
-    dev_info(&spi->dev, "Apex One SPI Bridge driver removed\n");
+    dev_info(&spi->dev, "GhostBlade SPI Bridge driver removed\n");
 
     kfree(dev);
     apex_dev = NULL;
@@ -1365,7 +1967,7 @@ static struct spi_driver apex_bridge_driver = {
 
 module_spi_driver(apex_bridge_driver);
 
-MODULE_AUTHOR("Apex One Project");
-MODULE_DESCRIPTION("Apex One SPI Bridge Driver (RK3576 <-> RP2350B)");
+MODULE_AUTHOR("GhostBlade Project");
+MODULE_DESCRIPTION("GhostBlade SPI Bridge Driver (RK3576 <-> RP2350B)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0.0");

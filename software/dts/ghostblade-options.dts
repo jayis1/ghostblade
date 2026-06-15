@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Overlay — GhostBlade Optional Hardware
+ * Project NullSpectre
+ *
+ * Apply this overlay when external GPS or Bluetooth modules
+ * are connected to the expansion headers.
+ *
+ * Usage:
+ *   dtc -I dts -O dtb -@ -o ghostblade-options.dtbo ghostblade-options.dts
+ *   sudo mkdir -p /sys/kernel/config/device-tree/overlays/options
+ *   sudo cp ghostblade-options.dtbo /sys/kernel/config/device-tree/overlays/options/dtbo
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	compatible = "ghostblade,nullspectre", "rockchip,rk3576";
+
+	/*
+	 * Fragment 0: GPS Module (u-blox NEO-M10N on UART2)
+	 * Connected via expansion header J8
+	 */
+	fragment@0 {
+		target = <&uart2>;
+
+		__overlay__ {
+			status = "okay";
+			current-speed = <9600>;
+
+			gps: gps-nmea {
+				compatible = "u-blox,neo-m10";
+				current-speed = <9600>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 1: External LNA power for SDR
+	 * GPIO-controlled LNA enable for external preamplifiers
+	 */
+	fragment@1 {
+		target-path = "/";
+
+		__overlay__ {
+			lna_en_regulator: lna-en-regulator {
+				compatible = "regulator-fixed";
+				regulator-name = "lna_en";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				gpio = <&gpio1 17 GPIO_ACTIVE_HIGH>; /* GPIO1_C1: LNA_EN */
+				enable-active-high;
+				startup-delay-us = <1000>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 2: Bluetooth over UART3 (optional BT module)
+	 * Connected via expansion header J9
+	 */
+	fragment@2 {
+		target = <&uart3>;
+
+		__overlay__ {
+			status = "okay";
+			current-speed = <3000000>;
+
+			bluetooth: bluetooth {
+				compatible = "brcm,bcm43438-bt";
+				max-speed = <3000000>;
+				shutdown-gpios = <&gpio1 18 GPIO_ACTIVE_HIGH>; /* BT_REG_ON */
+				device-wakeup-gpios = <&gpio1 19 GPIO_ACTIVE_HIGH>; /* BT_HOST_WAKE */
+				brcm,has-uart-policy;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 3: Additional pinctrl for overlay peripherals
+	 */
+	fragment@3 {
+		target = <&pinctrl>;
+
+		__overlay__ {
+			uart2_pins_overlay: uart2-pins-overlay {
+				pins = "UART2_TX", "UART2_RX";
+				function = "uart2";
+				bias-pull-up;
+				drive-strength = <4>;
+			};
+
+			uart3_pins_overlay: uart3-pins-overlay {
+				pins = "UART3_TX", "UART3_RX",
+				       "UART3_CTS", "UART3_RTS";
+				function = "uart3";
+				bias-pull-up;
+				drive-strength = <4>;
+			};
+		};
+	};
+};

@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
 """
-Apex One Gerber Generation Script
+GhostBlade Gerber Generation Script
 ==================================
 Generates manufacturing-ready Gerber files, drill files, and pick-and-place
 from KiCad PCB for submission to PCB fabricators.
 
 Usage:
-    python3 generate_gerbers.py [--kicad_pcb path/to/apex-one.kicad_pcb] [--output gerbers/]
+    python3 generate_gerbers.py [--kicad_pcb path/to/ghostblade.kicad_pcb] [--output gerbers/]
 
 Requirements:
     KiCad 8+ must be installed with kicad-cli available in PATH.
 
 Output:
     gerbers/
-    ├── apex-one-F_Cu.gbr          (Top copper - Signal + RF)
-    ├── apex-one-In1_Cu.gbr        (Inner copper 1 - Ground Plane)
-    ├── apex-one-In2_Cu.gbr        (Inner copper 2 - Signal/Low-Speed)
-    ├── apex-one-In3_Cu.gbr        (Inner copper 3 - Power Plane)
-    ├── apex-one-In4_Cu.gbr        (Inner copper 4 - Ground Plane 2)
-    ├── apex-one-B_Cu.gbr          (Bottom copper - Power distribution)
-    ├── apex-one-F_Paste.gbr       (Top solder paste)
-    ├── apex-one-B_Paste.gbr       (Bottom solder paste)
-    ├── apex-one-F_Mask.gbr        (Top solder mask)
-    ├── apex-one-B_Mask.gbr        (Bottom solder mask)
-    ├── apex-one-F_SilkS.gbr       (Top silkscreen)
-    ├── apex-one-B_SilkS.gbr       (Bottom silkscreen)
-    ├── apex-one-Edge_Cuts.gbr     (Board outline)
-    ├── apex-one-Vias.gbr          (Via holes - thermal + signal)
-    ├── apex-one.drl               (Excellon drill file)
-    ├── apex-one-NPTH.drl          (Non-plated through-hole drill)
-    └── apex-one-PickPlace.pos     (Pick-and-place file)
+    ├── ghostblade-F_Cu.gbr          (Top copper - Signal + RF)
+    ├── ghostblade-In1_Cu.gbr        (Inner copper 1 - Ground Plane)
+    ├── ghostblade-In2_Cu.gbr        (Inner copper 2 - Signal/Low-Speed)
+    ├── ghostblade-In3_Cu.gbr        (Inner copper 3 - Power Plane)
+    ├── ghostblade-In4_Cu.gbr        (Inner copper 4 - Ground Plane 2)
+    ├── ghostblade-B_Cu.gbr          (Bottom copper - Power distribution)
+    ├── ghostblade-F_Paste.gbr       (Top solder paste)
+    ├── ghostblade-B_Paste.gbr       (Bottom solder paste)
+    ├── ghostblade-F_Mask.gbr        (Top solder mask)
+    ├── ghostblade-B_Mask.gbr        (Bottom solder mask)
+    ├── ghostblade-F_SilkS.gbr       (Top silkscreen)
+    ├── ghostblade-B_SilkS.gbr       (Bottom silkscreen)
+    ├── ghostblade-Edge_Cuts.gbr     (Board outline)
+    ├── ghostblade-Vias.gbr          (Via holes - thermal + signal)
+    ├── ghostblade.drl               (Excellon drill file)
+    ├── ghostblade-NPTH.drl          (Non-plated through-hole drill)
+    └── ghostblade-PickPlace.pos     (Pick-and-place file)
 
 Manufacturing Notes:
     - 6-layer PCB, 1.6mm FR-4 (Isola 370HR or equivalent High-TG)
@@ -61,20 +61,20 @@ from datetime import datetime
 
 # Layer definitions for 6-layer stackup
 GERBER_LAYERS = {
-    "F.Cu":       "apex-one-F_Cu.gbr",
-    "In1.Cu":     "apex-one-In1_Cu.gbr",
-    "In2.Cu":     "apex-one-In2_Cu.gbr",
-    "In3.Cu":     "apex-one-In3_Cu.gbr",
-    "In4.Cu":     "apex-one-In4_Cu.gbr",
-    "B.Cu":       "apex-one-B_Cu.gbr",
-    "F.Paste":    "apex-one-F_Paste.gbr",
-    "B.Paste":    "apex-one-B_Paste.gbr",
-    "F.Mask":     "apex-one-F_Mask.gbr",
-    "B.Mask":     "apex-one-B_Mask.gbr",
-    "F.SilkS":    "apex-one-F_SilkS.gbr",
-    "B.SilkS":    "apex-one-B_SilkS.gbr",
-    "Edge.Cuts":  "apex-one-Edge_Cuts.gbr",
-    "In1.Cu":     "apex-one-Vias.gbr",  # Via layer
+    "F.Cu":       "ghostblade-F_Cu.gbr",
+    "In1.Cu":     "ghostblade-In1_Cu.gbr",
+    "In2.Cu":     "ghostblade-In2_Cu.gbr",
+    "In3.Cu":     "ghostblade-In3_Cu.gbr",
+    "In4.Cu":     "ghostblade-In4_Cu.gbr",
+    "B.Cu":       "ghostblade-B_Cu.gbr",
+    "F.Paste":    "ghostblade-F_Paste.gbr",
+    "B.Paste":    "ghostblade-B_Paste.gbr",
+    "F.Mask":     "ghostblade-F_Mask.gbr",
+    "B.Mask":     "ghostblade-B_Mask.gbr",
+    "F.SilkS":    "ghostblade-F_SilkS.gbr",
+    "B.SilkS":    "ghostblade-B_SilkS.gbr",
+    "Edge.Cuts":  "ghostblade-Edge_Cuts.gbr",
+    "In1.Cu":     "ghostblade-Vias.gbr",  # Via layer
 }
 
 
@@ -133,7 +133,7 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
     pos_cmd = [
         "kicad-cli", "pcb", "export", "pos",
         "--format", "csv",
-        "--output", str(out_path / "apex-one-PickPlace.pos"),
+        "--output", str(out_path / "ghostblade-PickPlace.pos"),
         str(pcb_path)
     ]
     try:
@@ -148,7 +148,7 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
 def generate_fab_note(output_dir: str):
     """Generate fabrication notes as a JSON file for the fab house."""
     fab_data = {
-        "project": "Apex One - Project Cyber-Swiss",
+        "project": "GhostBlade - Project NullSpectre",
         "revision": "1.0",
         "date": datetime.now().isoformat(),
         "board_specifications": {
@@ -198,7 +198,7 @@ def generate_fab_note(output_dir: str):
         ],
     }
 
-    fab_path = Path(output_dir) / "apex-one-fab-notes.json"
+    fab_path = Path(output_dir) / "ghostblade-fab-notes.json"
     fab_path.parent.mkdir(parents=True, exist_ok=True)
     with open(fab_path, 'w') as f:
         json.dump(fab_data, f, indent=2)
@@ -209,7 +209,7 @@ def generate_zip(output_dir: str):
     """Create a ZIP archive of all Gerber files for fab house submission."""
     import zipfile
 
-    zip_path = Path(output_dir) / "apex-one-gerbers.zip"
+    zip_path = Path(output_dir) / "ghostblade-gerbers.zip"
     gerber_dir = Path(output_dir)
 
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
@@ -221,8 +221,8 @@ def generate_zip(output_dir: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Apex One Gerber Generation")
-    parser.add_argument("--kicad-pcb", default="hardware/kicad/apex-one.kicad_pcb",
+    parser = argparse.ArgumentParser(description="GhostBlade Gerber Generation")
+    parser.add_argument("--kicad-pcb", default="hardware/kicad/ghostblade.kicad_pcb",
                         help="Path to KiCad PCB file")
     parser.add_argument("--output", default="hardware/gerbers",
                         help="Output directory for Gerber files")

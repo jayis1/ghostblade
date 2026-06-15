@@ -1,0 +1,453 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Source for GhostBlade (Project NullSpectre)
+ * Rockchip RK3576 + RP2350B Dual-Processor Pentesting Device
+ *
+ * Copyright (C) 2026 GhostBlade Project
+ * SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+ */
+
+/dts-v1/;
+#include "rk3576.dtsi"
+
+/ {
+	model = "GhostBlade NullSpectre";
+	compatible = "ghostblade,nullspectre", "rockchip,rk3576";
+
+	chosen {
+		stdout-path = &uart0;
+		bootargs = "earlycon=uart8250,mmio32,0xfeb50000,115200n8 "
+			   "console=ttyS0,115200n8 "
+			   "root=/dev/mmcblk0p6 rootfstype=ext4 "
+			   "rootwait "
+			   "apex_bridge.spi_speed=50000000";
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x0 0x0 0x80000000>; /* 8 GB LPDDR5 */
+	};
+
+	/* ================================================================
+	 * Power Supply Regulators
+	 * ================================================================ */
+
+	vdd_core: vdd-core-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_core";
+		regulator-min-microvolt = <900000>;
+		regulator-max-microvolt = <900000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	vdd_logic: vdd-logic-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_logic";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	vdd_3v3: vdd-3v3-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_3v3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	vdd_1v2_sdr: vdd-1v2-sdr-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_1v2_sdr";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		regulator-boot-on;
+	};
+
+	vdd_1v8_sdr: vdd-1v8-sdr-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_1v8_sdr";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
+	};
+
+	vdd_rf: vdd-rf-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_rf";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		vin-supply = <&vdd_3v3>;
+	};
+
+	vdd_nfc_tx: vdd-nfc-tx-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_nfc_tx";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-boot-on;
+	};
+
+	/* ================================================================
+	 * GPIO Keys
+	 * ================================================================ */
+
+	gpio_keys: gpio-keys {
+		compatible = "gpio-keys";
+		autorepeat;
+
+		button-bootsel: button-bootsel {
+			label = "BOOTSEL";
+			linux,code = <KEY_RESTART>; /* RP2350B BOOTSEL */
+			gpios = <&gpio1 12 GPIO_ACTIVE_LOW>; /* GPIO1_B4 */
+			debounce-interval = <50>;
+		};
+
+		button-user: button-user {
+			label = "USER";
+			linux,code = <KEY_F24>;
+			gpios = <&gpio1 13 GPIO_ACTIVE_LOW>; /* GPIO1_B5 */
+			debounce-interval = <50>;
+		};
+	};
+
+	/* ================================================================
+	 * LEDs
+	 * ================================================================ */
+
+	leds: leds {
+		compatible = "gpio-leds";
+
+		led-status: led-status {
+			label = "ghostblade:status";
+			gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>; /* GPIO1_B6 */
+			linux,default-trigger = "heartbeat";
+			default-state = "on";
+		};
+
+		led-activity: led-activity {
+			label = "ghostblade:activity";
+			gpios = <&gpio1 15 GPIO_ACTIVE_HIGH>; /* GPIO1_B7 */
+			linux,default-trigger = "cpu0";
+			default-state = "off";
+		};
+
+		led-sdr-rx: led-sdr-rx {
+			label = "ghostblade:sdr-rx";
+			gpios = <&gpio1 16 GPIO_ACTIVE_HIGH>; /* GPIO1_C0 */
+			default-state = "off";
+		};
+	};
+
+	/* ================================================================
+	 * Apex Bridge (SPI0) — RP2350B Coprocessor
+	 * ================================================================ */
+
+	apex_bridge: apex-bridge {
+		compatible = "apex,apex-bridge";
+		status = "okay";
+
+		pinctrl-0 = <&spi0_pins &bridge_gpio_pins>;
+		pinctrl-names = "default";
+
+		/* GPIO assignments (GPIO1 bank) */
+		apex,int-req-gpio = <&gpio1 8 GPIO_ACTIVE_LOW>;   /* GPIO1_B0 */
+		apex,host-rdy-gpio = <&gpio1 9 GPIO_ACTIVE_LOW>;  /* GPIO1_B1 */
+		apex,mcu-reset-gpio = <&gpio1 10 GPIO_ACTIVE_LOW>; /* GPIO1_B2 */
+	};
+
+	/* ================================================================
+	 * SDR (LMS7002M) — MIPI-CSI-2 Interface
+	 * Repurposed from camera to SDR IQ data transport
+	 * ================================================================ */
+
+	sdr_iq_port: sdr-iq-port {
+		compatible = "apex,sdr-iq-input";
+		status = "okay";
+
+		/* The LMS7002M is controlled via RP2350B SPI1.
+		 * This node describes the MIPI-CSI-2 data path from
+		 * LMS7002M to RK3576 for IQ sample streaming. */
+		port {
+			sdr_iq_ep: endpoint {
+				remote-endpoint = <&csi_input>;
+				data-lanes = <1 2 3 4>;
+				clock-lanes = <0>;
+				link-frequencies = /bits/ 64 <1500000000>;
+				bus-type = <4>; /* MIPI CSI-2 */
+			};
+		};
+	};
+};
+
+/* ================================================================
+ * SPI0 — Bridge to RP2350B Coprocessor
+ * ================================================================ */
+
+&spi0 {
+	status = "okay";
+	max-frequency = <50000000>; /* 50 MHz */
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	apex_bridge_spi: apex-bridge@0 {
+		compatible = "apex,apex-bridge";
+		reg = <0>; /* Chip select 0 */
+		spi-max-frequency = <50000000>;
+		spi-cpha = <0>;
+		spi-cpol = <0>;
+		spi-cs-high = <0>; /* Active-low chip select */
+
+		/* Interrupt from RP2350B INT_REQ (GPIO1_B0) */
+		interrupt-parent = <&gpio1>;
+		interrupts = <8 IRQ_TYPE_EDGE_FALLING>;
+
+		apex,int-req-gpio = <&gpio1 8 GPIO_ACTIVE_LOW>;
+		apex,host-rdy-gpio = <&gpio1 9 GPIO_ACTIVE_LOW>;
+		apex,mcu-reset-gpio = <&gpio1 10 GPIO_ACTIVE_LOW>;
+	};
+};
+
+/* ================================================================
+ * MIPI CSI-2 — SDR IQ Data Input (repurposed from camera)
+ * ================================================================ */
+
+&csi2 {
+	status = "okay";
+
+	ports {
+		port@0 {
+			reg = <0>;
+			csi_input: endpoint {
+				remote-endpoint = <&sdr_iq_ep>;
+				data-lanes = <1 2 3 4>;
+				clock-lanes = <0>;
+				link-frequencies = /bits/ 64 <1500000000>;
+			};
+		};
+	};
+};
+
+/* ================================================================
+ * I2C1 — Secondary Bridge to RP2350B
+ * ================================================================ */
+
+&i2c1 {
+	status = "okay";
+	clock-frequency = <400000>; /* 400 kHz Fast-Mode Plus */
+
+	/* RP2350B I2C0 slave address for telemetry/monitoring */
+	rp2350b_i2c: mcu@42 {
+		compatible = "apex,rp2350b-i2c";
+		reg = <0x42>;
+	};
+};
+
+/* ================================================================
+ * SDIO — Wi-Fi 6E (MT7922)
+ * ================================================================ */
+
+&sdio {
+	status = "okay";
+	max-frequency = <200000000>; /* HS400 SDR104 */
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cap-mmc-highspeed;
+	keep-power-in-suspend;
+	non-removable;
+	vmmc-supply = <&vdd_3v3>;
+	vqmmc-supply = <&vdd_logic>;
+
+	mt7922: wifi@1 {
+		compatible = "mediatek,mt7922";
+		reg = <1>;
+		interrupt-parent = <&gpio1>;
+		interrupts = <20 IRQ_TYPE_LEVEL_LOW>; /* GPIO1_D4: WIFI_IRQ */
+		mediatek,firmware = "mt7922.bin";
+	};
+};
+
+/* ================================================================
+ * eMMC — OS Root Filesystem
+ * ================================================================ */
+
+&emmc {
+	status = "okay";
+	bus-width = <8>;
+	max-frequency = <200000000>; /* HS400 Enhanced Strobe */
+	mmc-hs400-enhanced-strobe;
+	mmc-hs400-1_8v;
+	mmc-hs200-1_8v;
+	non-removable;
+	cap-mmc-highspeed;
+
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		partition@0 {
+			label = "spl";
+			reg = <0x0 0x40000>; /* 256 KB: U-Boot SPL */
+		};
+
+		partition@40000 {
+			label = "uboot";
+			reg = <0x40000 0x200000>; /* 2 MB: Full U-Boot */
+		};
+
+		partition@240000 {
+			label = "dtb";
+			reg = <0x240000 0x80000>; /* 512 KB: Device Tree Blob */
+		};
+
+		partition@2c0000 {
+			label = "boot";
+			reg = <0x2c0000 0x800000>; /* 8 MB: Kernel Image */
+		};
+
+		partition@ac0000 {
+			label = "rootfs";
+			reg = <0xac0000 0x0>; /* Rest: Root filesystem */
+		};
+	};
+};
+
+/* ================================================================
+ * PCIe — M.2 NVMe SSD
+ * ================================================================ */
+
+&pcie {
+	status = "okay";
+	max-link-speed = <3>; /* Gen3 */
+	num-lanes = <2>;
+
+	vpcie3v3-supply = <&vdd_3v3>;
+	vpcie1v8-supply = <&vdd_logic>;
+	vpcie0v9-supply = <&vdd_core>;
+
+	nvme@0,0 {
+		compatible = "apex,nvme-storage";
+		reg = <0x00000000 0 0 0 0>;
+	};
+};
+
+/* ================================================================
+ * USB-C — OTG (Host/Device + DisplayPort Alt Mode)
+ * ================================================================ */
+
+&usb3_otg {
+	status = "okay";
+	dr_mode = "otg";
+	maximum-speed = "super-speed";
+};
+
+/* ================================================================
+ * UART0 — Debug Console
+ * ================================================================ */
+
+&uart0 {
+	status = "okay";
+	current-speed = <115200>;
+	pinctrl-0 = <&uart0_pins>;
+	pinctrl-names = "default";
+};
+
+/* ================================================================
+ * Pin Control
+ * ================================================================ */
+
+&pinctrl {
+	spi0_pins: spi0-pins {
+		pins = "GPIO1_A0", "GPIO1_A1", "GPIO1_A2", "GPIO1_A3";
+		function = "spi0";
+		bias-pull-up;
+		drive-strength = <8>; /* 8 mA */
+	};
+
+	bridge_gpio_pins: bridge-gpio-pins {
+		pins = "GPIO1_B0", "GPIO1_B1", "GPIO1_B2";
+		function = "gpio";
+
+		/* INT_REQ: input with pull-up */
+		GPIO1_B0 {
+			pins = "GPIO1_B0";
+			bias-pull-up;
+			input-enable;
+		};
+
+		/* HOST_RDY: output */
+		GPIO1_B1 {
+			pins = "GPIO1_B1";
+			bias-pull-up;
+			drive-strength = <8>;
+			output-high;
+		};
+
+		/* MCU_RESET: output, initially LOW (asserted) */
+		GPIO1_B2 {
+			pins = "GPIO1_B2";
+			bias-pull-up;
+			drive-strength = <8>;
+			output-low;
+		};
+	};
+
+	mipi_csi_pins: mipi-csi-pins {
+		pins = "MIPI_CSI_CLK_P", "MIPI_CSI_CLK_N",
+		       "MIPI_CSI_D0_P", "MIPI_CSI_D0_N",
+		       "MIPI_CSI_D1_P", "MIPI_CSI_D1_N",
+		       "MIPI_CSI_D2_P", "MIPI_CSI_D2_N",
+		       "MIPI_CSI_D3_P", "MIPI_CSI_D3_N";
+		function = "mipi_csi";
+		bias-disable;
+		drive-strength = <4>;
+	};
+
+	i2c1_pins: i2c1-pins {
+		pins = "I2C1_SDA", "I2C1_SCL";
+		function = "i2c1";
+		bias-pull-up;
+		drive-strength = <4>;
+	};
+
+	uart0_pins: uart0-pins {
+		pins = "UART0_TX", "UART0_RX";
+		function = "uart0";
+		bias-pull-up;
+		drive-strength = <4>;
+	};
+
+	sdio_pins: sdio-pins {
+		pins = "SDIO_CLK", "SDIO_CMD",
+		       "SDIO_D0", "SDIO_D1",
+		       "SDIO_D2", "SDIO_D3";
+		function = "sdio";
+		bias-pull-up;
+		drive-strength = <8>;
+	};
+
+	sdio_irq_pin: sdio-irq-pin {
+		pins = "GPIO1_D4"; /* WIFI_IRQ */
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+	};
+
+	gpio_keys_pins: gpio-keys-pins {
+		pins = "GPIO1_B4", "GPIO1_B5"; /* BOOTSEL, USER */
+		function = "gpio";
+		bias-pull-up;
+		input-enable;
+	};
+
+	led_pins: led-pins {
+		pins = "GPIO1_B6", "GPIO1_B7", "GPIO1_C0";
+		       /* STATUS, ACTIVITY, SDR_RX */
+		function = "gpio";
+		drive-strength = <4>;
+	};
+};

@@ -1,7 +1,7 @@
 # PHASE 4: Foundational Software Stack & Implementation
 
-**Device:** Apex One  
-**Codename:** Project Cyber-Swiss  
+**Device:** GhostBlade  
+**Codename:** Project NullSpectre  
 **Date:** 2026-06-14  
 **Revision:** 1.0  
 

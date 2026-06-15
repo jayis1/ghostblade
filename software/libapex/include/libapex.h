@@ -1,10 +1,10 @@
 /*
- * libapex.h — Userspace API for Apex One SPI Bridge Device
+ * libapex.h — Userspace API for GhostBlade SPI Bridge Device
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * This library provides a C API for interacting with the Apex One
+ * This library provides a C API for interacting with the GhostBlade
  * pentesting device through the kernel SPI bridge driver. It wraps
  * the ioctl interface and provides higher-level functions for SDR
  * control, sub-GHz radio, NFC, and telemetry.
@@ -128,7 +128,7 @@ typedef struct {
  * ======================================================================== */
 
 /**
- * apex_open — Open a connection to the Apex One device
+ * apex_open — Open a connection to the GhostBlade device
  *
  * @device_path: Path to device node (e.g., "/dev/apex_bridge0").
  *               If NULL, uses the default "/dev/apex_bridge0".
