@@ -30,7 +30,7 @@ GhostBlade is a dual-processor pentesting device featuring:
 - **LMS7002M** — SDR transceiver (100 kHz – 3.8 GHz, 2×2 MIMO)
 - **CC1101** — Sub-GHz transceiver (300–928 MHz)
 - **ST25R3916** — NFC reader/writer (13.56 MHz, ISO 14443/15693)
-- **MT7922** — Wi-Fi 6E / Bluetooth 5.2
+- **MT7922** — Wi-Fi 6E / Bluetooth 5.4
 - **PE42422** — RF switch matrix (4 antenna paths)
 
 The RP2350B manages the radio control plane via SPI buses, while the
@@ -42,7 +42,7 @@ driver and `libapex` userspace library.
 ## Repository Structure
 
 ```
-apex-one/
+ghostblade/
 ├── firmware/
 │   └── rp2350b/                 # RP2350B MCU firmware
 │       ├── src/                  # C source files
@@ -111,8 +111,8 @@ for detailed timing diagrams.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/jayis1/apex-one.git
-cd apex-one
+git clone https://github.com/jayis1/ghostblade.git
+cd ghostblade
 ```
 
 ### 2. Install System Dependencies
@@ -336,8 +336,8 @@ before transmitting. Use terminators on unused antenna ports.
 
 ## Getting Help
 
-- **Issues**: https://github.com/jayis1/apex-one/issues
-- **Discussions**: https://github.com/jayis1/apex-one/discussions
+- **Issues**: https://github.com/jayis1/ghostblade/issues
+- **Discussions**: https://github.com/jayis1/ghostblade/discussions
 - **Wiki**: Architecture details and design decisions
 
 ## License

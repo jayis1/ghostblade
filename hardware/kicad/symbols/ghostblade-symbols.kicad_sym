@@ -1,4 +1,4 @@
-(kicad_symbol_lib (version 20240505) (generator "apex-one-cad")
+(kicad_symbol_lib (version 20240505) (generator "ghostblade-cad")
 
   ;; ================================================================
   ;; Rockchip RK3576 — Primary SoC (FCBGA-732, 0.65mm pitch)
@@ -6,7 +6,7 @@
   (symbol "RK3576" (in_bom yes) (on_board yes)
     (property "Reference" "U1" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "RK3576" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:FCBGA-732_0.65mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:FCBGA-732_0.65mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://www.rock-chips.com/uploads/pdf/RK3576%20Datasheet%20V1.0.pdf" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "Rockchip RK3576 Octa-core SoC (4xA72+4xA53, 6TOPS NPU)" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -229,7 +229,7 @@
   (symbol "RP2350B" (in_bom yes) (on_board yes)
     (property "Reference" "U2" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "RP2350B" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:QFN-60-0.4mm_7x7mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:QFN-60-0.4mm_7x7mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "Raspberry Pi RP2350B Dual-core Cortex-M33/RISC-V MCU" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -390,7 +390,7 @@
   (symbol "LMS7002M" (in_bom yes) (on_board yes)
     (property "Reference" "U3" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "LMS7002M" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:QFN-64-0.5mm_9x9mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:QFN-64-0.5mm_9x9mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://limemicro.com/wp-content/uploads/2024/LMS7002M-Datasheet.pdf" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "Lime Microsystems LMS7002M MIMO SDR Transceiver 100kHz-3.8GHz" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -475,7 +475,7 @@
   (symbol "CC1101" (in_bom yes) (on_board yes)
     (property "Reference" "U4" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "CC1101" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:QFN-20-0.5mm_4x4mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:QFN-20-0.5mm_4x4mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://www.ti.com/lit/ds/symlink/cc1101.pdf" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "Texas Instruments CC1101 Sub-1GHz RF Transceiver" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -533,7 +533,7 @@
   (symbol "ST25R3916" (in_bom yes) (on_board yes)
     (property "Reference" "U5" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "ST25R3916" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:QFN-32-0.5mm_5x5mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:QFN-32-0.5mm_5x5mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://www.st.com/resource/en/datasheet/st25r3916.pdf" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "STMicroelectronics ST25R3916 NFC Universal Device" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -599,7 +599,7 @@
   (symbol "PE42422" (in_bom yes) (on_board yes)
     (property "Reference" "U6" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "PE42422" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:QFN-16-0.5mm_3x3mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:QFN-16-0.5mm_3x3mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://www.psemi.com/pdf/datasheets/pe42422ds.pdf" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "Peregrine PE42422 SP4T RF Switch 50MHz-6GHz" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -653,7 +653,7 @@
   (symbol "MT7922" (in_bom yes) (on_board yes)
     (property "Reference" "U7" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "MT7922" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:LGA-145_14.5x13.5mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:LGA-145_14.5x13.5mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://www.mediatek.com/products/networking-and-connectivity/wi-fi-6e" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "MediaTek MT7922 Wi-Fi 6E / Bluetooth 5.4 Module" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -709,7 +709,7 @@
   (symbol "RK817" (in_bom yes) (on_board yes)
     (property "Reference" "U8" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "RK817" (at 0 0 0) (effects (font (size 1.27 1.27))))
-    (property "Footprint" "apex-one-footprints:QFN-48-0.5mm_6x6mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:QFN-48-0.5mm_6x6mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://www.rock-chips.com/uploads/pdf/RK817%20Datasheet.pdf" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "Rockchip RK817 PMIC with 4× BUCK, 7× LDO, Boost, Charger" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 
@@ -787,7 +787,7 @@
   (symbol "K3LKBKB0BM-MGCJ" (in_bom yes) (on_board yes)
     (property "Reference" "U9" (at 0 2 0) (effects (font (size 1.27 1.27))))
     (property "Value" "K3LKBKB0BM-MGCJ" (at 0 0 0) (effects (font (size 0.8 0.8))))
-    (property "Footprint" "apex-one-footprints:FBGA-200_0.4mm_12x12mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
+    (property "Footprint" "ghostblade-footprints:FBGA-200_0.4mm_12x12mm" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Datasheet" "https://www.samsung.com/semiconductor/dram/lpddr5/" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
     (property "Description" "Samsung 4GB LPDDR5 SDRAM 3200MT/s (x16)" (at 0 0 0) (effects (font (size 1.27 1.27)) hide))
 

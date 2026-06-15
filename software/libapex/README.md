@@ -1,6 +1,6 @@
-# libapex — Userspace C Library for Apex One
+# libapex — Userspace C Library for GhostBlade
 
-A C library and Python binding for interacting with the Apex One pentesting
+A C library and Python binding for interacting with the GhostBlade pentesting
 device through the kernel SPI bridge driver.
 
 ## Building

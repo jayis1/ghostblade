@@ -1,0 +1,92 @@
+(version 1)
+# GhostBlade DRC Rules — Project NullSpectre
+# 6-Layer FR-4, 1.6mm, Isola 370HR, IPC Class 3
+# These rules supplement the KiCad board design settings.
+
+(rule "GhostBlade: Minimum clearance digital"
+    (condition "A.NetClass == 'Default' || A.NetClass == 'DDR'")
+    (constraint clearance (min 0.1mm))
+)
+
+(rule "GhostBlade: Minimum clearance power"
+    (condition "A.NetClass == 'Power'")
+    (constraint clearance (min 0.2mm))
+)
+
+(rule "GhostBlade: Minimum clearance RF"
+    (condition "A.NetClass == 'RF'")
+    (constraint clearance (min 0.3mm))
+)
+
+(rule "GhostBlade: Minimum track width digital"
+    (condition "A.NetClass == 'Default'")
+    (constraint track_width (min 0.1mm))
+)
+
+(rule "GhostBlade: Minimum track width DDR"
+    (condition "A.NetClass == 'DDR'")
+    (constraint track_width (min 0.1mm))
+)
+
+(rule "GhostBlade: Minimum track width high-speed"
+    (condition "A.NetClass == 'High-Speed'")
+    (constraint track_width (min 0.15mm))
+)
+
+(rule "GhostBlade: Minimum track width RF"
+    (condition "A.NetClass == 'RF'")
+    (constraint track_width (min 0.142mm))
+)
+
+(rule "GhostBlade: Minimum track width power"
+    (condition "A.NetClass == 'Power'")
+    (constraint track_width (min 0.4mm))
+)
+
+(rule "GhostBlade: Minimum via diameter"
+    (constraint via_diameter (min 0.3mm))
+)
+
+(rule "GhostBlade: Minimum via drill"
+    (constraint via_drill (min 0.15mm))
+)
+
+(rule "GhostBlade: Differential pair gap high-speed"
+    (condition "A.NetClass == 'High-Speed'")
+    (constraint diff_pair_gap (min 0.127mm))
+)
+
+(rule "GhostBlade: Differential pair gap DDR"
+    (condition "A.NetClass == 'DDR'")
+    (constraint diff_pair_gap (min 0.127mm))
+)
+
+(rule "GhostBlade: Differential pair width high-speed"
+    (condition "A.NetClass == 'High-Speed'")
+    (constraint diff_pair_width (min 0.102mm))
+)
+
+(rule "GhostBlade: Differential pair width DDR"
+    (condition "A.NetClass == 'DDR'")
+    (constraint diff_pair_width (min 0.102mm))
+)
+
+(rule "GhostBlade: No silk on pads"
+    (constraint silk_to_pad_clearance (min 0.1mm))
+)
+
+(rule "GhostBlade: No silk on traces"
+    (constraint silk_to_copper_clearance (min 0.1mm))
+)
+
+(rule "GhostBlade: Board edge clearance"
+    (constraint edge_clearance (min 0.5mm))
+)
+
+(rule "GhostBlade: Hole size minimum"
+    (constraint hole_size (min 0.15mm))
+)
+
+(rule "GhostBlade: Annular ring minimum"
+    (constraint annular_width (min 0.1mm))
+)

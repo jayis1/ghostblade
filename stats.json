@@ -1,10 +1,10 @@
 {
   "C": 6616,
   "headers": 697,
-  "dts": 333,
-  "docs": 3211,
+  "dts": 358,
+  "docs": 3500,
   "bom_components": 66,
-  "total_files": 44,
-  "total_lines": 13057,
-  "last_updated": "2026-06-14"
+  "total_files": 57,
+  "total_lines": 15627,
+  "last_updated": "2026-06-15"
 }

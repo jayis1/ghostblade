@@ -1,68 +1,68 @@
 Reference,Value,Quantity,Manufacturer,MPN,Package,Category,Price_USD,Description,Datasheet,Footprint,Notes
-U1,RK3576,1,Rockchip,RK3576,FCBGA-732,IC/SoC,18.50,"Octa-core SoC 4xA72+4xA53 6TOPS NPU",https://www.rock-chips.com/uploads/pdf/RK3576%20Datasheet%20V1.0.pdf,apex-one-footprints:FCBGA-732_0.65mm,Requires thermal via matrix + heatsink
-U2,RP2350B,1,Raspberry Pi,RP2350B,QFN-60,IC/MCU,1.10,"Dual-core Cortex-M33/Hazard3 RISC-V MCU",https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf,apex-one-footprints:QFN-60-0.4mm_7x7mm,PIO blocks critical for RF switching
-U3,LMS7002M,1,Lime Microsystems,LMS7002M,QFN-64,IC/SDR,29.95,"MIMO SDR Transceiver 100kHz-3.8GHz",https://limemicro.com/wp-content/uploads/2024/LMS7002M-Datasheet.pdf,apex-one-footprints:QFN-64-0.5mm_9x9mm,Requires RF shielding can
-U4,CC1101,1,Texas Instruments,CC1101,QFN-20,IC/RF,2.45,"Sub-1GHz OOK/FSK Transceiver",https://www.ti.com/lit/ds/symlink/cc1101.pdf,apex-one-footprints:QFN-20-0.5mm_4x4mm,315/433/868/915MHz bands
-U5,ST25R3916,1,STMicroelectronics,ST25R3916,QFN-32,IC/NFC,3.20,"NFC Universal Device 13.56MHz",https://www.st.com/resource/en/datasheet/st25r3916.pdf,apex-one-footprints:QFN-32-0.5mm_5x5mm,Requires external antenna tuning
-U6,PE42422,1,Peregrine Semiconductor,PE42422,QFN-16,IC/RF-Switch,1.85,"SP4T RF Switch 50MHz-6GHz",https://www.psemi.com/pdf/datasheets/pe42422ds.pdf,apex-one-footprints:QFN-16-0.5mm_3x3mm,50 ohm matched
-U7,MT7922,1,MediaTek,MT7922,LGA-145,IC/WiFi-BT,8.50,"Wi-Fi 6E / Bluetooth 5.4 Module",https://www.mediatek.com/products/networking-and-connectivity/wi-fi-6e,apex-one-footprints:LGA-145_14.5x13.5mm,Monitor mode + packet injection support
-U8,RK817,1,Rockchip,RK817,QFN-48,IC/PMIC,2.80,"PMIC 4xBUCK 7xLDO Boost Charger",https://www.rock-chips.com/uploads/pdf/RK817%20Datasheet.pdf,apex-one-footprints:QFN-48-0.5mm_6x6mm,Controls all power rails + battery charging
-U9,K3LKBKB0BM-MGCJ,2,Samsung,K3LKBKB0BM-MGCJ,FBGA-200,IC/Memory,12.00,"4GB LPDDR5 SDRAM 3200MT/s x16",https://www.samsung.com/semiconductor/dram/lpddr5/,apex-one-footprints:FBGA-200_0.4mm_12x12mm,2x4GB = 8GB total
-U10,THGBMJG6C1LBAB7,1,Kioxia,THGBMJG6C1LBAB7,BGA-153,IC/Storage,4.50,"32GB eMMC 5.1",https://www.kioxia.com/en-jp/business/memory/embedded/,apex-one-footprints:BGA-153_0.5mm_11.5x13mm,eMMC for OS root filesystem
-J1,M.2_2230_Socket,1,TE Connectivity,2199230-1,Socket,Connector,3.50,"M.2 Key M Socket 2230 for NVMe SSD",https://www.te.com/usa/en/product-2199230-1.html,apex-one-footprints:M.2_2230_Key_M,PCIe Gen3 x2
-J2,USB-C_24pin,1,Amphenol,12401832E422A,USB-C,Connector,0.85,"USB Type-C 24-pin receptacle",https://www.amphenol.com/,apex-one-footprints:USB-C_24pin_0.5mm,USB 3.2 Gen1 + PD sink
-J3,SMA_RF_SDR,1,Amphenol,132289, SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (SDR)",https://www.amphenolrf.com/,apex-one-footprints:SMA_Edge_Mount,SDR antenna port
-J4,SMA_RF_SubGHz,1,Amphenol,132289,SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (Sub-GHz)",https://www.amphenolrf.com/,apex-one-footprints:SMA_Edge_Mount,CC1101 antenna port
-J5,SMA_RF_WiFi_2G,1,Amphenol,132289,SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (Wi-Fi 2.4G)",https://www.amphenolrf.com/,apex-one-footprints:SMA_Edge_Mount,MT7922 2.4GHz antenna
-J6,SMA_RF_WiFi_5G,1,Amphenol,132289,SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (Wi-Fi 5/6G)",https://www.amphenolrf.com/,apex-one-footprints:SMA_Edge_Mount,MT7922 5/6GHz antenna
-J7,uSD_Card,1,Molex,5040771891,uSD,Connector,0.65,"MicroSD card slot push-push",https://www.molex.com/,apex-one-footprints:MicroSD_Push-Push,Boot + removable storage
-J8,MIPI_DSI_FPC,1,Hirose,DF40C-30DP-0.4V,FPC_30pin,Connector,0.90,"MIPI-DSI FPC connector 30-pin 0.4mm",https://www.hirose.com/,apex-one-footprints:FPC_30pin_0.4mm,Display connector
-J9,JTAG_Header,1,Samtec,FTSH-105-01-F-DV-K,2x5_1.27mm,Connector,1.50,"ARM JTAG/SWD 10-pin 1.27mm header",https://www.samtec.com/,apex-one-footprints:Pin_Header_2x05_1.27mm,RP2350B debug + RK3576 debug
-J10,FPC_40pin,1,Hirose,DF40C-40DP-0.4V,FPC_40pin,Connector,1.10,"FPC connector 40-pin 0.4mm (keyboard/GPIO)",https://www.hirose.com/,apex-one-footprints:FPC_40pin_0.4mm,Expansion header
-Y1,24MHz_Crystal,1,Abracon,ABM8-24.000MHZ,HC49/SMD,Quartz,0.30,"24MHz crystal 20ppm 18pF",https://www.abracon.com/,apex-one-footprints:Crystal_HC49_SMD,RK3576 main oscillator
-Y2,32.768kHz_Crystal,1,Epson_FC-135,FC-135,3.2x1.5mm,Quartz,0.25,"32.768kHz crystal RTC 12.5pF",https://www.epson.com/,apex-one-footprints:Crystal_3.2x1.5mm,RK3576 RTC oscillator
-Y3,40MHz_Crystal,1,Abracon,ABM8-40.000MHZ,HC49/SMD,Quartz,0.30,"40MHz crystal for LMS7002M",https://www.abracon.com/,apex-one-footprints:Crystal_HC49_SMD,SDR reference clock
-Y4,26MHz_Crystal,1,TXC,7M-26.000MAAE,HC49/SMD,Quartz,0.25,"26MHz crystal for CC1101",https://www.txc.com/,apex-one-footprints:Crystal_HC49_SMD,Sub-GHz reference clock
-Y5,27.12MHz_Crystal,1,NXP,27.12MHz_NFC,XO-3.2x2.5mm,Quartz,0.40,"27.12MHz crystal for ST25R3916 NFC",https://www.nxp.com/,apex-one-footprints:Crystal_3.2x2.5mm,NFC reference clock
-L1,10uH_Power_Inductor,1,Murata,DFE201612E-100M=,2x1.6mm,Inductor,0.40,"10uH 2A shielded power inductor BUCK1",https://www.murata.com/,apex-one-footprints:Inductor_2x1.6mm,RK817 BUCK1 output
-L2,4.7uH_Power_Inductor,1,Murata,DFE201612E-4R7M=,2x1.6mm,Inductor,0.35,"4.7uH 2A shielded power inductor BUCK2",https://www.murata.com/,apex-one-footprints:Inductor_2x1.6mm,RK817 BUCK2 output
-L3,2.2uH_Power_Inductor,1,Murata,DFE201612E-2R2M=,2x1.6mm,Inductor,0.30,"2.2uH 2A shielded power inductor BUCK3",https://www.murata.com/,apex-one-footprints:Inductor_2x1.6mm,RK817 BUCK3 output
-L4,1.5uH_Power_Inductor,1,Murata,DFE201612E-1R5M=,2x1.6mm,Inductor,0.30,"1.5uH 2A shielded power inductor BUCK4",https://www.murata.com/,apex-one-footprints:Inductor_2x1.6mm,RK817 BUCK4 output
-L5,10uH_Boost_Inductor,1,Wurth,74477110,4x4mm,Inductor,0.55,"10uH 3A boost inductor for OLED VBAT",https://www.we-online.com/,apex-one-footprints:Inductor_4x4mm,RK817 boost output
-L6,2.7nH_RF_Matching,1,Johanson,252R15S2R7LV4E,0402,Inductor,0.05,"2.7nH RF matching inductor",https://www.johansontechnology.com/,apex-one-footprints:R_0402,LMS7002M RX matching
-L7,3.3nH_RF_Matching,1,Johanson,252R15S3N3LV4E,0402,Inductor,0.05,"3.3nH RF matching inductor",https://www.johansontechnology.com/,apex-one-footprints:R_0402,LMS7002M TX matching
-L8,10nH_RF_Matching,1,Johanson,252R15S10NV4E,0402,Inductor,0.05,"10nH RF matching inductor",https://www.johansontechnology.com/,apex-one-footprints:R_0402,NFC antenna matching
-L9,27nH_RF_Matching,1,Johanson,252R15S27NV4E,0402,Inductor,0.05,"27nH RF matching inductor",https://www.johansontechnology.com/,apex-one-footprints:R_0402,CC1101 LC filter
-FB1,600R_Ferrite,1,Murata,BLM18PG601SN1D,0402,Ferrite,0.04,"600 ohm 200mA ferrite bead RF isolation",https://www.murata.com/,apex-one-footprints:R_0402,Digital/analog ground split
-FB2,600R_Ferrite,1,Murata,BLM18PG601SN1D,0402,Ferrite,0.04,"600 ohm 200mA ferrite bead RF isolation",https://www.murata.com/,apex-one-footprints:R_0402,SDR analog ground
-FB3,600R_Ferrite,1,Murata,BLM18PG601SN1D,0402,Ferrite,0.04,"600 ohm 200mA ferrite bead RF isolation",https://www.murata.com/,apex-one-footprints:R_0402,NFC analog ground
-FB4,120R_Ferrite,1,Murata,BLM18PG121SN1D,0402,Ferrite,0.04,"120 ohm 500mA ferrite bead USB",https://www.murata.com/,apex-one-footprints:R_0402,USB VBUS filtering
-C1,100uF_Ceramic,1,Samsung,CL32A107MQVNNNE,1206,Capacitor,0.30,"100uF 6.3V X5R ceramic cap bulk decoupling",https://www.samsungsem.com/,apex-one-footprints:C_1206,VDD_CORE bulk
-C2-C5,22uF_Ceramic,4,Samsung,CL05A226MQ5NUNC,0402,Capacitor,0.08,"22uF 6.3V X5R ceramic decoupling",https://www.samsungsem.com/,apex-one-footprints:C_0402,BUCK output caps
-C6-C25,0.1uF_Ceramic,20,Samsung,CL05B104KO5NNNC,0402,Capacitor,0.01,"0.1uF 16V X7R ceramic bypass",https://www.samsungsem.com/,apex-one-footprints:C_0402,IC decoupling (diad/triad)
-C26-C45,1uF_Ceramic,20,Samsung,CL05B105KQ5NUNC,0402,Capacitor,0.02,"1uF 6.3V X5R ceramic bypass",https://www.samsungsem.com/,apex-one-footprints:C_0402,IC decoupling (diad/triad)
-C46-C55,10uF_Ceramic,10,Samsung,CL05A106MQ5NUNC,0402,Capacitor,0.05,"10uF 6.3V X5R ceramic bulk",https://www.samsungsem.com/,apex-one-footprints:C_0402,DDR/eMMC bulk
-C56,47pF_Ceramic,1,Samsung,CL05C470JB5NNNC,0402,Capacitor,0.01,"47pF 50V C0G/NP0 RF bypass",https://www.samsungsem.com/,apex-one-footprints:C_0402,SDR RF matching
-C57,100pF_Ceramic,1,Samsung,CL05C101JB5NNNC,0402,Capacitor,0.01,"100pF 50V C0G/NP0 RF bypass",https://www.samsungsem.com/,apex-one-footprints:C_0402,SDR DC block
-C58,10nF_Ceramic,1,Samsung,CL05B103KO5NNNC,0402,Capacitor,0.01,"10nF 16V X7R CC1101 coupling",https://www.samsungsem.com/,apex-one-footprints:C_0402,CC1101 DC block
-C59,33pF_Ceramic,1,Samsung,CL05C330JB5NNNC,0402,Capacitor,0.01,"33pF 50V C0G crystal load",https://www.samsungsem.com/,apex-one-footprints:C_0402,24MHz crystal
-C60,33pF_Ceramic,1,Samsung,CL05C330JB5NNNC,0402,Capacitor,0.01,"33pF 50V C0G crystal load",https://www.samsungsem.com/,apex-one-footprints:C_0402,40MHz crystal
-R1,10K_Pull_Up,1,Yageo,RC0402FR-0710KL,0402,Resistor,0.005,"10K 1% 1/16W pull-up",https://www.yageo.com/,apex-one-footprints:R_0402,I2C SDA pull-up
-R2,10K_Pull_Up,1,Yageo,RC0402FR-0710KL,0402,Resistor,0.005,"10K 1% 1/16W pull-up",https://www.yageo.com/,apex-one-footprints:R_0402,I2C SCL pull-up
-R3,4.7K_Pull_Up,1,Yageo,RC0402FR-074K7L,0402,Resistor,0.005,"4.7K 1% 1/16W pull-up",https://www.yageo.com/,apex-one-footprints:R_0402,SPI CSn pull-up
-R4,100R_Series,1,Yageo,RC0402FR-07100RL,0402,Resistor,0.005,"100R 1% 1/16W series",https://www.yageo.com/,apex-one-footprints:R_0402,NFC antenna series
-R5-R8,49.9R_Diff_Term,4,Yageo,RC0402FR-0749R9L,0402,Resistor,0.005,"49.9R 1% 1/16W diff term",https://www.yageo.com/,apex-one-footprints:R_0402,MIPI-CSI differential termination
-R9,0R_Jumper,1,Yageo,RC0402JR-070RL,0402,Resistor,0.005,"0R jumper 1/16W",https://www.yageo.com/,apex-one-footprints:R_0402,Ground bridge option
-SW1,Tactile_Switch,1,Alps,SKQGAFE010,4.2x3.2mm,Switch,0.25,"Tactile switch 6x3.5mm SMD power",https://www.alps.com/,apex-one-footprints:Switch_Tactile_6x3.5mm,Power button
-SW2,Tactile_Switch,1,Alps,SKQGAFE010,4.2x3.2mm,Switch,0.25,"Tactile switch 6x3.5mm SMD reset",https://www.alps.com/,apex-one-footprints:Switch_Tactile_6x3.5mm,Reset button
-D1,TVS_USB,1,Littelfuse,SR5.0T2G,SOT-23,Diode,0.15,"TVS diode 5V bidirectional USB",https://www.littelfuse.com/,apex-one-footprints:SOT-23,USB-C ESD protection
-D2,TVS_SDR,1,Littelfuse,PESD5V0S2BA,SOT-23,Diode,0.15,"TVS diode 5V bidirectional SDR port",https://www.littelfuse.com/,apex-one-footprints:SOT-23,SDR antenna ESD
-D3,LED_Power,1,Kingbright,APHHS1005QBDZGKC,0402,LED,0.04,"Green 0402 LED power indicator",https://www.kingbright.com/,apex-one-footprints:LED_0402,Power good
-D4,LED_Activity,1,Kingbright,APHHS1005SURCK,0402,LED,0.04,"Red 0402 LED activity indicator",https://www.kingbright.com/,apex-one-footprints:LED_0402,SDR activity
-D5,LED_BT,1,Kingbright,APHHS1005SYCK,0402,LED,0.04,"Yellow 0402 LED BT indicator",https://www.kingbright.com/,apex-one-footprints:LED_0402,Bluetooth active
-U10,TPS63020,1,Texas Instruments,TPS63020,VQFN-14,IC/DCDC,2.10,"Buck-Boost 2A 3.3V output battery",https://www.ti.com/lit/ds/symlink/tps63020.pdf,apex-one-footprints:VQFN-14_2.5x2.5mm,3.3V main rail from battery
-U11,TLV75533,1,Texas Instruments,TLV75533DBVR,SOT-23-5,IC/LDO,0.30,"LDO 3.3V 500mA low-Iq",https://www.ti.com/lit/ds/symlink/tlv75533.pdf,apex-one-footprints:SOT-23-5,RP2350B 3.3V rail
-U12,TLV75518,1,Texas Instruments,TLV75518DBVR,SOT-23-5,IC/LDO,0.30,"LDO 1.8V 500mA low-Iq",https://www.ti.com/lit/ds/symlink/tlv75518.pdf,apex-one-footprints:SOT-23-5,1.8V IO rail
-U13,NCP303,1,ON Semiconductor,NCP303LSN09T1G,SOT-23-5,IC/Reset,0.20,"Voltage supervisor 0.9V threshold",https://www.onsemi.com/,apex-one-footprints:SOT-23-5,RK3576 reset supervisor
-U14,W25Q128JVS,1,Winbond,W25Q128JVSIQ,SOP-8,IC/Flash,0.80,"128Mbit SPI NOR flash boot",https://www.winbond.com/,apex-one-footprints:SOP-8_5.3x8mm,U-Boot SPL storage
-U15,SY8120B,1,Silergy,SY8120BABC,SOT-23-6,IC/DCDC,0.35,"1A Buck 1.2V SDR core",https://www.silergy.com/,apex-one-footprints:SOT-23-6,LMS7002M 1.2V core
+U1,RK3576,1,Rockchip,RK3576,FCBGA-732,IC/SoC,18.50,"Octa-core SoC 4xA72+4xA53 6TOPS NPU",https://www.rock-chips.com/uploads/pdf/RK3576%20Datasheet%20V1.0.pdf,ghostblade-footprints:FCBGA-732_0.65mm,Requires thermal via matrix + heatsink
+U2,RP2350B,1,Raspberry Pi,RP2350B,QFN-60,IC/MCU,1.10,"Dual-core Cortex-M33/Hazard3 RISC-V MCU",https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf,ghostblade-footprints:QFN-60-0.4mm_7x7mm,PIO blocks critical for RF switching
+U3,LMS7002M,1,Lime Microsystems,LMS7002M,QFN-64,IC/SDR,29.95,"MIMO SDR Transceiver 100kHz-3.8GHz",https://limemicro.com/wp-content/uploads/2024/LMS7002M-Datasheet.pdf,ghostblade-footprints:QFN-64-0.5mm_9x9mm,Requires RF shielding can
+U4,CC1101,1,Texas Instruments,CC1101,QFN-20,IC/RF,2.45,"Sub-1GHz OOK/FSK Transceiver",https://www.ti.com/lit/ds/symlink/cc1101.pdf,ghostblade-footprints:QFN-20-0.5mm_4x4mm,315/433/868/915MHz bands
+U5,ST25R3916,1,STMicroelectronics,ST25R3916,QFN-32,IC/NFC,3.20,"NFC Universal Device 13.56MHz",https://www.st.com/resource/en/datasheet/st25r3916.pdf,ghostblade-footprints:QFN-32-0.5mm_5x5mm,Requires external antenna tuning
+U6,PE42422,1,Peregrine Semiconductor,PE42422,QFN-16,IC/RF-Switch,1.85,"SP4T RF Switch 50MHz-6GHz",https://www.psemi.com/pdf/datasheets/pe42422ds.pdf,ghostblade-footprints:QFN-16-0.5mm_3x3mm,50 ohm matched
+U7,MT7922,1,MediaTek,MT7922,LGA-145,IC/WiFi-BT,8.50,"Wi-Fi 6E / Bluetooth 5.4 Module",https://www.mediatek.com/products/networking-and-connectivity/wi-fi-6e,ghostblade-footprints:LGA-145_14.5x13.5mm,Monitor mode + packet injection support
+U8,RK817,1,Rockchip,RK817,QFN-48,IC/PMIC,2.80,"PMIC 4xBUCK 7xLDO Boost Charger",https://www.rock-chips.com/uploads/pdf/RK817%20Datasheet.pdf,ghostblade-footprints:QFN-48-0.5mm_6x6mm,Controls all power rails + battery charging
+U9,K3LKBKB0BM-MGCJ,2,Samsung,K3LKBKB0BM-MGCJ,FBGA-200,IC/Memory,12.00,"4GB LPDDR5 SDRAM 3200MT/s x16",https://www.samsung.com/semiconductor/dram/lpddr5/,ghostblade-footprints:FBGA-200_0.4mm_12x12mm,2x4GB = 8GB total
+U10,THGBMJG6C1LBAB7,1,Kioxia,THGBMJG6C1LBAB7,BGA-153,IC/Storage,4.50,"32GB eMMC 5.1",https://www.kioxia.com/en-jp/business/memory/embedded/,ghostblade-footprints:BGA-153_0.5mm_11.5x13mm,eMMC for OS root filesystem
+J1,M.2_2230_Socket,1,TE Connectivity,2199230-1,Socket,Connector,3.50,"M.2 Key M Socket 2230 for NVMe SSD",https://www.te.com/usa/en/product-2199230-1.html,ghostblade-footprints:M.2_2230_Key_M,PCIe Gen3 x2
+J2,USB-C_24pin,1,Amphenol,12401832E422A,USB-C,Connector,0.85,"USB Type-C 24-pin receptacle",https://www.amphenol.com/,ghostblade-footprints:USB-C_24pin_0.5mm,USB 3.2 Gen1 + PD sink
+J3,SMA_RF_SDR,1,Amphenol,132289, SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (SDR)",https://www.amphenolrf.com/,ghostblade-footprints:SMA_Edge_Mount,SDR antenna port
+J4,SMA_RF_SubGHz,1,Amphenol,132289,SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (Sub-GHz)",https://www.amphenolrf.com/,ghostblade-footprints:SMA_Edge_Mount,CC1101 antenna port
+J5,SMA_RF_WiFi_2G,1,Amphenol,132289,SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (Wi-Fi 2.4G)",https://www.amphenolrf.com/,ghostblade-footprints:SMA_Edge_Mount,MT7922 2.4GHz antenna
+J6,SMA_RF_WiFi_5G,1,Amphenol,132289,SMA_Edge,Connector,1.20,"SMA edge-mount 50 ohm RF connector (Wi-Fi 5/6G)",https://www.amphenolrf.com/,ghostblade-footprints:SMA_Edge_Mount,MT7922 5/6GHz antenna
+J7,uSD_Card,1,Molex,5040771891,uSD,Connector,0.65,"MicroSD card slot push-push",https://www.molex.com/,ghostblade-footprints:MicroSD_Push-Push,Boot + removable storage
+J8,MIPI_DSI_FPC,1,Hirose,DF40C-30DP-0.4V,FPC_30pin,Connector,0.90,"MIPI-DSI FPC connector 30-pin 0.4mm",https://www.hirose.com/,ghostblade-footprints:FPC_30pin_0.4mm,Display connector
+J9,JTAG_Header,1,Samtec,FTSH-105-01-F-DV-K,2x5_1.27mm,Connector,1.50,"ARM JTAG/SWD 10-pin 1.27mm header",https://www.samtec.com/,ghostblade-footprints:Pin_Header_2x05_1.27mm,RP2350B debug + RK3576 debug
+J10,FPC_40pin,1,Hirose,DF40C-40DP-0.4V,FPC_40pin,Connector,1.10,"FPC connector 40-pin 0.4mm (keyboard/GPIO)",https://www.hirose.com/,ghostblade-footprints:FPC_40pin_0.4mm,Expansion header
+Y1,24MHz_Crystal,1,Abracon,ABM8-24.000MHZ,HC49/SMD,Quartz,0.30,"24MHz crystal 20ppm 18pF",https://www.abracon.com/,ghostblade-footprints:Crystal_HC49_SMD,RK3576 main oscillator
+Y2,32.768kHz_Crystal,1,Epson_FC-135,FC-135,3.2x1.5mm,Quartz,0.25,"32.768kHz crystal RTC 12.5pF",https://www.epson.com/,ghostblade-footprints:Crystal_3.2x1.5mm,RK3576 RTC oscillator
+Y3,40MHz_Crystal,1,Abracon,ABM8-40.000MHZ,HC49/SMD,Quartz,0.30,"40MHz crystal for LMS7002M",https://www.abracon.com/,ghostblade-footprints:Crystal_HC49_SMD,SDR reference clock
+Y4,26MHz_Crystal,1,TXC,7M-26.000MAAE,HC49/SMD,Quartz,0.25,"26MHz crystal for CC1101",https://www.txc.com/,ghostblade-footprints:Crystal_HC49_SMD,Sub-GHz reference clock
+Y5,27.12MHz_Crystal,1,NXP,27.12MHz_NFC,XO-3.2x2.5mm,Quartz,0.40,"27.12MHz crystal for ST25R3916 NFC",https://www.nxp.com/,ghostblade-footprints:Crystal_3.2x2.5mm,NFC reference clock
+L1,10uH_Power_Inductor,1,Murata,DFE201612E-100M=,2x1.6mm,Inductor,0.40,"10uH 2A shielded power inductor BUCK1",https://www.murata.com/,ghostblade-footprints:Inductor_2x1.6mm,RK817 BUCK1 output
+L2,4.7uH_Power_Inductor,1,Murata,DFE201612E-4R7M=,2x1.6mm,Inductor,0.35,"4.7uH 2A shielded power inductor BUCK2",https://www.murata.com/,ghostblade-footprints:Inductor_2x1.6mm,RK817 BUCK2 output
+L3,2.2uH_Power_Inductor,1,Murata,DFE201612E-2R2M=,2x1.6mm,Inductor,0.30,"2.2uH 2A shielded power inductor BUCK3",https://www.murata.com/,ghostblade-footprints:Inductor_2x1.6mm,RK817 BUCK3 output
+L4,1.5uH_Power_Inductor,1,Murata,DFE201612E-1R5M=,2x1.6mm,Inductor,0.30,"1.5uH 2A shielded power inductor BUCK4",https://www.murata.com/,ghostblade-footprints:Inductor_2x1.6mm,RK817 BUCK4 output
+L5,10uH_Boost_Inductor,1,Wurth,74477110,4x4mm,Inductor,0.55,"10uH 3A boost inductor for OLED VBAT",https://www.we-online.com/,ghostblade-footprints:Inductor_4x4mm,RK817 boost output
+L6,2.7nH_RF_Matching,1,Johanson,252R15S2R7LV4E,0402,Inductor,0.05,"2.7nH RF matching inductor",https://www.johansontechnology.com/,ghostblade-footprints:R_0402,LMS7002M RX matching
+L7,3.3nH_RF_Matching,1,Johanson,252R15S3N3LV4E,0402,Inductor,0.05,"3.3nH RF matching inductor",https://www.johansontechnology.com/,ghostblade-footprints:R_0402,LMS7002M TX matching
+L8,10nH_RF_Matching,1,Johanson,252R15S10NV4E,0402,Inductor,0.05,"10nH RF matching inductor",https://www.johansontechnology.com/,ghostblade-footprints:R_0402,NFC antenna matching
+L9,27nH_RF_Matching,1,Johanson,252R15S27NV4E,0402,Inductor,0.05,"27nH RF matching inductor",https://www.johansontechnology.com/,ghostblade-footprints:R_0402,CC1101 LC filter
+FB1,600R_Ferrite,1,Murata,BLM18PG601SN1D,0402,Ferrite,0.04,"600 ohm 200mA ferrite bead RF isolation",https://www.murata.com/,ghostblade-footprints:R_0402,Digital/analog ground split
+FB2,600R_Ferrite,1,Murata,BLM18PG601SN1D,0402,Ferrite,0.04,"600 ohm 200mA ferrite bead RF isolation",https://www.murata.com/,ghostblade-footprints:R_0402,SDR analog ground
+FB3,600R_Ferrite,1,Murata,BLM18PG601SN1D,0402,Ferrite,0.04,"600 ohm 200mA ferrite bead RF isolation",https://www.murata.com/,ghostblade-footprints:R_0402,NFC analog ground
+FB4,120R_Ferrite,1,Murata,BLM18PG121SN1D,0402,Ferrite,0.04,"120 ohm 500mA ferrite bead USB",https://www.murata.com/,ghostblade-footprints:R_0402,USB VBUS filtering
+C1,100uF_Ceramic,1,Samsung,CL32A107MQVNNNE,1206,Capacitor,0.30,"100uF 6.3V X5R ceramic cap bulk decoupling",https://www.samsungsem.com/,ghostblade-footprints:C_1206,VDD_CORE bulk
+C2-C5,22uF_Ceramic,4,Samsung,CL05A226MQ5NUNC,0402,Capacitor,0.08,"22uF 6.3V X5R ceramic decoupling",https://www.samsungsem.com/,ghostblade-footprints:C_0402,BUCK output caps
+C6-C25,0.1uF_Ceramic,20,Samsung,CL05B104KO5NNNC,0402,Capacitor,0.01,"0.1uF 16V X7R ceramic bypass",https://www.samsungsem.com/,ghostblade-footprints:C_0402,IC decoupling (diad/triad)
+C26-C45,1uF_Ceramic,20,Samsung,CL05B105KQ5NUNC,0402,Capacitor,0.02,"1uF 6.3V X5R ceramic bypass",https://www.samsungsem.com/,ghostblade-footprints:C_0402,IC decoupling (diad/triad)
+C46-C55,10uF_Ceramic,10,Samsung,CL05A106MQ5NUNC,0402,Capacitor,0.05,"10uF 6.3V X5R ceramic bulk",https://www.samsungsem.com/,ghostblade-footprints:C_0402,DDR/eMMC bulk
+C56,47pF_Ceramic,1,Samsung,CL05C470JB5NNNC,0402,Capacitor,0.01,"47pF 50V C0G/NP0 RF bypass",https://www.samsungsem.com/,ghostblade-footprints:C_0402,SDR RF matching
+C57,100pF_Ceramic,1,Samsung,CL05C101JB5NNNC,0402,Capacitor,0.01,"100pF 50V C0G/NP0 RF bypass",https://www.samsungsem.com/,ghostblade-footprints:C_0402,SDR DC block
+C58,10nF_Ceramic,1,Samsung,CL05B103KO5NNNC,0402,Capacitor,0.01,"10nF 16V X7R CC1101 coupling",https://www.samsungsem.com/,ghostblade-footprints:C_0402,CC1101 DC block
+C59,33pF_Ceramic,1,Samsung,CL05C330JB5NNNC,0402,Capacitor,0.01,"33pF 50V C0G crystal load",https://www.samsungsem.com/,ghostblade-footprints:C_0402,24MHz crystal
+C60,33pF_Ceramic,1,Samsung,CL05C330JB5NNNC,0402,Capacitor,0.01,"33pF 50V C0G crystal load",https://www.samsungsem.com/,ghostblade-footprints:C_0402,40MHz crystal
+R1,10K_Pull_Up,1,Yageo,RC0402FR-0710KL,0402,Resistor,0.005,"10K 1% 1/16W pull-up",https://www.yageo.com/,ghostblade-footprints:R_0402,I2C SDA pull-up
+R2,10K_Pull_Up,1,Yageo,RC0402FR-0710KL,0402,Resistor,0.005,"10K 1% 1/16W pull-up",https://www.yageo.com/,ghostblade-footprints:R_0402,I2C SCL pull-up
+R3,4.7K_Pull_Up,1,Yageo,RC0402FR-074K7L,0402,Resistor,0.005,"4.7K 1% 1/16W pull-up",https://www.yageo.com/,ghostblade-footprints:R_0402,SPI CSn pull-up
+R4,100R_Series,1,Yageo,RC0402FR-07100RL,0402,Resistor,0.005,"100R 1% 1/16W series",https://www.yageo.com/,ghostblade-footprints:R_0402,NFC antenna series
+R5-R8,49.9R_Diff_Term,4,Yageo,RC0402FR-0749R9L,0402,Resistor,0.005,"49.9R 1% 1/16W diff term",https://www.yageo.com/,ghostblade-footprints:R_0402,MIPI-CSI differential termination
+R9,0R_Jumper,1,Yageo,RC0402JR-070RL,0402,Resistor,0.005,"0R jumper 1/16W",https://www.yageo.com/,ghostblade-footprints:R_0402,Ground bridge option
+SW1,Tactile_Switch,1,Alps,SKQGAFE010,4.2x3.2mm,Switch,0.25,"Tactile switch 6x3.5mm SMD power",https://www.alps.com/,ghostblade-footprints:Switch_Tactile_6x3.5mm,Power button
+SW2,Tactile_Switch,1,Alps,SKQGAFE010,4.2x3.2mm,Switch,0.25,"Tactile switch 6x3.5mm SMD reset",https://www.alps.com/,ghostblade-footprints:Switch_Tactile_6x3.5mm,Reset button
+D1,TVS_USB,1,Littelfuse,SR5.0T2G,SOT-23,Diode,0.15,"TVS diode 5V bidirectional USB",https://www.littelfuse.com/,ghostblade-footprints:SOT-23,USB-C ESD protection
+D2,TVS_SDR,1,Littelfuse,PESD5V0S2BA,SOT-23,Diode,0.15,"TVS diode 5V bidirectional SDR port",https://www.littelfuse.com/,ghostblade-footprints:SOT-23,SDR antenna ESD
+D3,LED_Power,1,Kingbright,APHHS1005QBDZGKC,0402,LED,0.04,"Green 0402 LED power indicator",https://www.kingbright.com/,ghostblade-footprints:LED_0402,Power good
+D4,LED_Activity,1,Kingbright,APHHS1005SURCK,0402,LED,0.04,"Red 0402 LED activity indicator",https://www.kingbright.com/,ghostblade-footprints:LED_0402,SDR activity
+D5,LED_BT,1,Kingbright,APHHS1005SYCK,0402,LED,0.04,"Yellow 0402 LED BT indicator",https://www.kingbright.com/,ghostblade-footprints:LED_0402,Bluetooth active
+U10,TPS63020,1,Texas Instruments,TPS63020,VQFN-14,IC/DCDC,2.10,"Buck-Boost 2A 3.3V output battery",https://www.ti.com/lit/ds/symlink/tps63020.pdf,ghostblade-footprints:VQFN-14_2.5x2.5mm,3.3V main rail from battery
+U11,TLV75533,1,Texas Instruments,TLV75533DBVR,SOT-23-5,IC/LDO,0.30,"LDO 3.3V 500mA low-Iq",https://www.ti.com/lit/ds/symlink/tlv75533.pdf,ghostblade-footprints:SOT-23-5,RP2350B 3.3V rail
+U12,TLV75518,1,Texas Instruments,TLV75518DBVR,SOT-23-5,IC/LDO,0.30,"LDO 1.8V 500mA low-Iq",https://www.ti.com/lit/ds/symlink/tlv75518.pdf,ghostblade-footprints:SOT-23-5,1.8V IO rail
+U13,NCP303,1,ON Semiconductor,NCP303LSN09T1G,SOT-23-5,IC/Reset,0.20,"Voltage supervisor 0.9V threshold",https://www.onsemi.com/,ghostblade-footprints:SOT-23-5,RK3576 reset supervisor
+U14,W25Q128JVS,1,Winbond,W25Q128JVSIQ,SOP-8,IC/Flash,0.80,"128Mbit SPI NOR flash boot",https://www.winbond.com/,ghostblade-footprints:SOP-8_5.3x8mm,U-Boot SPL storage
+U15,SY8120B,1,Silergy,SY8120BABC,SOT-23-6,IC/DCDC,0.35,"1A Buck 1.2V SDR core",https://www.silergy.com/,ghostblade-footprints:SOT-23-6,LMS7002M 1.2V core

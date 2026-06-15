@@ -1,6 +1,6 @@
-# Makefile for Apex One SPI Bridge Linux Kernel Driver
+# Makefile for GhostBlade SPI Bridge Linux Kernel Driver
 #
-# Copyright (C) 2026 Apex One Project
+# Copyright (C) 2026 GhostBlade Project
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 obj-m += apex_bridge.o

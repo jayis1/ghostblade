@@ -1,7 +1,7 @@
 /*
  * sdr_dma.c — DMA Ring Buffer Manager for SDR IQ Data on RP2350B
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements a DMA ring buffer manager for streaming SDR IQ

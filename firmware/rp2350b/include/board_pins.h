@@ -1,5 +1,5 @@
 # RP2350B Firmware Include - Board Pin Definitions
-# Copyright (C) 2026 Apex One Project
+# Copyright (C) 2026 GhostBlade Project
 # SPDX-License-Identifier: MIT
 
 # SPI0 Slave (Bridge to RK3576)

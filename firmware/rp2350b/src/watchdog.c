@@ -1,11 +1,11 @@
 /*
  * watchdog.c — Watchdog Timer for RP2350B Coprocessor
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements a watchdog timer for the RP2350B coprocessor
- * on the Apex One board. The watchdog ensures the MCU recovers from
+ * on the GhostBlade board. The watchdog ensures the MCU recovers from
  * software hangs by resetting the processor if the main loop fails
  * to service the watchdog within the timeout period.
  *

@@ -1,11 +1,11 @@
 /*
  * cc1101_init.c — CC1101 Sub-GHz Radio Initialization for RP2350B
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements the CC1101 sub-GHz transceiver initialization
- * sequence for the Apex One board. The CC1101 is connected to the
+ * sequence for the GhostBlade board. The CC1101 is connected to the
  * RP2350B via SPI1 (shared bus with LMS7002M, using GPIO CS).
  *
  * The CC1101 supports frequency ranges 300-348 MHz, 387-464 MHz,

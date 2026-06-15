@@ -1,13 +1,13 @@
 (export (version "E")
   (design
-    (source "apex-one.kicad_sch")
+    (source "ghostblade.kicad_sch")
     (date "2026-06-14")
-    (tool "Apex One CAD v1.0")
+    (tool "GhostBlade CAD v1.0")
   )
   (components
     (comp (ref "U1")
       (value "RK3576")
-      (footprint "apex-one-footprints:FCBGA-732_0.65mm")
+      (footprint "ghostblade-footprints:FCBGA-732_0.65mm")
       (datasheet "https://www.rock-chips.com/uploads/pdf/RK3576%20Datasheet%20V1.0.pdf")
       (fields
         (field (name "Manufacturer") "Rockchip")
@@ -17,7 +17,7 @@
     )
     (comp (ref "U2")
       (value "RP2350B")
-      (footprint "apex-one-footprints:QFN-60-0.4mm_7x7mm")
+      (footprint "ghostblade-footprints:QFN-60-0.4mm_7x7mm")
       (datasheet "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf")
       (fields
         (field (name "Manufacturer") "Raspberry Pi")
@@ -27,7 +27,7 @@
     )
     (comp (ref "U3")
       (value "LMS7002M")
-      (footprint "apex-one-footprints:QFN-64-0.5mm_9x9mm")
+      (footprint "ghostblade-footprints:QFN-64-0.5mm_9x9mm")
       (datasheet "https://limemicro.com/wp-content/uploads/2024/LMS7002M-Datasheet.pdf")
       (fields
         (field (name "Manufacturer") "Lime Microsystems")
@@ -37,7 +37,7 @@
     )
     (comp (ref "U4")
       (value "CC1101")
-      (footprint "apex-one-footprints:QFN-20-0.5mm_4x4mm")
+      (footprint "ghostblade-footprints:QFN-20-0.5mm_4x4mm")
       (datasheet "https://www.ti.com/lit/ds/symlink/cc1101.pdf")
       (fields
         (field (name "Manufacturer") "Texas Instruments")
@@ -47,7 +47,7 @@
     )
     (comp (ref "U5")
       (value "ST25R3916")
-      (footprint "apex-one-footprints:QFN-32-0.5mm_5x5mm")
+      (footprint "ghostblade-footprints:QFN-32-0.5mm_5x5mm")
       (datasheet "https://www.st.com/resource/en/datasheet/st25r3916.pdf")
       (fields
         (field (name "Manufacturer") "STMicroelectronics")
@@ -57,7 +57,7 @@
     )
     (comp (ref "U6")
       (value "PE42422")
-      (footprint "apex-one-footprints:QFN-16-0.5mm_3x3mm")
+      (footprint "ghostblade-footprints:QFN-16-0.5mm_3x3mm")
       (datasheet "https://www.psemi.com/pdf/datasheets/pe42422ds.pdf")
       (fields
         (field (name "Manufacturer") "Peregrine Semiconductor")
@@ -67,7 +67,7 @@
     )
     (comp (ref "U7")
       (value "MT7922")
-      (footprint "apex-one-footprints:LGA-145_14.5x13.5mm")
+      (footprint "ghostblade-footprints:LGA-145_14.5x13.5mm")
       (datasheet "https://www.mediatek.com/products/networking-and-connectivity/wi-fi-6e")
       (fields
         (field (name "Manufacturer") "MediaTek")
@@ -77,7 +77,7 @@
     )
     (comp (ref "U8")
       (value "RK817")
-      (footprint "apex-one-footprints:QFN-48-0.5mm_6x6mm")
+      (footprint "ghostblade-footprints:QFN-48-0.5mm_6x6mm")
       (datasheet "https://www.rock-chips.com/uploads/pdf/RK817%20Datasheet.pdf")
       (fields
         (field (name "Manufacturer") "Rockchip")
@@ -87,7 +87,7 @@
     )
     (comp (ref "U9")
       (value "K3LKBKB0BM-MGCJ")
-      (footprint "apex-one-footprints:FBGA-200_0.4mm_12x12mm")
+      (footprint "ghostblade-footprints:FBGA-200_0.4mm_12x12mm")
       (datasheet "https://www.samsung.com/semiconductor/dram/lpddr5/")
       (fields
         (field (name "Manufacturer") "Samsung")

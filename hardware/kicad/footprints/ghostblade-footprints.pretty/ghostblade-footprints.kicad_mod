@@ -1,9 +1,9 @@
-(kicad_footprint_lib (version 20240505) (generator "apex-one-cad")
+(kicad_footprint_lib (version 20240505) (generator "ghostblade-cad")
 
   ;; ================================================================
   ;; FCBGA-732 — Rockchip RK3576 (0.65mm pitch, 23x23mm body)
   ;; ================================================================
-  (footprint "FCBGA-732_0.65mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "FCBGA-732_0.65mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "Rockchip RK3576 FCBGA-732, 0.65mm pitch, 23x23mm body")
     (tags "BGA RK3576 FCBGA-732")
@@ -40,7 +40,7 @@
   ;; ================================================================
   ;; QFN-60-0.4mm — RP2350B (7x7mm body)
   ;; ================================================================
-  (footprint "QFN-60-0.4mm_7x7mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "QFN-60-0.4mm_7x7mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "RP2350B QFN-60, 0.4mm pitch, 7x7mm body, 0.85mm pad width")
     (tags "QFN RP2350B")
@@ -82,7 +82,7 @@
   ;; ================================================================
   ;; QFN-64-0.5mm — LMS7002M (9x9mm body)
   ;; ================================================================
-  (footprint "QFN-64-0.5mm_9x9mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "QFN-64-0.5mm_9x9mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "LMS7002M QFN-64, 0.5mm pitch, 9x9mm body")
     (tags "QFN LMS7002M")
@@ -117,7 +117,7 @@
   ;; ================================================================
   ;; QFN-20-0.5mm — CC1101 (4x4mm body)
   ;; ================================================================
-  (footprint "QFN-20-0.5mm_4x4mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "QFN-20-0.5mm_4x4mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "CC1101 QFN-20, 0.5mm pitch, 4x4mm body")
     (tags "QFN CC1101")
@@ -150,7 +150,7 @@
   ;; ================================================================
   ;; QFN-32-0.5mm — ST25R3916 (5x5mm body)
   ;; ================================================================
-  (footprint "QFN-32-0.5mm_5x5mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "QFN-32-0.5mm_5x5mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "ST25R3916 QFN-32, 0.5mm pitch, 5x5mm body")
     (tags "QFN ST25R3916")
@@ -179,7 +179,7 @@
   ;; ================================================================
   ;; QFN-16-0.5mm — PE42422 (3x3mm body)
   ;; ================================================================
-  (footprint "QFN-16-0.5mm_3x3mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "QFN-16-0.5mm_3x3mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "PE42422 QFN-16, 0.5mm pitch, 3x3mm body")
     (tags "QFN PE42422 RF-switch")
@@ -208,7 +208,7 @@
   ;; ================================================================
   ;; LGA-145 — MT7922 (14.5x13.5mm)
   ;; ================================================================
-  (footprint "LGA-145_14.5x13.5mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "LGA-145_14.5x13.5mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "MediaTek MT7922 LGA-145 module, 14.5x13.5mm")
     (tags "LGA MT7922 WiFi")
@@ -234,7 +234,7 @@
   ;; ================================================================
   ;; QFN-48-0.5mm — RK817 (6x6mm)
   ;; ================================================================
-  (footprint "QFN-48-0.5mm_6x6mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "QFN-48-0.5mm_6x6mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "RK817 PMIC QFN-48, 0.5mm pitch, 6x6mm body")
     (tags "QFN RK817 PMIC")
@@ -263,7 +263,7 @@
   ;; ================================================================
   ;; FBGA-200 — LPDDR5 (0.4mm pitch, 12x12mm)
   ;; ================================================================
-  (footprint "FBGA-200_0.4mm_12x12mm" (version 20240505) (generator "apex-one-cad")
+  (footprint "FBGA-200_0.4mm_12x12mm" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "Samsung LPDDR5 FBGA-200, 0.4mm pitch, 12x12mm body")
     (tags "BGA LPDDR5")
@@ -289,7 +289,7 @@
   ;; ================================================================
   ;; SMA_EDGE — SMA connector for RF (edge-mount)
   ;; ================================================================
-  (footprint "SMA_Edge_Mount" (version 20240505) (generator "apex-one-cad")
+  (footprint "SMA_Edge_Mount" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "SMA edge-mount RF connector, 50 ohm")
     (tags "SMA RF connector")
@@ -316,7 +316,7 @@
   ;; ================================================================
   ;; M.2 2230 — NVMe SSD slot
   ;; ================================================================
-  (footprint "M.2_2230_Key_M" (version 20240505) (generator "apex-one-cad")
+  (footprint "M.2_2230_Key_M" (version 20240505) (generator "ghostblade-cad")
     (layer "F.Cu")
     (descr "M.2 2230 Key M socket for NVMe SSD, PCIe Gen3 x2")
     (tags "M.2 NVMe SSD")

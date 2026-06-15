@@ -24,12 +24,12 @@ pyapext_module = Extension(
 setup(
     name='pyapex',
     version='0.1.0',
-    description='Python bindings for Apex One hardware (libapex)',
+    description='Python bindings for GhostBlade hardware (libapex)',
     long_description=open(os.path.join(here, 'README.md')).read() if os.path.exists(os.path.join(here, 'README.md')) else '',
     long_description_content_type='text/markdown',
-    author='Apex One Project',
+    author='GhostBlade Project',
     license='GPL-2.0-or-later',
-    url='https://github.com/jayis1/apex-one',
+    url='https://github.com/jayis1/ghostblade',
     ext_modules=[pyapext_module],
     python_requires='>=3.8',
     classifiers=[

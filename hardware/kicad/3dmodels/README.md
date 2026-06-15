@@ -1,4 +1,4 @@
-# Apex One — 3D Model References
+# GhostBlade — 3D Model References
 
 Each major IC has a corresponding STEP model for KiCad 3D visualization.
 These are industry-standard packages — obtain models from manufacturers or
@@ -46,10 +46,10 @@ The complete board outline STEP model for mechanical integration:
 
 ```bash
 # Export board outline from KiCad PCB
-kicad-cli pcb export step --output apex-one-board.step apex-one.kicad_pcb
+kicad-cli pcb export step --output ghostblade-board.step ghostblade.kicad_pcb
 ```
 
-This produces `apex-one-board.step` suitable for mechanical CAD integration
+This produces `ghostblade-board.step` suitable for mechanical CAD integration
 (enclosure design, thermal simulation, etc.).
 
 ## Enclosure Integration Notes

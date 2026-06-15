@@ -1,7 +1,7 @@
 /*
  * spi_protocol.c — SPI Bridge Protocol Handler for RP2350B
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements the SPI0 slave protocol handler that receives,

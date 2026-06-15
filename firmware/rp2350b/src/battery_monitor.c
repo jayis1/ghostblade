@@ -1,7 +1,7 @@
 /*
  * battery_monitor.c — ADC Battery & Temperature Monitor for RP2350B
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements battery voltage monitoring and die temperature
