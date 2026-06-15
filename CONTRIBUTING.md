@@ -1,6 +1,6 @@
-# Contributing to Apex One
+# Contributing to GhostBlade
 
-Thank you for your interest in contributing to the Apex One project! This document provides guidelines for contributing.
+Thank you for your interest in contributing to the GhostBlade (Project NullSpectre) project! This document provides guidelines for contributing.
 
 ## Code of Conduct
 
@@ -11,33 +11,43 @@ Be respectful, constructive, and professional. We're all here to build something
 ### Hardware (Schematics, PCB, BOM)
 
 1. Use KiCad 8+ for all schematic and PCB edits
-2. Follow the naming conventions in the manifest (`.mf`) file
+2. Follow the naming conventions in `GhostBlade.mf`
 3. Ensure all net names match the schematic netlist in Phase 2 documentation
 4. Run ERC/DRC before submitting changes
 5. Submit Gerber files + BOM for manufacturing review
 
 ### Firmware (RP2350B)
 
-1. Follow the RP2350B SDK conventions (Pico SDK)
-2. Use the register definitions in `firmware/rp2350b/include/`
-3. All SPI transactions must use the framed protocol defined in `apex_bridge_regs.h`
-4. Add CRC validation for all inter-processor communication
-5. Test on hardware before submitting PRs
+1. Build with CMake + Pico SDK (see `firmware/rp2350b/CMakeLists.txt`)
+2. Follow the RP2350B SDK conventions (Pico SDK)
+3. Use the register definitions in `firmware/rp2350b/include/`
+4. All SPI transactions must use the framed protocol defined in `apex_bridge_regs.h`
+5. Add CRC validation for all inter-processor communication
+6. Test on hardware before submitting PRs
 
 ### Software (Linux Driver, Userspace)
 
-1. Follow Linux kernel coding style (`scripts/checkpatch.pl`)
+1. Follow Linux kernel coding style — use `.clang-format` in the repo root
 2. The driver must compile cleanly against kernel 6.6+
 3. Add `MODULE_AUTHOR`, `MODULE_DESCRIPTION`, `MODULE_LICENSE` to all modules
 4. Use kernel-doc comments for all public functions
 5. Test with `CONFIG_DEBUG_FS`, `CONFIG_DYNAMIC_DEBUG` enabled
+6. Userspace library (`libapex`) should follow the same style
+
+### Device Tree
+
+1. Keep `ghostblade-rk3576.dts` in sync with `GhostBlade.mf` manifest
+2. Optional hardware goes in `ghostblade-options.dts` overlay
+3. Run `.github/scripts/check-dts-consistency.py` before submitting
 
 ### Documentation
 
-1. Markdown format for all docs
+1. Markdown format for all docs — lint with `.markdownlint.json` config
 2. Include units for all measurements (mm, MHz, mA, etc.)
-3. Keep the manifest file (`.mf`) in sync with any spec changes
+3. Keep `GhostBlade.mf` in sync with any spec changes
 4. Reference component designators (U1, R5, C12, etc.) consistently
+5. Run `.github/scripts/check-links.sh` to verify internal links
+6. Spellcheck with `codespell` using `.codespell.ignore`
 
 ## Pull Request Process
 
@@ -60,6 +70,19 @@ Fixes #123 (if applicable)
 ```
 
 Types: `hw` (hardware), `fw` (firmware), `sw` (software), `docs`, `fix`, `refactor`
+
+## CI Checks
+
+Pull requests are checked by the following workflows:
+
+| Workflow | What it checks |
+|----------|---------------|
+| `driver-build.yml` | Kernel module build (6.1/6.5/6.8), cppcheck, sparse |
+| `firmware-build.yml` | RP2350B firmware build (Pico SDK), clang-format |
+| `docs-lint.yml` | Markdownlint + codespell on all `.md` files |
+| `netlist-check.yml` | DTS GPIO/net consistency against manifest |
+
+Make sure CI passes before requesting review.
 
 ## License
 
