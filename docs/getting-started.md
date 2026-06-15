@@ -1,6 +1,6 @@
-# Getting Started — Apex One (GhostBlade / Project NullSpectre)
+# Getting Started — GhostBlade (Project NullSpectre)
 
-Welcome to the Apex One open-source hardware project! This guide will
+Welcome to the GhostBlade open-source hardware project! This guide will
 help you set up your development environment, understand the project
 structure, and start contributing.
 
@@ -23,7 +23,7 @@ structure, and start contributing.
 
 ## Project Overview
 
-Apex One is a dual-processor pentesting device featuring:
+GhostBlade is a dual-processor pentesting device featuring:
 
 - **RK3576** — ARM Cortex-A72 quad-core SoC running Linux
 - **RP2350B** — ARM Cortex-M33 dual-core MCU for real-time radio control
@@ -308,7 +308,7 @@ See `CONTRIBUTING.md` for full details.
 
 ## Hardware-in-the-Loop Testing
 
-For developers with physical Apex One hardware:
+For developers with physical GhostBlade hardware:
 
 1. Flash the latest firmware to the RP2350B
 2. Load the kernel driver on the RK3576

@@ -1,5 +1,5 @@
 # CI Workflow: Build RP2350B Firmware
-# Copyright (C) 2026 Apex One Project
+# Copyright (C) 2026 GhostBlade Project
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Builds the RP2350B firmware using the Raspberry Pi Pico SDK (arm-none-eabi-gcc).

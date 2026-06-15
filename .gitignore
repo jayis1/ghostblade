@@ -13,14 +13,26 @@
 firmware/rp2350b/build/
 firmware/rp2350b/.vscode/
 
+# Kernel module build
+software/linux-drivers/*.ko
+software/linux-drivers/*.mod
+software/linux-drivers/*.mod.c
+software/linux-drivers/*.o
+software/linux-drivers/.*.cmd
+software/linux-drivers/Module.symvers
+software/linux-drivers/modules.order
+
+# libapex build
+software/libapex/build/
+
 # KiCad
-hardware/schematics/*.bak
-hardware/schematics/*.kicad_pcb-bak
-hardware/schematics/*.kicad_sch-bak
-hardware/schematics/*.kicad_pcb
-hardware/schematics/_autosave-*
-hardware/pcb/*.bak
-hardware/pcb/_autosave-*
+hardware/kicad/*.bak
+hardware/kicad/*.kicad_pcb-bak
+hardware/kicad/*.kicad_sch-bak
+hardware/kicad/_autosave-*
+
+# Gerber output
+hardware/gerbers/
 
 # IDE
 .vscode/
@@ -36,6 +48,16 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+*.pyo
+dist/
+*.egg-info/
+
+# Device tree build
+*.dtb
+*.dtbo
 
 # Logs
 *.log
+
+# Test binaries
+tests/test_spi_protocol

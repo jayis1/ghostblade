@@ -1,10 +1,10 @@
 /*
  * pyapex — Python Bindings for libapex
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Python C extension module providing access to the Apex One hardware
+ * Python C extension module providing access to the GhostBlade hardware
  * through the libapex C library. This module wraps all libapex functions
  * into Python classes and methods.
  *
@@ -387,7 +387,7 @@ static PyMethodDef pyapex_device_methods[] = {
 static PyTypeObject PyApexDeviceType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name      = "pyapex.ApexDevice",
-    .tp_doc       = "Apex One hardware device handle",
+    .tp_doc       = "GhostBlade hardware device handle",
     .tp_basicsize = sizeof(PyApexDeviceObject),
     .tp_itemsize  = 0,
     .tp_flags     = Py_TPFLAGS_DEFAULT,
@@ -459,7 +459,7 @@ static PyMethodDef pyapex_module_methods[] = {
 static struct PyModuleDef pyapex_module = {
     PyModuleDef_HEAD_INIT,
     .m_name    = "pyapex",
-    .m_doc     = "Python bindings for Apex One hardware (libapex)",
+    .m_doc     = "Python bindings for GhostBlade hardware (libapex)",
     .m_size    = -1,
     .m_methods = pyapex_module_methods,
 };

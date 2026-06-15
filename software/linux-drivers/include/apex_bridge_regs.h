@@ -1,7 +1,7 @@
 /*
- * apex_bridge_regs.h — MMIO Register Definitions for Apex One SPI Bridge
+ * apex_bridge_regs.h — MMIO Register Definitions for GhostBlade SPI Bridge
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This header defines the memory-mapped I/O registers for the RK3576

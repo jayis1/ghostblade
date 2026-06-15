@@ -1,0 +1,22 @@
+# Clang-Format configuration for GhostBlade project
+# Based on Linux kernel style with minor adjustments for firmware
+
+---
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 8
+TabWidth: 8
+UseTab: ForIndentation
+BreakBeforeBraces: Linux
+ColumnLimit: 100
+PointerAlignment: Right
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASideLine: false
+AllowShortLoopsOnASingleLine: false
+AlignConsecutiveMacros: AcrossEmptyLines
+SortIncludes: false
+SpaceAfterCStyleCast: true
+SpaceBeforeParens: ControlStatements
+IndentCaseLabels: false
+MaxEmptyLinesToKeep: 1
+Standard: c11

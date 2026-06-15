@@ -1,9 +1,9 @@
 # PHASE 3: Physical PCB Blueprints & Layout Guidelines
 
-**Device:** Apex One  
-**Codename:** Project Cyber-Swiss  
-**Date:** 2026-06-14  
-**Revision:** 1.0  
+**Device:** GhostBlade  
+**Codename:** Project NullSpectre  
+**Date:** 2026-06-15  
+**Revision:** 1.1  
 
 ---
 

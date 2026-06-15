@@ -1,7 +1,7 @@
 /*
- * apex_bridge.c — Linux Kernel Driver for Apex One SPI Bridge
+ * apex_bridge.c — Linux Kernel Driver for GhostBlade SPI Bridge
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This driver implements a character device interface for the SPI bridge
@@ -51,6 +51,9 @@
 #include <linux/completion.h>
 #include <linux/workqueue.h>
 #include <linux/jiffies.h>
+#include <linux/atomic.h>
+#include <linux/pm.h>
+#include <linux/pm_runtime.h>
 
 #include "apex_bridge_regs.h"
 
@@ -90,7 +93,7 @@ struct apex_bridge_dev {
     int                gpio_int_req;   /* INT_REQ GPIO number */
     int                gpio_host_rdy; /* HOST_RDY GPIO number */
     int                gpio_mcu_reset; /* MCU_RESET GPIO number */
-    bool               open;          /* Device is open */
+    atomic_t            open_count;     /* Atomic open counter (0 or 1) */
     struct kfifo       rx_fifo;       /* RX data FIFO */
     struct kfifo       tx_fifo;       /* TX data FIFO */
     struct apex_telemetry last_telem; /* Last telemetry snapshot */
@@ -514,8 +517,14 @@ static int apex_bridge_open(struct inode *inode, struct file *filp)
 
     filp->private_data = dev;
 
-    if (test_and_set_bit(0, (unsigned long *)&dev->open))
+    /* Use cmpxchg for atomic open check — dev->open is bool, but
+     * test_and_set_bit() requires unsigned long alignment. Use a
+     * proper atomic compare-and-swap instead.
+     */
+    if (cmpxchg(&dev->open_count, 0, 1) != 0)
         return -EBUSY;  /* Only one user at a time */
+    /* Resume device from runtime suspend */
+    pm_runtime_get_sync(&dev->spi->dev);
 
     return 0;
 }
@@ -524,7 +533,9 @@ static int apex_bridge_release(struct inode *inode, struct file *filp)
 {
     struct apex_bridge_dev *dev = filp->private_data;
 
-    clear_bit(0, (unsigned long *)&dev->open);
+    /* Allow device to runtime suspend */
+    pm_runtime_put_autosuspend(&dev->spi->dev);
+    atomic_set(&dev->open_count, 0);
     filp->private_data = NULL;
 
     return 0;
@@ -559,7 +570,7 @@ static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
 }
 
 static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
-                                  size_t count, loff_t *f_pos)
+                                 size_t count, loff_t *f_pos)
 {
     struct apex_bridge_dev *dev = filp->private_data;
     uint8_t *kbuf;
@@ -568,7 +579,9 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
     int frame_len;
     int ret;
 
-    /* Limit write size to max payload */
+    /* Validate write size */
+    if (count < 1)
+        return -EINVAL;
     if (count > APEX_SPI_MAX_PAYLOAD)
         return -EMSGSIZE;
 
@@ -577,7 +590,7 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
         return -ENOMEM;
 
     if (copy_from_user(kbuf, buf, count)) {
-        kfree(kbuf);
+        kfree_sensitive(kbuf);
         return -EFAULT;
     }
 
@@ -598,11 +611,6 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
      * The first byte of user data is treated as the command opcode.
      * The remaining bytes are the payload.
      */
-    if (count < 1) {
-        ret = -EINVAL;
-        goto out;
-    }
-
     frame_len = apex_build_frame(kbuf[0], &kbuf[1], count - 1,
                                   frame, APEX_SPI_FRAME_SIZE_MAX);
     if (frame_len < 0) {
@@ -634,9 +642,10 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
     ret = count;  /* Report full write as consumed */
 
 out:
-    kfree(kbuf);
-    kfree(frame);
-    kfree(rx_buf);
+    /* Securely wipe buffers that may contain protocol data before freeing */
+    kfree_sensitive(kbuf);
+    kfree_sensitive(frame);
+    kfree_sensitive(rx_buf);
     return ret;
 }
 
@@ -741,6 +750,12 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
             break;
         }
 
+        /* Validate reg_len to prevent buffer overflow */
+        if (cfg.reg_len == 0 || cfg.reg_len > sizeof(cfg.data)) {
+            ret = -EINVAL;
+            break;
+        }
+
         cfg_total = sizeof(cfg.reg_addr) + sizeof(cfg.reg_len) + cfg.reg_len;
         cfg_buf = kmalloc(cfg_total, GFP_KERNEL);
         if (!cfg_buf) {
@@ -753,7 +768,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         if (copy_from_user(&cfg_buf[2],
                            (uint8_t __user *)(arg + offsetof(struct apex_cc1101_cfg, data)),
                            cfg.reg_len)) {
-            kfree(cfg_buf);
+            kfree_sensitive(cfg_buf);
             ret = -EFAULT;
             break;
         }
@@ -761,7 +776,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         frame_len = apex_build_frame(APEX_CMD_CC1101_CFG, cfg_buf,
                                       cfg_total, frame,
                                       APEX_SPI_FRAME_SIZE_MAX);
-        kfree(cfg_buf);
+        kfree_sensitive(cfg_buf);
 
         if (frame_len < 0) {
             ret = frame_len;
@@ -784,6 +799,12 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
             break;
         }
 
+        /* Validate data_len to prevent buffer overflow */
+        if (le16_to_cpu(nfc.data_len) > sizeof(nfc.data)) {
+            ret = -EINVAL;
+            break;
+        }
+
         nfc_total = sizeof(nfc.cmd) + sizeof(nfc.flags) +
                      sizeof(nfc.data_len) + le16_to_cpu(nfc.data_len);
         nfc_buf = kmalloc(nfc_total, GFP_KERNEL);
@@ -798,7 +819,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         if (copy_from_user(&nfc_buf[4],
                            (uint8_t __user *)(arg + offsetof(struct apex_nfc_transact, data)),
                            le16_to_cpu(nfc.data_len))) {
-            kfree(nfc_buf);
+            kfree_sensitive(nfc_buf);
             ret = -EFAULT;
             break;
         }
@@ -806,7 +827,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         frame_len = apex_build_frame(APEX_CMD_NFC_TRANSACT, nfc_buf,
                                       nfc_total, frame,
                                       APEX_SPI_FRAME_SIZE_MAX);
-        kfree(nfc_buf);
+        kfree_sensitive(nfc_buf);
 
         if (frame_len < 0) {
             ret = frame_len;
@@ -1081,7 +1102,7 @@ static int apex_bridge_probe(struct spi_device *spi)
     struct apex_bridge_dev *dev;
     int ret;
 
-    dev_info(&spi->dev, "Apex One SPI Bridge driver probing\n");
+    dev_info(&spi->dev, "GhostBlade SPI Bridge driver probing\n");
 
     dev = kzalloc(sizeof(*dev), GFP_KERNEL);
     if (!dev)
@@ -1090,6 +1111,7 @@ static int apex_bridge_probe(struct spi_device *spi)
     dev->spi = spi;
     spi_set_drvdata(spi, dev);
 
+    atomic_set(&dev->open_count, 0);
     mutex_init(&dev->lock);
     spin_lock_init(&dev->rx_lock);
     init_waitqueue_head(&dev->rx_waitq);
@@ -1184,7 +1206,7 @@ static int apex_bridge_probe(struct spi_device *spi)
     apex_mcu_reset_release(dev);
 
     apex_dev = dev;
-    dev_info(&spi->dev, "Apex One SPI Bridge driver initialized\n");
+    dev_info(&spi->dev, "GhostBlade SPI Bridge driver initialized\n");
     dev_info(&spi->dev, "Device: /dev/%s0, Major: %d, Minor: %d\n",
              DEVICE_NAME, MAJOR(dev->devt), MINOR(dev->devt));
 
@@ -1233,7 +1255,7 @@ static void apex_bridge_remove(struct spi_device *spi)
     kfifo_free(&dev->rx_fifo);
     kfifo_free(&dev->tx_fifo);
 
-    dev_info(&spi->dev, "Apex One SPI Bridge driver removed\n");
+    dev_info(&spi->dev, "GhostBlade SPI Bridge driver removed\n");
 
     kfree(dev);
     apex_dev = NULL;
@@ -1267,7 +1289,7 @@ static struct spi_driver apex_bridge_driver = {
 
 module_spi_driver(apex_bridge_driver);
 
-MODULE_AUTHOR("Apex One Project");
-MODULE_DESCRIPTION("Apex One SPI Bridge Driver (RK3576 <-> RP2350B)");
+MODULE_AUTHOR("GhostBlade Project");
+MODULE_DESCRIPTION("GhostBlade SPI Bridge Driver (RK3576 <-> RP2350B)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0.0");
