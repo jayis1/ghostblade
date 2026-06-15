@@ -1,6 +1,6 @@
-# Contributing to Apex One
+# Contributing to GhostBlade
 
-Thank you for your interest in contributing to the Apex One project! This document provides guidelines for contributing.
+Thank you for your interest in contributing to the GhostBlade project! This document provides guidelines for contributing.
 
 ## Code of Conduct
 

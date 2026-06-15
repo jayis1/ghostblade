@@ -1,7 +1,7 @@
 /*
  * test_spi_protocol.c — Unit Tests for SPI Bridge Protocol Framing
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Unit tests for the SPI protocol handler, focusing on:

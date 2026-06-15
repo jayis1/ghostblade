@@ -1,5 +1,5 @@
 # libapex Makefile
-# Copyright (C) 2026 Apex One Project
+# Copyright (C) 2026 GhostBlade Project
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 CC      ?= gcc

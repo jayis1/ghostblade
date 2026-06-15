@@ -1,12 +1,12 @@
 /*
- * libapex.c — Userspace Library for Apex One SPI Bridge Device
+ * libapex.c — Userspace Library for GhostBlade SPI Bridge Device
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Implementation of the libapex API. This library wraps the kernel
  * driver's ioctl interface and provides a clean, typed C API for
- * controlling the Apex One pentesting hardware.
+ * controlling the GhostBlade pentesting hardware.
  */
 
 #include "libapex.h"

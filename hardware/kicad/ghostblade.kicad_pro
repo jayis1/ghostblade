@@ -1,7 +1,7 @@
 (kicad_pro (version 20240505)
 
   (general
-    (project "Apex One")
+    (project "GhostBlade")
     (project_rev "1.0")
     (comment 0 "Project Cyber-Swiss — Advanced Mobile Pentesting Lab")
     (comment 1 "Dual-Processor: RK3576 + RP2350B")
@@ -27,13 +27,13 @@
 
   (schematic
     (symbol_libraries
-      (logical_lib "apex-one-symbols")
+      (logical_lib "ghostblade-symbols")
     )
   )
 
   (pcb
     (footprint_libraries
-      (logical_lib "apex-one-footprints")
+      (logical_lib "ghostblade-footprints")
     )
   )
 

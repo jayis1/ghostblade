@@ -39,6 +39,7 @@
 		regulator-max-microvolt = <900000>;
 		regulator-boot-on;
 		regulator-always-on;
+		startup-delay-us = <200>;
 	};
 
 	vdd_logic: vdd-logic-regulator {
@@ -48,6 +49,7 @@
 		regulator-max-microvolt = <1800000>;
 		regulator-boot-on;
 		regulator-always-on;
+		startup-delay-us = <500>;
 	};
 
 	vdd_3v3: vdd-3v3-regulator {
@@ -57,6 +59,7 @@
 		regulator-max-microvolt = <3300000>;
 		regulator-boot-on;
 		regulator-always-on;
+		startup-delay-us = <1000>;
 	};
 
 	vdd_1v2_sdr: vdd-1v2-sdr-regulator {
@@ -65,6 +68,7 @@
 		regulator-min-microvolt = <1200000>;
 		regulator-max-microvolt = <1200000>;
 		regulator-boot-on;
+		startup-delay-us = <2000>;
 	};
 
 	vdd_1v8_sdr: vdd-1v8-sdr-regulator {
@@ -73,6 +77,7 @@
 		regulator-min-microvolt = <1800000>;
 		regulator-max-microvolt = <1800000>;
 		regulator-boot-on;
+		startup-delay-us = <1500>;
 	};
 
 	vdd_rf: vdd-rf-regulator {
@@ -81,6 +86,8 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 		vin-supply = <&vdd_3v3>;
+		startup-delay-us = <3000>;
+		off-on-delay-us = <5000>;
 	};
 
 	vdd_nfc_tx: vdd-nfc-tx-regulator {
@@ -89,6 +96,49 @@
 		regulator-min-microvolt = <5000000>;
 		regulator-max-microvolt = <5000000>;
 		regulator-boot-on;
+		startup-delay-us = <5000>;
+		off-on-delay-us = <10000>;
+	};
+
+	/* ================================================================
+	 * Thermal Zones
+	 * ================================================================ */
+
+	thermal-zones {
+		soc_thermal: soc-thermal {
+			polling-delay-passive = <1000>; /* 1s passive polling */
+			polling-delay = <5000>; /* 5s active polling */
+			thermal-sensors = <&tsadc>;
+
+			trips {
+				soc_alert: soc-alert {
+					temperature = <75000>; /* 75°C alert */
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
+				soc_crit: soc-crit {
+					temperature = <85000>; /* 85°C critical */
+					hysteresis = <2000>;
+					type = "critical";
+				};
+
+				soc_emergency: soc-emergency {
+					temperature = <105000>; /* 105°C emergency shutdown */
+					hysteresis = <0>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&soc_alert>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <4096>;
+				};
+			};
+		};
 	};
 
 	/* ================================================================

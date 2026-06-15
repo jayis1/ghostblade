@@ -68,6 +68,87 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ---
 
+## System Block Diagram
+
+```mermaid
+graph TB
+    RK3576[RK3576 SoC<br/>4×A72 + 4×A53<br/>6 TOPS NPU<br/>Mali G52]
+    RP2350B[RP2350B MCU<br/>2×M33 / Hazard3<br/>150 MHz]
+    LMS[LMS7002M SDR<br/>100 kHz–3.8 GHz<br/>2×2 MIMO]
+    CC[CC1101 Sub-GHz<br/>300–928 MHz]
+    NFC[ST25R3916 NFC<br/>ISO 14443/15693]
+    MT[MT7922 Wi-Fi 6E<br/>BT 5.4]
+    ANT[PE42422 Antenna Switch]
+    DDR[8 GB LPDDR5]
+    eMMC[32 GB eMMC 5.1]
+    NVMe[M.2 2230 NVMe]
+    PMIC[RK817 PMIC]
+    BAT[5000 mAh Li-Po]
+
+    RK3576 -- SPI0 50 MHz<br/>CRC-64/CRC-32 framed --> RP2350B
+    RK3576 -- INT_REQ / HOST_RDY --> RP2350B
+    RP2350B -- SPI1 --> LMS
+    RP2350B -- SPI1 shared --> CC
+    RP2350B -- SPI2 --> NFC
+    RP2350B -- I2C0 --> NFC
+    RP2350B -- GPIO --> ANT
+    RK3576 -- MIPI-CSI-2 --> LMS
+    RK3576 -- PCIe Gen3 x2 --> NVMe
+    RK3576 -- eMMC 5.1 --> eMMC
+    RK3576 -- LPDDR5 3200 --> DDR
+    RK3576 -- PCIe + USB --> MT
+    PMIC --> RK3576
+    PMIC --> RP2350B
+    BAT --> PMIC
+```
+
+## Power Sequencing Diagram
+
+```mermaid
+sequenceDiagram
+    participant BAT as Battery (3.7–4.2V)
+    participant PMIC as RK817 PMIC
+    participant SOC as RK3576
+    participant MCU as RP2350B
+    participant SDR as LMS7002M
+    participant NFC as ST25R3916
+
+    BAT->>PMIC: VBAT_ALWAYS (3.7–4.2V)
+    PMIC->>PMIC: Power-on reset (PWRON key)
+    PMIC->>SOC: VDD_CORE 0.9V (BUCK1)
+    PMIC->>SOC: VDD_LOGIC 1.8V (BUCK2)
+    PMIC->>SOC: VDD_DDR 1.1V (BUCK3)
+    Note over SOC: Boot ROM → SPL → U-Boot → Linux
+    SOC->>MCU: MCU_RESET assert (LOW)
+    PMIC->>MCU: VDD_3V3 (BUCK4 + LDO)
+    SOC->>MCU: MCU_RESET release (HIGH)
+    Note over MCU: RP2350B firmware init
+    MCU->>SOC: HOST_RDY assert (LOW)
+    SOC->>MCU: SPI0 probe → apex_bridge driver
+    MCU->>SDR: SDR_RESET release, SPI1 config
+    MCU->>NFC: NFC_SPI_CSN, SPI2 config
+    Note over SOC,NFC: System operational
+```
+
+## SPI Bridge Protocol
+
+```mermaid
+sequenceDiagram
+    participant Host as RK3576 (Host)
+    participant MCU as RP2350B (MCU)
+
+    Note over Host,MCU: Command Transaction
+    Host->>MCU: CSn LOW → TX frame (16B hdr + payload + CRC32)
+    Host->>MCU: CSn HIGH
+    Note over MCU: MCU validates CRC-64 hdr + CRC-32 payload
+    MCU->>Host: INT_REQ LOW (data ready)
+    Host->>MCU: CSn LOW → NOP frame → RX response
+    Host->>MCU: CSn HIGH
+    MCU->>Host: INT_REQ HIGH (deassert)
+```
+
+---
+
 ## Repository Structure
 
 ```

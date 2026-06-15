@@ -1,11 +1,11 @@
 /*
  * st25r3916_init.c — ST25R3916 NFC Controller Initialization for RP2350B
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements the ST25R3916 NFC reader/writer initialization
- * sequence for the Apex One board. The ST25R3916 is connected to the
+ * sequence for the GhostBlade board. The ST25R3916 is connected to the
  * RP2350B via SPI2 (dedicated NFC control bus) and I2C0 (secondary
  * control/monitoring).
  *

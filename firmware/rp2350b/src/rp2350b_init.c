@@ -1,11 +1,11 @@
 /*
  * rp2350b_init.c — Low-Level Initialization for RP2350B Coprocessor
  *
- * Copyright (C) 2026 Apex One Project
+ * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: MIT
  *
  * This file implements the hardware initialization sequence for the
- * RP2350B coprocessor on the Apex One board. It runs from the RP2350B's
+ * RP2350B coprocessor on the GhostBlade board. It runs from the RP2350B's
  * boot ROM → flash bootloader → this code.
  *
  * Sequence:
