@@ -35,57 +35,13 @@
 
 /* ── Project headers ──────────────────────────────────────────────────────── */
 #include "board_pins.h"
-
-/* ── External function declarations (module entry points) ─────────────────── */
-
-/* rp2350b_init.c — Low-level hardware initialization */
-extern void rp2350b_init(void);
-extern void rp2350b_gpio_set(uint8_t pin, bool value);
-extern bool rp2350b_gpio_get(uint8_t pin);
-
-/* spi_protocol.c — SPI bridge protocol handler */
-extern void spi_protocol_init(void);
-extern int  spi_protocol_process(void);
-extern void spi_protocol_send_telemetry(void);
-extern void spi_protocol_update_telemetry(uint16_t rssi_dbm_x10,
-                                           uint16_t temp_c_x10,
-                                           uint16_t vbat_mv,
-                                           uint16_t cc_rssi_x10,
-                                           uint16_t nfc_field_mv);
-extern void spi_protocol_tick(void);
-
-/* sdr_dma.c — SDR DMA ring buffer manager */
-extern int  sdr_dma_init(void);
-extern void sdr_dma_start(void);
-extern void sdr_dma_stop(void);
-extern void sdr_dma_set_frequency(uint32_t freq_hz, uint16_t bw_khz, uint16_t gain_db_x10);
-
-/* cc1101_init.c — CC1101 sub-GHz radio initialization */
-extern int  cc1101_init(void);
-extern void cc1101_set_rx_mode(void);
-extern void cc1101_set_tx_mode(void);
-extern void cc1101_set_idle(void);
-extern int8_t cc1101_get_rssi_dbm(void);
-
-/* st25r3916_init.c — ST25R3916 NFC controller initialization */
-extern int  st25r3916_init(void);
-extern void st25r3916_start_polling(void);
-extern void st25r3916_stop_polling(void);
-extern uint16_t st25r3916_get_field_strength_mv(void);
-
-/* battery_monitor.c — ADC battery and temperature monitoring */
-extern int  battery_monitor_init(void);
-extern uint16_t battery_monitor_get_vbat_mv(void);
-extern int16_t battery_monitor_get_temp_c_x10(void);
-extern void battery_monitor_update(void);
-extern bool battery_is_brownout(uint16_t vbat_mv, bool *brownout_active);
-
-/* watchdog.c — Hardware watchdog management */
-extern bool watchdog_init(void);
-extern void watchdog_kick(void);
-extern void watchdog_enable_bark(void);
-extern void watchdog_mark_brownout(void);
-extern bool watchdog_check_brownout(void);
+#include "rp2350b_init.h"
+#include "spi_protocol.h"
+#include "sdr_dma.h"
+#include "cc1101_init.h"
+#include "st25r3916_init.h"
+#include "battery_monitor.h"
+#include "watchdog.h"
 
 /* ── Binary info for picotool ──────────────────────────────────────────────── */
 bi_decl(bi_program_name("GhostBlade Firmware"))

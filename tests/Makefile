@@ -5,16 +5,20 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Build targets:
-#   test_spi_protocol  — Userspace SPI protocol unit tests
-#   test_apex_bridge   — Kernel module test harness (for target)
-#   all                — Build all userspace tests
-#   clean              — Remove build artifacts
+#   test_spi_protocol     — Userspace SPI protocol unit tests
+#   test_battery_monitor  — Battery monitor calculation unit tests
+#   test_cc1101_config    — CC1101 register configuration unit tests
+#   test_apex_bridge      — Kernel module test harness (for target)
+#   all                   — Build all userspace tests
+#   clean                 — Remove build artifacts
 #
 # Usage:
-#   make                    # Build all userspace tests
-#   make test_spi_protocol  # Build SPI protocol tests only
-#   make run                # Build and run userspace tests
-#   make check              # Same as 'make run'
+#   make                       # Build all userspace tests
+#   make test_spi_protocol     # Build SPI protocol tests only
+#   make test_battery_monitor  # Build battery monitor tests only
+#   make test_cc1101_config    # Build CC1101 config tests only
+#   make run                   # Build and run all userspace tests
+#   make check                 # Same as 'make run'
 #
 # For the kernel module test:
 #   make -C /lib/modules/$(uname -r)/build M=$(pwd) modules
@@ -26,7 +30,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -39,10 +43,12 @@ help:
 	@echo "GhostBlade Test Suite"
 	@echo ""
 	@echo "Targets:"
-	@echo "  all                - Build all userspace tests"
-	@echo "  test_spi_protocol  - Build SPI protocol unit tests"
-	@echo "  run / check        - Build and run userspace tests"
-	@echo "  clean              - Remove build artifacts"
+	@echo "  all                   - Build all userspace tests"
+	@echo "  test_spi_protocol     - Build SPI protocol unit tests"
+	@echo "  test_battery_monitor  - Build battery monitor unit tests"
+	@echo "  test_cc1101_config    - Build CC1101 configuration unit tests"
+	@echo "  run / check           - Build and run all userspace tests"
+	@echo "  clean                 - Remove build artifacts"
 	@echo ""
 	@echo "Kernel module test (build on target):"
 	@echo "  make -C /lib/modules/\$$(uname -r)/build M=\$$(pwd) modules"
@@ -50,9 +56,21 @@ help:
 test_spi_protocol: test_spi_protocol.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
-run: test_spi_protocol
+test_battery_monitor: test_battery_monitor.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) -lm
+
+test_cc1101_config: test_cc1101_config.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+run: $(USERSPACE_TARGETS)
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol
+	@echo ""
+	@echo "=== Running Battery Monitor Unit Tests ==="
+	@./test_battery_monitor
+	@echo ""
+	@echo "=== Running CC1101 Configuration Unit Tests ==="
+	@./test_cc1101_config
 	@echo ""
 
 check: run

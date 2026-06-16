@@ -52,6 +52,13 @@ set(FW_SOURCES
 
 set(FW_HEADERS
     include/board_pins.h
+    include/rp2350b_init.h
+    include/spi_protocol.h
+    include/sdr_dma.h
+    include/cc1101_init.h
+    include/st25r3916_init.h
+    include/battery_monitor.h
+    include/watchdog.h
 )
 
 # ── Create executable ─────────────────────────────────────────────────────────

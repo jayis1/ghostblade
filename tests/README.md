@@ -33,6 +33,55 @@ make test_spi_protocol
 
 **Result:** 158/158 assertions pass.
 
+### `test_battery_monitor.c` — Battery Monitor Unit Tests
+
+Unit tests for the battery voltage monitoring and brownout detection calculations used in the RP2350B firmware's `battery_monitor` module.
+
+**Test coverage:**
+- ADC raw value to battery voltage conversion (zero, midrange, full-scale, typical 3.7V, low battery 3.0V)
+- Battery voltage to percentage conversion (full, empty, 50%, 10%, midpoints, monotonicity, boundaries)
+- Brownout detection with hysteresis (normal voltage, enter, hold, exit, full cycle, exact threshold, exact recovery, no oscillation)
+- ADC quantization (noise, overflow, resolution)
+- Temperature sensor conversion (27°C, 85°C hot, -40°C cold)
+
+**Build:**
+```bash
+make test_battery_monitor
+```
+
+**Run:**
+```bash
+./test_battery_monitor
+```
+
+**Result:** 95/95 assertions pass.
+
+### `test_cc1101_config.c` — CC1101 Configuration Unit Tests
+
+Unit tests for the CC1101 sub-GHz radio register configuration calculations, including frequency, data rate, deviation, channel bandwidth, PA power table, and RSSI conversion.
+
+**Test coverage:**
+- Frequency register calculation (868 MHz, 433.92 MHz, 915 MHz, accuracy within ±10 kHz)
+- Data rate register calculation (250 kBaud, 38.4 kBaud, 1.2 kBaud)
+- Deviation register calculation (127 kHz, 20 kHz)
+- Channel bandwidth calculation (200 kHz, 100 kHz, minimum)
+- PA power table verification (8 levels, specific known values)
+- RSSI to dBm conversion (typical, strong, weak, very weak, range)
+- Sync word configuration
+- MDMCFG4 and MDMCFG3 register assembly
+
+**Build:**
+```bash
+make test_cc1101_config
+```
+
+**Run:**
+```bash
+./test_cc1101_config
+```
+
+**Result:** 37/37 assertions pass.
+
 ### `test_apex_bridge.c` — Kernel Module Test Harness
 
 In-kernel test harness for the `apex_bridge` SPI bridge driver. Runs as a loadable kernel module on the RK3576 target platform.
@@ -86,6 +135,14 @@ Shell script that runs on the RK3576 host and verifies the full SPI bridge commu
 ./hil_spi_bridge_test.sh           # Run all tests
 ./hil_spi_bridge_test.sh --quick   # Quick smoke tests (skip stress test)
 ./hil_spi_bridge_test.sh --loop    # Run continuously until failure
+```
+
+## Building All Tests
+
+```bash
+make            # Build all userspace tests
+make run        # Build and run all userspace tests
+make check      # Same as 'make run'
 ```
 
 ## CRC Implementation Notes

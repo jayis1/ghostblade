@@ -92,8 +92,8 @@ ghostblade/
 ### SPI Bridge Protocol
 
 The RK3576 communicates with the RP2350B over SPI0 using a framed
-protocol with CRC-16 integrity. See `docs/spi-protocol-timing.md`
-for detailed timing diagrams.
+protocol with CRC-64 header integrity and CRC-32 payload integrity.
+See `docs/spi-protocol-timing.md` for detailed timing diagrams.
 
 ---
 
@@ -219,27 +219,61 @@ dev.close()
 
 ```bash
 cd tests
-gcc -Wall -Wextra -std=c11 -DNO_CMOCKA -o test_spi_protocol test_spi_protocol.c
+make test_spi_protocol
 ./test_spi_protocol
 ```
 
 Expected output:
 ```
 === SPI Protocol Unit Tests ===
-Running: test_crc16_known_vectors
-Running: test_valid_nop_frame
-Running: test_valid_payload_frame
 ...
-=== Results: 26/26 passed, 0 failed ===
+=== Results: 158/158 passed, 0 failed ===
+```
+
+### Battery Monitor Unit Tests
+
+```bash
+make test_battery_monitor
+./test_battery_monitor
+```
+
+Expected output:
+```
+=== Battery Monitor Unit Tests ===
+...
+=== Results: 95/95 passed, 0 failed ===
+```
+
+### CC1101 Configuration Unit Tests
+
+```bash
+make test_cc1101_config
+./test_cc1101_config
+```
+
+Expected output:
+```
+=== CC1101 Configuration Unit Tests ===
+...
+=== Results: 37/37 passed, 0 failed ===
+```
+
+### Run All Userspace Tests
+
+```bash
+make all
+make run
 ```
 
 ### With cmocka (if installed)
 
 ```bash
 sudo apt-get install libcmocka-dev
-gcc -Wall -Wextra -std=c11 -lcmocka -o test_spi_protocol test_spi_protocol.c
-./test_spi_protocol
+# Rebuild with cmocka support (remove -DNO_CMOCKA from CFLAGS in Makefile)
+make clean && make all
 ```
+
+See `tests/README.md` for detailed test documentation.
 
 ---
 

@@ -8,7 +8,7 @@
 #   1. Copied from $PICO_SDK_PATH/external/pico_sdk_import.cmake, or
 #   2. Included via -DPICO_SDK_PATH= on the cmake command line.
 #
-# The CI workflow uses option 2: cmake .. -DPICO_SDK_PATH=/opt/pico-sdk
+# The build system uses option 2: cmake .. -DPICO_SDK_PATH=/opt/pico-sdk
 # For local development, set PICO_SDK_PATH in your environment or pass
 # it to cmake.
 
