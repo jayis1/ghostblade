@@ -26,6 +26,19 @@
 /* Forward declarations from other modules */
 extern void watchdog_feed(void);
 
+/* ── Memory barriers for lock-free ring buffer ────────────────────────────
+ *
+ * The SPI0 RX and TX ring buffers are accessed from both ISR context
+ * (rx_head/tx_tail) and main-loop context (rx_tail/tx_head). We use
+ * volatile qualifiers for the shared indices, but on ARM Cortex-M33
+ * with data cache, we must ensure ordering of reads/writes to avoid
+ * stale data. Use DMB (Data Memory Barrier) after ISR writes and
+ * before main-loop reads to ensure visibility.
+ */
+static inline void dmb(void) {
+    __asm__ volatile ("dmb" ::: "memory");
+}
+
 /**
  * secure_wipe — Securely clear sensitive data from memory
  *
@@ -405,7 +418,9 @@ static int build_response_frame(uint8_t cmd, const uint8_t *payload,
         tx_head = (tx_head + 1) & (TX_RING_SIZE - 1);
     }
 
-    /* Assert INT_REQ to signal RK3576 that response data is available */
+    /* Assert INT_REQ to signal RK3576 that response data is available.
+     * Ensure TX ring data is visible before asserting the interrupt. */
+    dmb();
     int_req_assert();
 
     return 0;
@@ -736,7 +751,10 @@ int spi_protocol_process(void) {
     int frames_processed = 0;
     struct spi_frame_header *hdr;
 
-    /* Drain available bytes from the SPI0 RX ring buffer */
+    /* Drain available bytes from the SPI0 RX ring buffer.
+     * Insert a data memory barrier before reading to ensure we
+     * see the latest data written by the ISR. */
+    dmb();
     while (spi_rx_head != spi_rx_tail) {
         uint8_t byte = spi_rx_buf[spi_rx_tail];
         spi_rx_tail = (spi_rx_tail + 1) & (SPI_RX_BUF_SIZE - 1);

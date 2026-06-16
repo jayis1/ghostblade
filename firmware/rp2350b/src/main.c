@@ -78,11 +78,14 @@ extern int  battery_monitor_init(void);
 extern uint16_t battery_monitor_get_vbat_mv(void);
 extern int16_t battery_monitor_get_temp_c_x10(void);
 extern void battery_monitor_update(void);
+extern bool battery_is_brownout(uint16_t vbat_mv, bool *brownout_active);
 
 /* watchdog.c — Hardware watchdog management */
-extern void watchdog_init(uint32_t timeout_ms);
+extern bool watchdog_init(void);
 extern void watchdog_kick(void);
 extern void watchdog_enable_bark(void);
+extern void watchdog_mark_brownout(void);
+extern bool watchdog_check_brownout(void);
 
 /* ── Binary info for picotool ──────────────────────────────────────────────── */
 bi_decl(bi_program_name("GhostBlade Firmware"))
@@ -308,10 +311,20 @@ int main(void)
     }
     printf("[MAIN] Peripherals initialized\r\n");
 
+    /* Check for brownout reset (detected via watchdog scratch register) */
+    if (watchdog_check_brownout()) {
+        printf("[MAIN] INFO: Recovered from brownout/undervoltage reset\r\n");
+    }
+
     /* ── Step 3: Configure watchdog ────────────────────────────────────── */
     printf("[MAIN] Configuring watchdog (%d ms timeout)...\r\n",
            WATCHDOG_TIMEOUT_MS);
-    watchdog_init(WATCHDOG_TIMEOUT_MS);
+    {
+        bool was_wd_reset = watchdog_init();
+        if (was_wd_reset) {
+            printf("[MAIN] Recovered from watchdog reset\r\n");
+        }
+    }
     watchdog_enable_bark();
     printf("[MAIN] Watchdog active\r\n");
 
@@ -367,6 +380,17 @@ int main(void)
         if ((now - last_telem_time) >= TELEMETRY_INTERVAL_MS) {
             spi_protocol_send_telemetry();
             last_telem_time = now;
+        }
+
+        /* Periodic: Brownout detection via battery monitor */
+        if (g_state.battery_monitor_ready) {
+            uint16_t vbat = battery_monitor_get_vbat_mv();
+            static bool brownout_active = false;
+            if (battery_is_brownout(vbat, &brownout_active)) {
+                /* Mark brownout in watchdog scratch register so we
+                 * can detect it after the inevitable reset */
+                watchdog_mark_brownout();
+            }
         }
 
         /* Yield to avoid 100% CPU usage in idle state */

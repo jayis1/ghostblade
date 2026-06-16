@@ -87,7 +87,8 @@ struct apex_bridge_dev {
     struct device      *dev;          /* Device class */
     struct class       *class;        /* Device class */
     struct mutex       lock;          /* Mutex for SPI bus access */
-    spinlock_t         rx_lock;       /* Spinlock for RX FIFO */
+    spinlock_t         rx_lock;       /* Spinlock for RX FIFO and telemetry */
+    spinlock_t         tx_lock;       /* Spinlock for TX FIFO */
     wait_queue_head_t  rx_waitq;      /* Wait queue for read() */
     wait_queue_head_t  tx_waitq;      /* Wait queue for write() */
     struct completion   xfer_done;     /* SPI transfer completion */
@@ -101,6 +102,9 @@ struct apex_bridge_dev {
     struct kfifo       tx_fifo;       /* TX data FIFO */
     struct apex_telemetry last_telem; /* Last telemetry snapshot */
     unsigned long      flags;         /* Driver state flags */
+    atomic_t           spi_err_count; /* Cumulative SPI error count */
+    u8                 saved_spi_mode;       /* Saved SPI mode for PM resume */
+    u32                saved_spi_max_speed_hz; /* Saved SPI speed for PM resume */
     struct apex_sg_engine sg_engine;  /* Scatter-gather DMA engine */
 };
 
@@ -206,6 +210,7 @@ static int apex_spi_xfer(struct apex_bridge_dev *dev,
     if (ret < 0) {
         dev_err(&dev->spi->dev, "SPI transfer failed: %d\n", ret);
         set_bit(APEX_FLAG_SPI_ERROR, &dev->flags);
+        atomic_inc(&dev->spi_err_count);
         return ret;
     }
 
@@ -495,6 +500,9 @@ out_free:
     kfree(tx_frame);
 }
 
+/* Forward declaration — mmap is defined in the SG engine section below */
+static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma);
+
 static irqreturn_t apex_irq_handler(int irq, void *dev_id)
 {
     struct apex_bridge_dev *dev = dev_id;
@@ -659,6 +667,12 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
     uint8_t *frame;
     uint8_t *rx_buf;
     int frame_len, ret;
+
+    /* Validate ioctl command: must use our magic number and valid direction */
+    if (_IOC_TYPE(cmd) != APEX_IOC_MAGIC)
+        return -ENOTTY;
+    if (_IOC_NR(cmd) < 1 || _IOC_NR(cmd) > 11)
+        return -ENOTTY;
 
     frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
     if (!frame)
@@ -955,12 +969,13 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
 }
 
 static __poll_t apex_bridge_poll(struct file *filp,
-                                  struct poll_table_struct *wait)
+                                 struct poll_table_struct *wait)
 {
     struct apex_bridge_dev *dev = filp->private_data;
     __poll_t mask = 0;
 
     poll_wait(filp, &dev->rx_waitq, wait);
+    poll_wait(filp, &dev->tx_waitq, wait);
 
     if (!kfifo_is_empty(&dev->rx_fifo))
         mask |= EPOLLIN | EPOLLRDNORM;
@@ -973,8 +988,9 @@ static __poll_t apex_bridge_poll(struct file *filp,
     if (test_bit(APEX_FLAG_MCU_RESET, &dev->flags))
         mask |= EPOLLHUP;
 
-    /* Always writable (SPI is synchronous) */
-    mask |= EPOLLOUT | EPOLLWRNORM;
+    /* Writable when TX FIFO has space (or always if FIFO is large enough) */
+    if (kfifo_avail(&dev->tx_fifo) > 0)
+        mask |= EPOLLOUT | EPOLLWRNORM;
 
     return mask;
 }
@@ -1133,8 +1149,7 @@ static ssize_t spi_errors_show(struct device *dev,
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
 
-    return sprintf(buf, "%lu\n",
-                   test_bit(APEX_FLAG_SPI_ERROR, &adev->flags) ? 1UL : 0UL);
+    return sprintf(buf, "%u\n", atomic_read(&adev->spi_err_count));
 }
 static DEVICE_ATTR_RO(spi_errors);
 
@@ -1158,9 +1173,9 @@ static ssize_t tx_fifo_count_show(struct device *dev,
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
     unsigned int count;
 
-    spin_lock(&adev->rx_lock);
+    spin_lock(&adev->tx_lock);
     count = kfifo_len(&adev->tx_fifo);
-    spin_unlock(&adev->rx_lock);
+    spin_unlock(&adev->tx_lock);
 
     return sprintf(buf, "%u\n", count);
 }
@@ -1681,6 +1696,11 @@ static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
  * Allows userspace to mmap the SG buffer pool as a contiguous region.
  * Each buffer's descriptor is placed at the start of the buffer region,
  * allowing userspace to determine which buffers contain valid data.
+ *
+ * Uses dma_mmap_coherent() for proper mapping of DMA-coherent memory.
+ * This avoids calling virt_to_page() on DMA-coherent allocations, which
+ * is incorrect on non-cache-coherent architectures (e.g., ARM with
+ * writecombine mappings) and can lead to cache aliasing issues.
  */
 static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
 {
@@ -1688,37 +1708,49 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
     struct apex_sg_engine *eng = &dev->sg_engine;
     unsigned long vsize = vma->vm_end - vma->vm_start;
     unsigned long psize;
-    uint32_t i;
     int ret;
 
     if (eng->state == APEX_SG_STATE_IDLE)
         return -ENODEV;
 
-    psize = eng->buf_count * eng->buf_size;
+    psize = (unsigned long)eng->buf_count * eng->buf_size;
     if (vsize > psize)
         return -EINVAL;
 
-    /* Map each buffer as a separate page range */
-    for (i = 0; i < eng->buf_count; i++) {
-        unsigned long offset = i * eng->buf_size;
-        unsigned long nr_pages = eng->buf_size / PAGE_SIZE;
-        unsigned long j;
+    /* Use dma_mmap_coherent for proper DMA buffer mapping.
+     * This handles cache attributes correctly for DMA-coherent memory
+     * and avoids the incorrect use of virt_to_page()/remap_pfn_range()
+     * on DMA-allocated buffers.
+     */
+    vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 
-        if (offset >= vsize)
-            break;
+    /* Map all buffers as a single contiguous region using the first buffer's
+     * DMA address as the physical base. This assumes DMA-coherent buffers
+     * are allocated contiguously (which dma_alloc_coherent typically provides
+     * for each individual buffer, but buffers may not be contiguous with
+     * each other). We map buffer-by-buffer to handle non-contiguous cases.
+     */
+    {
+        unsigned long vma_offset = vma->vm_start;
+        uint32_t i;
 
-        for (j = 0; j < nr_pages && (offset + j * PAGE_SIZE) < vsize; j++) {
-            ret = remap_pfn_range(vma,
-                    vma->vm_start + offset + j * PAGE_SIZE,
-                    page_to_pfn(virt_to_page(eng->bufs[i].dma_virt + j * PAGE_SIZE)),
-                    PAGE_SIZE, vma->vm_page_prot);
+        for (i = 0; i < eng->buf_count && vma_offset < vma->vm_end; i++) {
+            unsigned long buf_vsize = eng->buf_size;
+
+            /* Truncate last buffer mapping if vsize doesn't cover all buffers */
+            if (vma_offset + buf_vsize > vma->vm_end)
+                buf_vsize = vma->vm_end - vma_offset;
+
+            ret = dma_mmap_coherent(&dev->spi->dev, vma,
+                                     eng->bufs[i].dma_virt,
+                                     eng->bufs[i].dma_phys,
+                                     buf_vsize);
             if (ret)
                 return ret;
+
+            vma_offset += buf_vsize;
         }
     }
-
-    /* Mark as DMA-coherent mapping (no cache flush needed) */
-    vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 
     return 0;
 }
@@ -1742,8 +1774,10 @@ static int apex_bridge_probe(struct spi_device *spi)
     spi_set_drvdata(spi, dev);
 
     atomic_set(&dev->open_count, 0);
+    atomic_set(&dev->spi_err_count, 0);
     mutex_init(&dev->lock);
     spin_lock_init(&dev->rx_lock);
+    spin_lock_init(&dev->tx_lock);
     init_waitqueue_head(&dev->rx_waitq);
     init_waitqueue_head(&dev->tx_waitq);
     init_completion(&dev->xfer_done);
@@ -1929,21 +1963,62 @@ MODULE_DEVICE_TABLE(spi, apex_bridge_id_table);
 
 static int apex_bridge_runtime_suspend(struct device *dev)
 {
-    /* Save power by reducing SPI clock; MCU stays active */
+    struct spi_device *spi = to_spi_device(dev);
+    struct apex_bridge_dev *adev = spi_get_drvdata(spi);
+
     dev_dbg(dev, "apex_bridge: runtime suspend\n");
+
+    /* Save current SPI configuration for restore on resume */
+    adev->saved_spi_mode = spi->mode;
+    adev->saved_spi_max_speed_hz = spi->max_speed_hz;
+
+    /* Disable SPI transfers by lowering clock speed to minimum.
+     * We keep the SPI bus powered to allow the MCU to still signal
+     * interrupts, but the low speed ensures minimal power consumption
+     * on the SPI bus lines. */
+    spi->max_speed_hz = 1000000;  /* 1 MHz — low power mode */
+    spi_setup(spi);
+
+    /* Free the SPI IRQ during suspend to avoid spurious wakeups
+     * from the MCU INT_REQ line while the host is idle. The IRQ
+     * will be re-requested in runtime_resume. */
+    if (adev->irq >= 0) {
+        disable_irq(adev->irq);
+    }
+
     return 0;
 }
 
 static int apex_bridge_runtime_resume(struct device *dev)
 {
+    struct spi_device *spi = to_spi_device(dev);
+    struct apex_bridge_dev *adev = spi_get_drvdata(spi);
+
     dev_dbg(dev, "apex_bridge: runtime resume\n");
+
+    /* Restore original SPI configuration */
+    spi->mode = adev->saved_spi_mode;
+    spi->max_speed_hz = adev->saved_spi_max_speed_hz;
+    spi_setup(spi);
+
+    /* Re-enable the SPI IRQ */
+    if (adev->irq >= 0) {
+        enable_irq(adev->irq);
+    }
+
     return 0;
 }
 
 static int apex_bridge_runtime_idle(struct device *dev)
 {
-    /* Allow runtime suspend when no open handles */
-    return pm_runtime_suspend(dev);
+    struct spi_device *spi = to_spi_device(dev);
+    struct apex_bridge_dev *adev = spi_get_drvdata(spi);
+
+    /* Allow runtime suspend only when no open handles */
+    if (atomic_read(&adev->open_count) == 0)
+        return pm_runtime_suspend(dev);
+
+    return -EBUSY;
 }
 
 static const struct dev_pm_ops apex_bridge_pm_ops = {

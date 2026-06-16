@@ -270,7 +270,7 @@ int apex_cc1101_set_power(apex_handle_t handle, int8_t power_dbm);
  *
  * Returns: APEX_OK on success
  */
-int apex_nfc_transact(apex_handle_t handle, const apex_nfc_transact_t *txn);
+int apex_nfc_transact(apex_handle_t handle, apex_nfc_transact_t *txn);
 
 /**
  * apex_nfc_field_on — Turn on the NFC 13.56 MHz carrier field

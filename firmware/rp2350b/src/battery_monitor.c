@@ -536,6 +536,12 @@ enum power_state power_state_get(void) {
  * power_state_set — Force a power state transition
  *
  * @state: Target power state
+ *
+ * Note: This function should only be called from a single context
+ * (e.g., main loop). The state machine does not use a mutex because
+ * it runs in a single-threaded bare-metal environment. If this is
+ * later called from multiple contexts (e.g., ISR and main loop),
+ * a critical section or mutex must be added.
  */
 void power_state_set(enum power_state state) {
     current_power_state = state;

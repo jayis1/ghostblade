@@ -295,7 +295,7 @@ int apex_cc1101_set_power(apex_handle_t handle, int8_t power_dbm) {
  * NFC Controller
  * ======================================================================== */
 
-int apex_nfc_transact(apex_handle_t handle, const apex_nfc_transact_t *txn) {
+int apex_nfc_transact(apex_handle_t handle, apex_nfc_transact_t *txn) {
     struct kernel_nfc_transact ktxn;
 
     if (!handle || handle->fd < 0 || !txn)
@@ -315,14 +315,18 @@ int apex_nfc_transact(apex_handle_t handle, const apex_nfc_transact_t *txn) {
         return APEX_ERR_IOCTL_FAILED;
     }
 
-    /* Copy back response data — note: txn was declared const, but the
-     * kernel driver writes response data back to the same buffer.
-     * This is intentional API design: the data[] buffer serves as both
-     * TX and RX. The const qualifier on txn applies only to the caller's
-     * promise not to modify the data before this call returns.
-     * We use a separate kernel buffer (ktxn) for the ioctl, then copy
-     * the response back only if the caller provided a writable buffer.
+    /* Copy back response data to the caller's buffer.
+     * The kernel driver writes response data into ktxn.data and
+     * updates ktxn.data_len with the response length.
      */
+    if (ktxn.data_len > 0) {
+        size_t copy_len = ktxn.data_len;
+        if (copy_len > sizeof(txn->data))
+            copy_len = sizeof(txn->data);
+        memcpy(txn->data, ktxn.data, copy_len);
+    }
+    /* Update data_len with actual response length from kernel */
+    txn->data_len = ktxn.data_len;
 
     handle->last_error = APEX_OK;
     return APEX_OK;

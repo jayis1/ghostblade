@@ -115,6 +115,13 @@ static volatile uint8_t blocks_filled = 0;     /* Number of filled blocks availa
 static volatile bool dma_running = false;
 static volatile uint32_t dma_irq_count = 0;
 
+/* Ensure visibility of volatile variables between ISR and main context.
+ * On ARM Cortex-M33 with data cache, we need DMB after ISR writes
+ * and before main-loop reads to ensure cache coherency. */
+static inline void sdr_dmb(void) {
+    __asm__ volatile ("dmb" ::: "memory");
+}
+
 /* Statistics */
 static struct {
     uint32_t total_blocks_captured;
@@ -175,6 +182,9 @@ void sdr_dma_irq_handler(void) {
         dma_write_block = next_write;
         blocks_filled++;
         dma_stats.total_blocks_captured++;
+
+        /* Ensure ISR writes are visible before potentially starting next DMA */
+        sdr_dmb();
 
         /* If streaming is active, re-chain DMA for next block */
         if (dma_running) {
@@ -316,6 +326,9 @@ void sdr_dma_stop(void) {
  * Returns: pointer to the block data, or NULL if no blocks available
  */
 const uint8_t *sdr_dma_get_block(uint8_t *block_idx, uint16_t *size) {
+    /* Ensure we read the latest values written by the ISR */
+    sdr_dmb();
+
     if (blocks_filled == 0) {
         dma_stats.underruns++;
         return NULL;
@@ -372,5 +385,6 @@ bool sdr_dma_is_running(void) {
  * Returns: count of blocks available for the protocol handler
  */
 uint8_t sdr_dma_blocks_available(void) {
+    sdr_dmb();
     return blocks_filled;
 }

@@ -75,7 +75,8 @@
  */
 
 #define WD_TIMEOUT_US          500000UL    /* 500 ms timeout */
-#define WD_MAGIC_SCRATCH       0xAPEX1UL  /* Magic value in scratch register */
+#define WD_MAGIC_VALUE         0xA7EC1001UL  /* Magic: "APEX1001" encoded in valid hex */
+/* 0xA7EC1001 chosen as recognizable magic: reads as "A7ECl001" pattern */
 
 /* ========================================================================
  * Watchdog Public API
@@ -108,7 +109,7 @@ bool watchdog_init(void) {
         *wd_reason = 0;
 
         /* Scratch register 0 contains our magic if we set it before reset */
-        if (*wd_scratch0 == WD_MAGIC_SCRATCH) {
+        if (*wd_scratch0 == WD_MAGIC_VALUE) {
             /* This was an intentional watchdog-triggered reboot
              * (e.g., after firmware update). Clear the magic. */
             *wd_scratch0 = 0;
@@ -186,7 +187,7 @@ void watchdog_reboot(bool intentional) {
     volatile uint32_t *wd_ctrl = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_CTRL);
 
     if (intentional) {
-        *wd_scratch0 = WD_MAGIC_SCRATCH;
+        *wd_scratch0 = WD_MAGIC_VALUE;
     }
 
     /* Ensure watchdog is enabled */
@@ -198,6 +199,25 @@ void watchdog_reboot(bool intentional) {
     /* Wait for reset (should never return) */
     while (1)
         __asm__("nop");
+}
+
+/**
+ * watchdog_enable_bark — Enable the watchdog bark (early warning) interrupt
+ *
+ * The bark interrupt fires one tick before the watchdog reset, giving
+ * the system a last chance to log diagnostics, deassert INT_REQ, and
+ * gracefully shut down peripherals before the hardware reset occurs.
+ *
+ * The bark ISR should be registered separately (e.g., in main.c) to
+ * call watchdog_bark_handler or equivalent.
+ */
+void watchdog_enable_bark(void) {
+    volatile uint32_t *wd_ctrl = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_CTRL);
+
+    /* Enable the watchdog interrupt (bark).
+     * On RP2350B, the watchdog generates an interrupt one tick before
+     * the timeout expires. We also keep the pause-during-debug bits. */
+    *wd_ctrl |= WD_CTRL_ENABLE | WD_CTRL_PAUSE_DBG0 | WD_CTRL_PAUSE_JTAG;
 }
 
 /**
@@ -241,4 +261,45 @@ void watchdog_set_scratch(uint8_t index, uint32_t val) {
 
     volatile uint32_t *wd_scratch = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_SCRATCH0);
     wd_scratch[index] = val;
+}
+
+/* ========================================================================
+ * Brownout Detection
+ *
+ * The RP2350B has a brownout detection (BOD) circuit in the power
+ * management block. When the supply voltage drops below a configurable
+ * threshold, the BOD triggers a system reset to prevent erratic
+ * behavior from undervoltage conditions.
+ *
+ * We use scratch register 7 to store a brownout magic value so the
+ * firmware can detect and report brownout resets on boot.
+ * ======================================================================== */
+
+#define WD_SCRATCH_BOD_MAGIC   0xB07D0001UL  /* "BOD1" — brownout detected marker */
+
+/**
+ * watchdog_mark_brownout — Mark that a brownout event was detected
+ *
+ * Writes a magic value to scratch register 7 so that after reboot,
+ * the firmware can distinguish a brownout reset from a watchdog reset.
+ * Call this from the brownout ISR if one is configured, or from the
+ * main loop if VBAT ADC drops below threshold.
+ */
+void watchdog_mark_brownout(void) {
+    volatile uint32_t *wd_scratch7 = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_SCRATCH7);
+    *wd_scratch7 = WD_SCRATCH_BOD_MAGIC;
+}
+
+/**
+ * watchdog_check_brownout — Check if the previous reset was due to brownout
+ *
+ * Returns: true if a brownout marker was found in scratch register 7
+ */
+bool watchdog_check_brownout(void) {
+    volatile uint32_t *wd_scratch7 = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_SCRATCH7);
+    if (*wd_scratch7 == WD_SCRATCH_BOD_MAGIC) {
+        *wd_scratch7 = 0;  /* Clear the marker */
+        return true;
+    }
+    return false;
 }
