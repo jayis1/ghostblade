@@ -258,6 +258,42 @@ Expected output:
 === Results: 37/37 passed, 0 failed ===
 ```
 
+### Watchdog Timer Unit Tests
+
+```bash
+make test_watchdog
+./test_watchdog
+```
+
+Expected output:
+```
+=== Watchdog Unit Tests ===
+...
+=== Results: 72/72 passed, 0 failed ===
+```
+
+Tests the watchdog timer configuration, brownout detection magic values,
+load value calculations, bark/reset timing, kick interval safety, and
+boot sequence reset reason handling.
+
+### Power State Machine Unit Tests
+
+```bash
+make test_power_states
+./test_power_states
+```
+
+Expected output:
+```
+=== Power State Machine Unit Tests ===
+...
+=== Results: 57/57 passed, 0 failed ===
+```
+
+Tests the battery monitor power state machine transitions (ACTIVE → IDLE →
+SLEEP → SHUTDOWN), voltage threshold hysteresis, brownout detection,
+overtemperature protection, and boundary conditions.
+
 ### Run All Userspace Tests
 
 ```bash

@@ -8,6 +8,8 @@
 #   test_spi_protocol     — Userspace SPI protocol unit tests
 #   test_battery_monitor  — Battery monitor calculation unit tests
 #   test_cc1101_config    — CC1101 register configuration unit tests
+#   test_watchdog         — Watchdog timer unit tests
+#   test_power_states     — Power state machine unit tests
 #   test_apex_bridge      — Kernel module test harness (for target)
 #   all                   — Build all userspace tests
 #   clean                 — Remove build artifacts
@@ -30,7 +32,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -47,6 +49,8 @@ help:
 	@echo "  test_spi_protocol     - Build SPI protocol unit tests"
 	@echo "  test_battery_monitor  - Build battery monitor unit tests"
 	@echo "  test_cc1101_config    - Build CC1101 configuration unit tests"
+	@echo "  test_watchdog         - Build watchdog timer unit tests"
+	@echo "  test_power_states     - Build power state machine unit tests"
 	@echo "  run / check           - Build and run all userspace tests"
 	@echo "  clean                 - Remove build artifacts"
 	@echo ""
@@ -62,6 +66,12 @@ test_battery_monitor: test_battery_monitor.c
 test_cc1101_config: test_cc1101_config.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
+test_watchdog: test_watchdog.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+test_power_states: test_power_states.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
 run: $(USERSPACE_TARGETS)
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol
@@ -71,6 +81,12 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running CC1101 Configuration Unit Tests ==="
 	@./test_cc1101_config
+	@echo ""
+	@echo "=== Running Watchdog Timer Unit Tests ==="
+	@./test_watchdog
+	@echo ""
+	@echo "=== Running Power State Machine Unit Tests ==="
+	@./test_power_states
 	@echo ""
 
 check: run

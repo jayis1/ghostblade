@@ -67,6 +67,11 @@ Before submitting a PR, ensure:
 1. **Firmware builds** with no warnings: `cmake --build build -Werror=dev`
 2. **Kernel module compiles**: `make -C /path/to/kernel M=$(pwd) modules`
 3. **Unit tests pass**: `cd tests && make run`
+   - test_spi_protocol (158 tests): SPI frame format, CRC validation, edge cases
+   - test_battery_monitor (95 tests): ADC conversion, battery percentage, brownout hysteresis
+   - test_cc1101_config (37 tests): CC1101 register configuration validation
+   - test_watchdog (72 tests): Watchdog timer constants, brownout magic values, reset reasons
+   - test_power_states (57 tests): Power state machine transitions, voltage thresholds
 4. **DTS validates**: `dtc -I dts -O dtb software/dts/ghostblade-rk3576.dts`
 5. **Markdown lints clean**: `markdownlint docs/ README.md CONTRIBUTING.md`
 6. **No spelling errors**: `codespell --config .codespell.ignore`
