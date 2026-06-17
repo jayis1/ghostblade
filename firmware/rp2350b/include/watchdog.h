@@ -30,7 +30,7 @@
 #define WATCHDOG_BARK_TIME_MS   1000
 
 /** Magic value stored in scratch register on brownout detection */
-#define WATCHDOG_BROWNOUT_MAGIC 0xB047B00TL
+#define WATCHDOG_BROWNOUT_MAGIC 0xB047B00FUL
 
 /* ── Public API ─────────────────────────────────────────────────────────── */
 

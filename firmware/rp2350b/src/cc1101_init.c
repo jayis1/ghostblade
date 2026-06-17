@@ -303,7 +303,7 @@ uint8_t cc1101_read_reg(uint8_t addr) {
 uint8_t cc1101_read_status(uint8_t addr) {
     uint8_t val;
     apex_cc1101_cs_assert();
-    apex_cc1101_spi_xfer(CC1101_READ_BURST(addr));
+    apex_cc1101_spi_xfer(CC1101_READ_SINGLE(addr));
     val = apex_cc1101_spi_xfer(0x00);
     apex_cc1101_cs_release();
     return val;

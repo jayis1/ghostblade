@@ -28,6 +28,16 @@
  * ST25R3916 Register Map (Space A: Direct Command / Space B: Reg)
  * ======================================================================== */
 
+/* IRQ status register addresses (Space A, read to clear) */
+#define ST25R3916_REG_IRQ_STATUS1           0x04   /* IRQ Status 1 (read to clear) */
+#define ST25R3916_REG_IRQ_STATUS2           0x05   /* IRQ Status 2 (read to clear) */
+#define ST25R3916_REG_IRQ_STATUS3           0x06   /* IRQ Status 3 (read to clear) */
+#define ST25R3916_REG_IRQ_STATUS4           0x07   /* IRQ Status 4 (read to clear) */
+#define ST25R3916_REG_IRQ_STATUS5           0x08   /* IRQ Status 5 (read to clear) */
+
+/* TX FIFO write address (Space A, write-only) */
+#define ST25R3916_REG_TX_FIFO               0x1F   /* TX FIFO write (write-only) */
+
 /* Space A registers (access via SPI with address byte encoding) */
 #define ST25R3916_REG_IO_CONF1              0x00   /* I/O Configuration 1 */
 #define ST25R3916_REG_IO_CONF2              0x01   /* I/O Configuration 2 */
@@ -204,6 +214,12 @@ uint8_t st25r3916_read_reg(uint8_t addr) {
  */
 void st25r3916_write_multiple_regs(uint8_t start_addr,
                                     const uint8_t *values, uint8_t len) {
+    /* Bounds check: ST25R3916 register address space is 0x00-0x3F.
+     * Prevent wrap-around by rejecting writes that exceed the address space. */
+    if (len == 0 || !values)
+        return;
+    if ((uint16_t)start_addr + len > 0x40)
+        return;
     for (uint8_t i = 0; i < len; i++) {
         st25r3916_write_reg(start_addr + i, values[i]);
     }
@@ -215,6 +231,9 @@ void st25r3916_write_multiple_regs(uint8_t start_addr,
  * @cmd: Command byte (0xC1-0xD3)
  */
 void st25r3916_send_command(uint8_t cmd) {
+    /* Validate command range — direct commands are 0xC1-0xD3 per datasheet */
+    if (cmd < 0xC1 || cmd > 0xD3)
+        return;
     apex_nfc_cs_assert();
     /* Direct command: bit7=1 (write), bit6=1 (space A), addr = cmd */
     apex_nfc_spi_xfer(cmd | 0x80);
@@ -230,12 +249,11 @@ void st25r3916_clear_interrupts(uint8_t *irq1, uint8_t *irq2,
                                 uint8_t *irq3, uint8_t *irq4,
                                 uint8_t *irq5) {
     /* Read IRQ status registers (reading clears the flags) */
-    /* IRQ status registers are at specific addresses in the register map */
-    if (irq1) *irq1 = st25r3916_read_reg(0x04);  /* Simplified; actual addrs vary */
-    if (irq2) *irq2 = st25r3916_read_reg(0x05);
-    if (irq3) *irq3 = st25r3916_read_reg(0x06);
-    if (irq4) *irq4 = st25r3916_read_reg(0x07);
-    if (irq5) *irq5 = st25r3916_read_reg(0x08);
+    if (irq1) *irq1 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS1);
+    if (irq2) *irq2 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS2);
+    if (irq3) *irq3 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS3);
+    if (irq4) *irq4 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS4);
+    if (irq5) *irq5 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS5);
 
     /* Also send clear IRQs command for safety */
     st25r3916_send_command(ST25R3916_CMD_CLEAR_IRQS);
@@ -264,6 +282,7 @@ void st25r3916_clear_interrupts(uint8_t *irq1, uint8_t *irq2,
  */
 int st25r3916_init(void) {
     uint8_t irq1 = 0;
+    uint8_t ic_id;
 
     /* Step 1: Ensure power supply is stable.
      * VDD_NFC_TX (5.0V) must be stable before accessing the chip.
@@ -271,7 +290,18 @@ int st25r3916_init(void) {
      * already stable when this function is called.
      */
 
-    /* Step 2: Send SET_DEFAULT command to reset all registers to defaults */
+    /* Step 2: Verify chip identity before configuration.
+     * The ST25R3916 IC identity register should return 0x39 (ST25R3916)
+     * or 0x89 (ST25R3916B). A mismatch indicates the chip is not
+     * present or not responding correctly on SPI2.
+     */
+    ic_id = st25r3916_read_reg(ST25R3916_REG_IC_IDENTITY);
+    if (ic_id != 0x39 && ic_id != 0x89) {
+        /* Chip not detected or wrong part — return error */
+        return -1;
+    }
+
+    /* Step 3: Send SET_DEFAULT command to reset all registers to defaults */
     st25r3916_send_command(ST25R3916_CMD_SET_DEFAULT);
 
     /* Wait for SET_DEFAULT to complete (~100 μs) */
@@ -421,10 +451,15 @@ int st25r3916_init(void) {
     /* Read IRQ1 register — bit 0 (OSC) should be set */
     st25r3916_clear_interrupts(&irq1, NULL, NULL, NULL, NULL);
     if (!(irq1 & ST25R3916_IRQ1_OSC)) {
-        /* Oscillator not ready yet — wait a bit more */
+        /* Oscillator not ready yet — wait a bit more and retry */
         for (volatile int i = 0; i < 50000; i++)
             __asm__("nop");
         st25r3916_clear_interrupts(&irq1, NULL, NULL, NULL, NULL);
+        if (!(irq1 & ST25R3916_IRQ1_OSC)) {
+            /* Oscillator still not ready — this is a hardware fault.
+             * Return error so caller can handle appropriately. */
+            return -2;
+        }
     }
 
     /* Step 24: Send INITIALIZE command for DPO (Dynamic Power Output) */
@@ -456,9 +491,12 @@ int st25r3916_iso14443a_reqa(void) {
     st25r3916_write_reg(ST25R3916_REG_NUM_TX_BYTES2, 0x00);
     st25r3916_write_reg(ST25R3916_REG_NUM_TX_BYTES3, 0x00);
 
-    /* Write REQA command byte (0x26) to TX FIFO */
-    /* TX FIFO write is done via the FIFO register */
-    st25r3916_write_reg(0x1F, 0x26);  /* Simplified; actual FIFO write sequence */
+    /* Write REQA command byte (0x26) to TX FIFO.
+     * TX FIFO is accessed via the write-only FIFO register at address 0x1F
+     * in Space A. This is distinct from the IRQ_MASK1 register at the same
+     * address in Space B — the Space A/B distinction is encoded in the SPI
+     * address byte. */
+    st25r3916_write_reg(ST25R3916_REG_TX_FIFO, 0x26);
 
     /* Start TX */
     st25r3916_send_command(ST25R3916_CMD_TX_ON);

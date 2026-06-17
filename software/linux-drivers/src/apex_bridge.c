@@ -520,6 +520,7 @@ static irqreturn_t apex_irq_handler(int irq, void *dev_id)
 static int apex_bridge_open(struct inode *inode, struct file *filp)
 {
     struct apex_bridge_dev *dev;
+    int ret;
 
     dev = container_of(inode->i_cdev, struct apex_bridge_dev, cdev);
     if (!dev) {
@@ -532,8 +533,14 @@ static int apex_bridge_open(struct inode *inode, struct file *filp)
     /* Use atomic cmpxchg to ensure only one opener at a time */
     if (atomic_cmpxchg(&dev->open_count, 0, 1) != 0)
         return -EBUSY;  /* Only one user at a time */
+
     /* Resume device from runtime suspend */
-    pm_runtime_get_sync(&dev->spi->dev);
+    ret = pm_runtime_get_sync(&dev->spi->dev);
+    if (ret < 0) {
+        atomic_set(&dev->open_count, 0);
+        pm_runtime_put_noidle(&dev->spi->dev);
+        return ret;
+    }
 
     return 0;
 }
@@ -556,6 +563,9 @@ static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
     struct apex_bridge_dev *dev = filp->private_data;
     unsigned int copied;
     int ret;
+    unsigned int avail;
+    size_t to_copy;
+    void *kbuf;
 
     if (kfifo_is_empty(&dev->rx_fifo)) {
         if (filp->f_flags & O_NONBLOCK)
@@ -568,13 +578,31 @@ static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
             return ret;
     }
 
+    /* Determine how much data is available, then copy to a kernel buffer
+     * under the lock, and copy to userspace outside the lock.
+     * kfifo_to_user() can sleep (copy_to_user), so we must NOT hold
+     * a spinlock while calling it. */
     spin_lock(&dev->rx_lock);
-    ret = kfifo_to_user(&dev->rx_fifo, buf, count, &copied);
+    avail = kfifo_len(&dev->rx_fifo);
+    to_copy = min_t(size_t, count, avail);
+    if (to_copy == 0) {
+        spin_unlock(&dev->rx_lock);
+        return 0;
+    }
+    kbuf = kmalloc(to_copy, GFP_ATOMIC);
+    if (!kbuf) {
+        spin_unlock(&dev->rx_lock);
+        return -ENOMEM;
+    }
+    copied = kfifo_out(&dev->rx_fifo, kbuf, to_copy);
     spin_unlock(&dev->rx_lock);
 
-    if (ret)
-        return ret;
+    if (copy_to_user(buf, kbuf, copied)) {
+        kfree(kbuf);
+        return -EFAULT;
+    }
 
+    kfree(kbuf);
     return copied;
 }
 
@@ -673,6 +701,17 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         return -ENOTTY;
     if (_IOC_NR(cmd) < 1 || _IOC_NR(cmd) > 11)
         return -ENOTTY;
+
+    /* Validate direction: write ioctls require write access,
+     * read ioctls require read access to the user buffer */
+    if (_IOC_DIR(cmd) & _IOC_WRITE) {
+        if (!access_ok((void __user *)arg, _IOC_SIZE(cmd)))
+            return -EFAULT;
+    }
+    if (_IOC_DIR(cmd) & _IOC_READ) {
+        if (!access_ok((void __user *)arg, _IOC_SIZE(cmd)))
+            return -EFAULT;
+    }
 
     frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
     if (!frame)
@@ -1188,8 +1227,13 @@ static ssize_t sg_state_show(struct device *dev,
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
     const char *state_str;
+    enum apex_sg_state state;
 
-    switch (adev->sg_engine.state) {
+    mutex_lock(&adev->sg_lock);
+    state = adev->sg_engine.state;
+    mutex_unlock(&adev->sg_lock);
+
+    switch (state) {
     case APEX_SG_STATE_IDLE:
         state_str = "idle";
         break;
@@ -1212,7 +1256,13 @@ static ssize_t sg_total_bytes_show(struct device *dev,
                                      struct device_attribute *attr, char *buf)
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
-    return sprintf(buf, "%llu\n", adev->sg_engine.total_transferred);
+    u64 total_transferred;
+
+    mutex_lock(&adev->sg_lock);
+    total_transferred = adev->sg_engine.total_transferred;
+    mutex_unlock(&adev->sg_lock);
+
+    return sprintf(buf, "%llu\n", total_transferred);
 }
 static DEVICE_ATTR_RO(sg_total_bytes);
 
@@ -1220,7 +1270,13 @@ static ssize_t sg_overruns_show(struct device *dev,
                                   struct device_attribute *attr, char *buf)
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
-    return sprintf(buf, "%u\n", adev->sg_engine.overruns);
+    unsigned int overruns;
+
+    mutex_lock(&adev->sg_lock);
+    overruns = adev->sg_engine.overruns;
+    mutex_unlock(&adev->sg_lock);
+
+    return sprintf(buf, "%u\n", overruns);
 }
 static DEVICE_ATTR_RO(sg_overruns);
 
@@ -1228,7 +1284,13 @@ static ssize_t sg_errors_show(struct device *dev,
                                 struct device_attribute *attr, char *buf)
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
-    return sprintf(buf, "%u\n", adev->sg_engine.errors);
+    unsigned int errors;
+
+    mutex_lock(&adev->sg_lock);
+    errors = adev->sg_engine.errors;
+    mutex_unlock(&adev->sg_lock);
+
+    return sprintf(buf, "%u\n", errors);
 }
 static DEVICE_ATTR_RO(sg_errors);
 
@@ -1236,7 +1298,13 @@ static ssize_t sg_frames_rx_show(struct device *dev,
                                    struct device_attribute *attr, char *buf)
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
-    return sprintf(buf, "%u\n", adev->sg_engine.frames_rx);
+    unsigned int frames_rx;
+
+    mutex_lock(&adev->sg_lock);
+    frames_rx = adev->sg_engine.frames_rx;
+    mutex_unlock(&adev->sg_lock);
+
+    return sprintf(buf, "%u\n", frames_rx);
 }
 static DEVICE_ATTR_RO(sg_frames_rx);
 
@@ -1409,8 +1477,10 @@ static void apex_sg_work_handler(struct work_struct *work)
         memset(&xfer, 0, sizeof(xfer));
         xfer.rx_buf = buf->dma_virt;
         xfer.len = eng->buf_size;
+        /* Use configured SPI speed when running, fall back to
+         * a conservative 10 MHz for error recovery transfers */
         xfer.speed_hz = eng->state == APEX_SG_STATE_RUNNING ?
-                         spi_speed_hz : spi_speed_hz;
+                         spi_speed_hz : min(spi_speed_hz, 10000000);
 
         spi_message_init_with_transfers(&msg, &xfer, 1);
 
@@ -1717,6 +1787,16 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
     if (vsize > psize)
         return -EINVAL;
 
+    /* Validate that the VMA offset is page-aligned and within range */
+    if (vma->vm_pgoff >= (psize >> PAGE_SHIFT))
+        return -EINVAL;
+
+    /* Set VM flags for device/DMA mapping:
+     * VM_DONTEXPAND prevents mremap from expanding the mapping,
+     * VM_IO marks it as device I/O memory (affects /proc/pid/maps).
+     */
+    vma->vm_flags |= VM_DONTEXPAND | VM_IO;
+
     /* Use dma_mmap_coherent for proper DMA buffer mapping.
      * This handles cache attributes correctly for DMA-coherent memory
      * and avoids the incorrect use of virt_to_page()/remap_pfn_range()
@@ -1729,27 +1809,49 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
      * are allocated contiguously (which dma_alloc_coherent typically provides
      * for each individual buffer, but buffers may not be contiguous with
      * each other). We map buffer-by-buffer to handle non-contiguous cases.
+     *
+     * Note: dma_mmap_coherent() modifies vma->vm_start internally, so we
+     * must save and restore it around each call, and adjust vm_pgoff for
+     * each subsequent buffer.
      */
     {
-        unsigned long vma_offset = vma->vm_start;
+        unsigned long orig_vm_start = vma->vm_start;
+        unsigned long orig_vm_end = vma->vm_end;
+        unsigned long vm_pgoff_orig = vma->vm_pgoff;
         uint32_t i;
+        unsigned long offset = 0;
 
-        for (i = 0; i < eng->buf_count && vma_offset < vma->vm_end; i++) {
+        for (i = 0; i < eng->buf_count && offset < vsize; i++) {
             unsigned long buf_vsize = eng->buf_size;
 
             /* Truncate last buffer mapping if vsize doesn't cover all buffers */
-            if (vma_offset + buf_vsize > vma->vm_end)
-                buf_vsize = vma->vm_end - vma_offset;
+            if (offset + buf_vsize > vsize)
+                buf_vsize = vsize - offset;
+
+            /* Restore VMA start/end for each buffer mapping */
+            vma->vm_start = orig_vm_start + offset;
+            vma->vm_end = vma->vm_start + buf_vsize;
+            vma->vm_pgoff = vm_pgoff_orig + (offset >> PAGE_SHIFT);
 
             ret = dma_mmap_coherent(&dev->spi->dev, vma,
                                      eng->bufs[i].dma_virt,
                                      eng->bufs[i].dma_phys,
                                      buf_vsize);
-            if (ret)
+            if (ret) {
+                /* Restore VMA on failure */
+                vma->vm_start = orig_vm_start;
+                vma->vm_end = orig_vm_end;
+                vma->vm_pgoff = vm_pgoff_orig;
                 return ret;
+            }
 
-            vma_offset += buf_vsize;
+            offset += buf_vsize;
         }
+
+        /* Restore original VMA boundaries */
+        vma->vm_start = orig_vm_start;
+        vma->vm_end = orig_vm_end;
+        vma->vm_pgoff = vm_pgoff_orig;
     }
 
     return 0;

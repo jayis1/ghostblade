@@ -20,6 +20,16 @@
 #include <sys/ioctl.h>
 
 /* ========================================================================
+ * Secure memory wipe — prevent compiler from optimizing away memset
+ * ======================================================================== */
+
+static void secure_wipe(void *ptr, size_t len) {
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len--)
+        *p++ = 0;
+}
+
+/* ========================================================================
  * Kernel ioctl definitions (must match apex_bridge_regs.h)
  * ======================================================================== */
 
@@ -311,6 +321,8 @@ int apex_nfc_transact(apex_handle_t handle, apex_nfc_transact_t *txn) {
         memcpy(ktxn.data, txn->data, txn->data_len);
 
     if (ioctl(handle->fd, IOC_NFC_TRANSACT, &ktxn) < 0) {
+        /* Wipe sensitive NFC data from stack before returning error */
+        secure_wipe(&ktxn, sizeof(ktxn));
         handle->last_error = APEX_ERR_IOCTL_FAILED;
         return APEX_ERR_IOCTL_FAILED;
     }
@@ -318,15 +330,23 @@ int apex_nfc_transact(apex_handle_t handle, apex_nfc_transact_t *txn) {
     /* Copy back response data to the caller's buffer.
      * The kernel driver writes response data into ktxn.data and
      * updates ktxn.data_len with the response length.
+     * Clamp the response length to the buffer size to prevent
+     * reporting more bytes than were actually copied.
      */
     if (ktxn.data_len > 0) {
         size_t copy_len = ktxn.data_len;
+        if (copy_len > sizeof(ktxn.data))
+            copy_len = sizeof(ktxn.data);
         if (copy_len > sizeof(txn->data))
             copy_len = sizeof(txn->data);
         memcpy(txn->data, ktxn.data, copy_len);
+        txn->data_len = (uint16_t)copy_len;
+    } else {
+        txn->data_len = 0;
     }
-    /* Update data_len with actual response length from kernel */
-    txn->data_len = ktxn.data_len;
+
+    /* Wipe kernel transaction struct from stack — NFC data is sensitive */
+    secure_wipe(&ktxn, sizeof(ktxn));
 
     handle->last_error = APEX_OK;
     return APEX_OK;

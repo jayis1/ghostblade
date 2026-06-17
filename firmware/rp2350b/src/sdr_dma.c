@@ -106,7 +106,15 @@
 /* 4096 bytes total ring buffer, aligned to 4-byte boundary */
 static uint8_t sdr_ring_buf[SDR_RING_BUF_SIZE] __attribute__((aligned(4)));
 
-/* Block management */
+/* Block management.
+ * blocks_filled is accessed from both ISR context (incremented)
+ * and main-loop context (decremented in sdr_dma_release_block).
+ * On ARM Cortex-M33, volatile ensures the compiler doesn't cache
+ * values in registers, and single-core execution means ISR context
+ * can't be preempted by main context. However, we use __atomic
+ * builtins to ensure proper read-modify-write atomicity for
+ * the increment/decrement operations.
+ */
 static volatile uint8_t dma_write_block = 0;  /* Next block DMA will fill */
 static volatile uint8_t proto_read_block = 0;  /* Next block protocol will read */
 static volatile uint8_t blocks_filled = 0;     /* Number of filled blocks available */
@@ -180,7 +188,7 @@ void sdr_dma_irq_handler(void) {
         }
 
         dma_write_block = next_write;
-        blocks_filled++;
+        __atomic_add_fetch(&blocks_filled, 1, __ATOMIC_RELAXED);
         dma_stats.total_blocks_captured++;
 
         /* Ensure ISR writes are visible before potentially starting next DMA */
@@ -329,7 +337,7 @@ const uint8_t *sdr_dma_get_block(uint8_t *block_idx, uint16_t *size) {
     /* Ensure we read the latest values written by the ISR */
     sdr_dmb();
 
-    if (blocks_filled == 0) {
+    if (__atomic_load_n(&blocks_filled, __ATOMIC_RELAXED) == 0) {
         dma_stats.underruns++;
         return NULL;
     }
@@ -347,9 +355,9 @@ const uint8_t *sdr_dma_get_block(uint8_t *block_idx, uint16_t *size) {
  * Advances the read pointer and decrements the filled count.
  */
 void sdr_dma_release_block(void) {
-    if (blocks_filled > 0) {
+    if (__atomic_load_n(&blocks_filled, __ATOMIC_RELAXED) > 0) {
         proto_read_block = (proto_read_block + 1) % SDR_RING_NUM_BLOCKS;
-        blocks_filled--;
+        __atomic_sub_fetch(&blocks_filled, 1, __ATOMIC_RELAXED);
         dma_stats.total_blocks_sent++;
     }
 }
@@ -386,5 +394,5 @@ bool sdr_dma_is_running(void) {
  */
 uint8_t sdr_dma_blocks_available(void) {
     sdr_dmb();
-    return blocks_filled;
+    return __atomic_load_n(&blocks_filled, __ATOMIC_RELAXED);
 }
