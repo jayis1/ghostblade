@@ -144,4 +144,25 @@ int16_t cc1101_get_rssi_dbm(uint8_t rssi_dec);
  */
 int16_t cc1101_get_rssi_x10(void);
 
+/**
+ * cc1101_set_band — Switch CC1101 to a different ISM band configuration
+ *
+ * Reconfigures the CC1101 for the specified frequency band. This performs
+ * a full re-initialization: IDLE, flush FIFOs, write config table,
+ * PATABLE write, SCAL strobe, and ID verification.
+ *
+ * @band: CC1101_BAND_433 (433 MHz), CC1101_BAND_868 (868 MHz),
+ *        or CC1101_BAND_915 (915 MHz)
+ *
+ * Returns: 0 on success, -1 on invalid band or part number mismatch,
+ *          -4 on calibration timeout
+ */
+int cc1101_set_band(int band);
+
+/* ── CC1101 band identifiers ────────────────────────────────────────────── */
+
+#define CC1101_BAND_433  0    /**< 433 MHz ISM band (EU 433.05–434.79 MHz) */
+#define CC1101_BAND_868  1    /**< 868 MHz ISM band (EU 863–870 MHz) */
+#define CC1101_BAND_915  2    /**< 915 MHz ISM band (US 902–928 MHz) */
+
 #endif /* CC1101_INIT_H */

@@ -27,6 +27,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 |----------|-------------|
 | [Hardware Test Procedures](hardware-test-procedures.md) | 17-section manufacturing test plan with pass/fail criteria |
 | [Hardware Contributor Guide](hardware-contributor-guide.md) | Schematic/PCB design rules, DRC constraints, review checklist |
+| [ESD Protection, Reset Circuits & Test Points](hardware-protection-and-testpoints.md) | TVS protection, reset timing, test point map, decoupling requirements |
 
 ## Contributing
 

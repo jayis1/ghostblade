@@ -22,6 +22,10 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 - HIL (hardware-in-the-loop) SPI bridge test script (`tests/hil_spi_bridge_test.sh`)
 - Contributor onboarding guide (`docs/getting-started-contributors.md`)
 - Pin assignment cross-reference document (`docs/pin-assignments.md`)
+- ESD protection, reset circuits, and test points document (`docs/hardware-protection-and-testpoints.md`)
+- CC1101 multi-band configuration tables for 433 MHz and 915 MHz ISM bands
+- `cc1101_set_band()` API for runtime band switching (433/868/915 MHz)
+- Multi-band frequency verification tests in `test_cc1101_config.c`
 - `stats.json` updated with current line counts and file counts
 
 ### Changed

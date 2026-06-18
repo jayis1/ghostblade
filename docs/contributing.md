@@ -237,7 +237,7 @@ Use the following prefixes:
 
 ### Medium Priority
 
-4. **CC1101 register initialization** — Complete the CC1101 sub-GHz transceiver initialization with verified register values for 433 MHz, 868 MHz, and 915 MHz bands.
+4. **CC1101 register initialization** — Complete the CC1101 sub-GHz transceiver initialization with verified register values for 433 MHz, 868 MHz, and 915 MHz bands. ✅ *Multi-band config tables (433/868/915 MHz) and `cc1101_set_band()` API added.*
 
 5. **ST25R3916 register address consistency** — The NFC driver register addresses have been consolidated in `st25r3916_init.h`. Verify against the ST25R3916 datasheet (DS12290) and test on hardware.
 
