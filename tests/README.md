@@ -229,6 +229,30 @@ echo 1 > /sys/kernel/test_apex_bridge/run
 cat /sys/kernel/test_apex_bridge/result
 ```
 
+### `test_libapex.c` — libapex Userspace Library Unit Tests
+
+Unit tests for the `libapex` C library that wraps the kernel SPI bridge driver's ioctl interface. Tests the userspace API for device management, SDR control, antenna selection, CC1101 configuration, NFC transactions, and telemetry.
+
+**Test coverage:**
+- Device open/close and error handling
+- SDR tune parameter validation
+- Antenna selection (all four paths)
+- CC1101 register configuration
+- NFC transaction parameter encoding
+- Telemetry data parsing and battery percentage calculation
+- Error code mapping (`apex_strerror`)
+- File descriptor retrieval for poll/select
+
+**Build:**
+```bash
+make test_libapex
+```
+
+**Run:**
+```bash
+./test_libapex
+```
+
 ### `hil_spi_bridge_test.sh` — Hardware-in-the-Loop (HIL) Test
 
 Shell script that runs on the RK3576 host and verifies the full SPI bridge communication path to the RP2350B coprocessor. Requires:

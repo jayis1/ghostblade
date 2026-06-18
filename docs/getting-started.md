@@ -326,6 +326,42 @@ Tests the battery monitor power state machine transitions (ACTIVE → IDLE →
 SLEEP → SHUTDOWN), voltage threshold hysteresis, brownout detection,
 overtemperature protection, and boundary conditions.
 
+### SDR DMA Ring Buffer Unit Tests
+
+```bash
+make test_sdr_dma
+./test_sdr_dma
+```
+
+Expected output:
+```
+=== SDR DMA Ring Buffer Unit Tests ===
+...
+=== Results: 52/52 passed, 0 failed ===
+```
+
+Tests the SDR DMA ring buffer manager: block produce/consume cycles, overrun
+and underrun detection, wrap-around integrity, sustained streaming patterns,
+and rapid stress testing.
+
+### SPI0 ISR Frame Assembly Unit Tests
+
+```bash
+make test_spi0_isr
+./test_spi0_isr
+```
+
+Expected output:
+```
+=== SPI0 ISR Frame Assembly Unit Tests ===
+...
+=== Results: 42/42 passed, 0 failed ===
+```
+
+Tests the SPI0 slave interrupt handler's frame assembly state machine: sync
+byte detection, header and payload CRC validation, error recovery, resync,
+back-to-back frame processing, and statistics tracking.
+
 ### Run All Userspace Tests
 
 ```bash

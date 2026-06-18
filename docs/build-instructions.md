@@ -194,6 +194,9 @@ make test_battery_monitor
 make test_cc1101_config
 make test_watchdog
 make test_power_states
+make test_sdr_dma
+make test_spi0_isr
+make test_libapex
 ```
 
 You can also build from the project root:

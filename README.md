@@ -159,11 +159,14 @@ ghostblade/
 │   ├── build-instructions.md                  # Detailed build instructions
 │   ├── flashing-guide.md                      # Firmware flashing & driver loading
 │   ├── faq-troubleshooting.md                 # Frequently asked questions
+│   ├── pin-assignments.md                     # Pin cross-ref: schematic, DTS, firmware
 │   ├── power-tree.md                          # Power tree diagram & rails
 │   ├── spi-protocol-timing.md                # SPI bridge timing diagrams
 │   ├── sysfs-attributes.md                   # Driver sysfs telemetry reference
 │   ├── hardware-test-procedures.md             # 17-section test plan
 │   ├── hardware-contributor-guide.md          # Hardware design guidelines
+│   ├── contributing.md                        # How to contribute (code, docs, hardware)
+│   ├── getting-started-contributors.md        # Contributor onboarding checklist
 │   ├── phase1-conceptual/
 │   │   └── architecture-and-requirements.md   # Power budgets, thermal, bus topology
 │   ├── phase2-schematics/
@@ -178,11 +181,14 @@ ghostblade/
 │       ├── pico_sdk_import.cmake               # Pico SDK import
 │       ├── rp2350b_memmap.ld                   # Linker script (memory map)
 │       ├── include/
-│       │   └── board_pins.h                    # MCU pin definitions
+│       │   ├── board_pins.h                    # MCU pin definitions
+│       │   ├── spi0_isr.h                      # SPI0 slave ISR API
+│       │   └── ...                              # Other firmware headers
 │       └── src/
 │           ├── main.c                          # Entry point & init dispatch
 │           ├── rp2350b_init.c                  # Clocks, GPIO, SPI, PIO, ADC init
 │           ├── spi_protocol.c                  # SPI bridge protocol handler
+│           ├── spi0_isr.c                      # SPI0 slave interrupt handler
 │           ├── cc1101_init.c                   # CC1101 sub-GHz radio init
 │           ├── st25r3916_init.c                # ST25R3916 NFC controller init
 │           ├── sdr_dma.c                       # SDR DMA ring buffer manager
@@ -234,6 +240,9 @@ ghostblade/
 │   ├── test_cc1101_config.c                  # CC1101 register config tests
 │   ├── test_watchdog.c                        # Watchdog timer unit tests
 │   ├── test_power_states.c                   # Power state machine tests
+│   ├── test_sdr_dma.c                        # SDR DMA ring buffer tests
+│   ├── test_spi0_isr.c                        # SPI0 ISR frame assembly tests
+│   ├── test_libapex.c                          # libapex userspace library tests
 │   ├── test_apex_bridge.c                     # Kernel module test harness
 │   └── hil_spi_bridge_test.sh                 # HIL SPI bridge test script
 ├── tools/
@@ -296,11 +305,14 @@ ghostblade/
 | [Build Instructions](docs/build-instructions.md) | Detailed build steps for firmware, driver, libapex |
 | [Flashing Guide](docs/flashing-guide.md) | Firmware flashing, driver loading, recovery |
 | [FAQ & Troubleshooting](docs/faq-troubleshooting.md) | Common issues and solutions |
+| [Pin Assignments](docs/pin-assignments.md) | Cross-reference: schematic, DTS, and firmware pin mappings |
 | [Power Tree](docs/power-tree.md) | Power domain diagram, rail assignments, sequencing |
 | [SPI Protocol & Timing](docs/spi-protocol-timing.md) | Bridge protocol, frame format, timing diagrams |
 | [Sysfs Attributes](docs/sysfs-attributes.md) | Driver telemetry attributes, usage examples |
 | [Hardware Test Procedures](docs/hardware-test-procedures.md) | 17-section manufacturing test plan |
 | [Hardware Contributor Guide](docs/hardware-contributor-guide.md) | Schematic/PCB design guidelines, DRC rules |
+| [Contributing](docs/contributing.md) | Code, documentation, and hardware contribution workflow |
+| [Contributor Onboarding](docs/getting-started-contributors.md) | Step-by-step checklist for new contributors |
 
 ## Engineering Phases
 

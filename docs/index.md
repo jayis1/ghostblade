@@ -19,6 +19,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [SPI Protocol & Timing](spi-protocol-timing.md) | Bridge protocol frame format, timing diagrams, CRC spec |
 | [Power Tree](power-tree.md) | Power domain diagram, rail assignments, sequencing chart |
 | [FAQ & Troubleshooting](faq-troubleshooting.md) | Common issues, error codes, and solutions |
+| [Pin Assignments](pin-assignments.md) | Cross-reference: schematic, DTS, and firmware pin mappings |
 
 ## Hardware
 
@@ -26,6 +27,13 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 |----------|-------------|
 | [Hardware Test Procedures](hardware-test-procedures.md) | 17-section manufacturing test plan with pass/fail criteria |
 | [Hardware Contributor Guide](hardware-contributor-guide.md) | Schematic/PCB design rules, DRC constraints, review checklist |
+
+## Contributing
+
+| Document | Description |
+|----------|-------------|
+| [Contributing](contributing.md) | Code, documentation, and hardware contribution workflow |
+| [Contributor Onboarding](getting-started-contributors.md) | Step-by-step checklist for new contributors |
 
 ## Engineering Phases (Detailed Design)
 

@@ -43,6 +43,7 @@ set(FW_SOURCES
     src/main.c
     src/rp2350b_init.c
     src/spi_protocol.c
+    src/spi0_isr.c
     src/sdr_dma.c
     src/cc1101_init.c
     src/st25r3916_init.c
@@ -54,6 +55,7 @@ set(FW_HEADERS
     include/board_pins.h
     include/rp2350b_init.h
     include/spi_protocol.h
+    include/spi0_isr.h
     include/sdr_dma.h
     include/cc1101_init.h
     include/st25r3916_init.h

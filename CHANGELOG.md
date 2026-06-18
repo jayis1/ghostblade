@@ -16,15 +16,26 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 - Top-level `Makefile` for convenient project-wide builds (firmware, driver, libapex, tests, DTS)
 - DTS Makefile (`software/dts/Makefile`) for compiling and validating device tree sources
 - Unit tests for battery monitor, CC1101 configuration, watchdog timer, and power state machine
+- SDR DMA ring buffer unit tests (`tests/test_sdr_dma.c`, 52 assertions)
+- SPI0 ISR frame assembly unit tests (`tests/test_spi0_isr.c`, 42 assertions)
+- SPI0 slave interrupt handler firmware module (`firmware/rp2350b/src/spi0_isr.c`, `include/spi0_isr.h`)
 - HIL (hardware-in-the-loop) SPI bridge test script (`tests/hil_spi_bridge_test.sh`)
+- Contributor onboarding guide (`docs/getting-started-contributors.md`)
+- Pin assignment cross-reference document (`docs/pin-assignments.md`)
 - `stats.json` updated with current line counts and file counts
 
 ### Changed
 
-- `.gitignore` updated to include all test binary targets (test_battery_monitor, test_cc1101_config, test_watchdog, test_power_states)
+- `.gitignore` updated to include all test binary targets (test_battery_monitor, test_cc1101_config, test_watchdog, test_power_states, test_sdr_dma, test_spi0_isr, test_libapex)
 - `.gitignore` updated to include firmware build outputs (*.uf2, *.hex, *.bin, *.elf, *.map)
-- `tools/generate_gerbers.py` — moved SPDX-License-Identifier into file header, consolidated license declaration
-- `software/libapex/setup.py` — added copyright and SPDX license header
+- `firmware/rp2350b/CMakeLists.txt` — added `spi0_isr.c` and `spi0_isr.h` to build
+- `README.md` — updated repository structure and documentation index with new files (SPI0 ISR, SDR DMA tests, libapex tests, pin assignments doc, contributing guides)
+- `docs/index.md` — added Contributing section and pin assignments link
+- `docs/build-instructions.md` — added test_sdr_dma, test_spi0_isr, test_libapex to test build commands
+- `docs/getting-started.md` — added SDR DMA and SPI0 ISR test sections
+- `docs/contributing.md` — updated repository structure (fixed stale `netlists/` → `bom/` + `drc/`), updated "Areas That Need Help" to reflect completed SPI0 ISR and SDR DMA work
+- `tests/README.md` — added test_libapex documentation section
+- `stats.json` — updated line counts and file counts
 
 ---
 

@@ -71,3 +71,6 @@ tests/test_cc1101_config
 tests/test_watchdog
 tests/test_power_states
 tests/test_apex_bridge
+tests/test_sdr_dma
+tests/test_spi0_isr
+tests/test_libapex

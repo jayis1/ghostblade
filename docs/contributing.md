@@ -35,11 +35,12 @@ The RK3576 communicates with the RP2350B over a high-speed SPI bus, which carrie
 ghostblade/
 ├── firmware/
 │   └── rp2350b/
-│       ├── include/           # Public headers (SPI protocol, driver APIs)
-│       └── src/               # Source files (SPI protocol, SDR DMA, CC1101, NFC, battery monitor)
+│       ├── include/           # Public headers (SPI protocol, SPI0 ISR, driver APIs)
+│       └── src/               # Source files (SPI protocol, SPI0 ISR, SDR DMA, CC1101, NFC, battery monitor)
 ├── hardware/
 │   ├── kicad/                # KiCad schematic and PCB files
-│   └── netlists/             # Exported netlists and BOM
+│   ├── bom/                  # Bill of materials (CSV and interactive HTML)
+│   └── drc/                  # KiCad DRC rules (IPC Class 3)
 ├── software/
 │   ├── linux-drivers/
 │   │   ├── include/          # Kernel driver headers (register defs, ioctl commands)
@@ -47,20 +48,9 @@ ghostblade/
 │   ├── libapex/
 │   │   ├── include/          # libapex public API header
 │   │   └── src/              # libapex C library + Python bindings (pyapex.c)
-│   └── dts/                  # Device tree overlay for SDR configuration
-├── docs/
-│   ├── getting-started.md    # This file
-│   ├── spi-protocol-timing.md
-│   ├── power-tree.md
-│   └── hardware-test-procedures.md
-└── tests/
-    ├── test_spi_protocol.c
-    ├── test_battery_monitor.c
-    ├── test_cc1101_config.c
-    ├── test_watchdog.c
-    ├── test_power_states.c
-    ├── test_libapex.c
-    └── Makefile
+│   └── dts/                  # Device tree sources and overlays
+├── docs/                     # Documentation (getting started, build, flashing, FAQ, etc.)
+└── tests/                    # Unit and integration tests
 ```
 
 ## Getting the Code
@@ -239,29 +229,27 @@ Use the following prefixes:
 
 ### High Priority
 
-1. **SPI protocol handler** — The RP2350B needs a complete SPI slave implementation that receives commands from the RK3576, parses frames, dispatches to sub-system handlers, and sends responses. The framing is defined in `spi_protocol.h`.
+1. **Kernel driver DMA scatter-gather** — The `apex_bridge.c` driver currently uses a simple read/write approach. Adding scatter-gather DMA support would significantly improve SDR throughput.
 
-2. **SDR DMA ring buffer** — The LMS7002M IQ data path needs a DMA ring buffer implementation that streams samples from the SDR through the RP2350B to the RK3576. See `sdr_dma.c` for the current skeleton.
+2. **Device tree overlay** — The SDR configuration overlay needs runtime parameter support for frequency, bandwidth, and gain changes.
 
-3. **Kernel driver DMA scatter-gather** — The `apex_bridge.c` driver currently uses a simple read/write approach. Adding scatter-gather DMA support would significantly improve SDR throughput.
-
-4. **Device tree overlay** — The SDR configuration overlay needs runtime parameter support for frequency, bandwidth, and gain changes.
+3. **SPI0 ISR integration testing** — The SPI0 slave interrupt handler (`spi0_isr.c`) is implemented but needs hardware-in-the-loop verification of frame assembly, CRC validation, and error recovery under real SPI traffic.
 
 ### Medium Priority
 
-5. **CC1101 register initialization** — Complete the CC1101 sub-GHz transceiver initialization with verified register values for 433 MHz, 868 MHz, and 915 MHz bands.
+4. **CC1101 register initialization** — Complete the CC1101 sub-GHz transceiver initialization with verified register values for 433 MHz, 868 MHz, and 915 MHz bands.
 
-6. **ST25R3916 register address consistency** — The NFC driver register addresses have been consolidated in `st25r3916_init.h`. Verify against the ST25R3916 datasheet (DS12290) and test on hardware.
+5. **ST25R3916 register address consistency** — The NFC driver register addresses have been consolidated in `st25r3916_init.h`. Verify against the ST25R3916 datasheet (DS12290) and test on hardware.
 
-7. **Hardware-in-the-loop tests** — Automated test scripts that run on the actual GhostBlade hardware, exercising the SPI bridge, SDR streaming, NFC tag detection, and sub-GHz transmission.
+6. **Hardware-in-the-loop tests** — Automated test scripts that run on the actual GhostBlade hardware, exercising the SPI bridge, SDR streaming, NFC tag detection, and sub-GHz transmission.
 
-8. **Power sequencing timing charts** — Add detailed timing diagrams for the RK3576 → PMIC → RP2350B power-up sequence.
+7. **Power sequencing timing charts** — Add detailed timing diagrams for the RK3576 → PMIC → RP2350B power-up sequence.
 
 ### Low Priority
 
-9. **Schematic PDF exports** — Generate PDF exports from KiCad for the schematic and board layout.
+8. **Schematic PDF exports** — Generate PDF exports from KiCad for the schematic and board layout.
 
-10. **BOM validation** — Cross-reference the bill of materials against available parts and create an alternate parts list.
+9. **BOM validation** — Cross-reference the bill of materials against available parts and create an alternate parts list.
 
 ## Questions?
 
