@@ -85,7 +85,12 @@
 /* Timer Registers */
 #define ST25R3916_REG_TIMER_EMV          0x1D    /**< Timer EMV */
 #define ST25R3916_REG_TIMER1              0x1E    /**< Timer 1 */
-#define ST25R3916_REG_TIMER2              0x1F    /**< Timer 2 */
+/* Note: 0x1F is the TX FIFO write-only register, NOT Timer 2.
+ *       TX FIFO and Timer 2 share address 0x1F in Space A, but
+ *       the TX FIFO is write-only while Timer 2 is read-only.
+ *       Use ST25R3916_REG_TX_FIFO for writing and TIMER2 offset
+ *       when reading the timer value. */
+#define ST25R3916_REG_TIMER2              0x1F    /**< Timer 2 (read-only; TX FIFO at same addr is write-only) */
 #define ST25R3916_REG_TIMER3              0x20    /**< Timer 3 */
 
 /* Interrupt Masks */
@@ -298,7 +303,19 @@ void st25r3916_stop_polling(void);
 uint16_t st25r3916_get_field_strength_mv(void);
 
 /**
- * st25r3916_send_command — Send a raw NFC command
+ * st25r3916_send_command — Send a direct command to the ST25R3916
+ *
+ * @cmd: Command byte (0xC1-0xD3)
+ *
+ * Sends a command strobe via SPI. This is the primary command interface
+ * for direct commands such as SET_DEFAULT, CLEAR_IRQS, TX_ON, etc.
+ * Use st25r3916_transact() for full NFC command transactions with
+ * TX/RX data exchange (REQA, anticollision, etc.).
+ */
+void st25r3916_send_command(uint8_t cmd);
+
+/**
+ * st25r3916_transact — Perform a full NFC command transaction
  *
  * @cmd:       NFC command opcode (NFC_CMD_REQA, etc.)
  * @tx_data:   TX data buffer (may be NULL for no-TX commands)
@@ -309,10 +326,10 @@ uint16_t st25r3916_get_field_strength_mv(void);
  *
  * Returns: 0 on success, negative on error
  */
-int st25r3916_send_command(uint8_t cmd,
-                            const uint8_t *tx_data, uint16_t tx_len,
-                            uint8_t *rx_data, uint16_t *rx_len,
-                            uint32_t timeout_ms);
+int st25r3916_transact(uint8_t cmd,
+                       const uint8_t *tx_data, uint16_t tx_len,
+                       uint8_t *rx_data, uint16_t *rx_len,
+                       uint32_t timeout_ms);
 
 /* ========================================================================
  * Register Access Functions (used internally and for advanced configuration)
@@ -340,15 +357,6 @@ uint8_t st25r3916_read_reg(uint8_t addr);
  */
 void st25r3916_write_multiple_regs(uint8_t start_addr,
                                     const uint8_t *values, uint8_t len);
-
-/**
- * st25r3916_send_command — Send a direct command to the ST25R3916
- *
- * @cmd: Command byte (0xC1-0xD3, or use ST25R3916_CMD_* defines)
- *
- * Sends a command strobe via SPI. This is the primary command interface.
- */
-void st25r3916_send_command(uint8_t cmd);
 
 /**
  * st25r3916_strobe — Alias for st25r3916_send_command

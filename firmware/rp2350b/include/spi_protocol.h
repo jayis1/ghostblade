@@ -24,8 +24,14 @@
 /** Maximum payload length per frame */
 #define SPI_MAX_PAYLOAD_LEN     4092
 
+/** Alias: SPI_MAX_PAYLOAD is the short name used in some modules */
+#define SPI_MAX_PAYLOAD         SPI_MAX_PAYLOAD_LEN
+
 /** Header size: sync(1) + cmd(1) + len(2) + reserved(4) + crc64(8) */
 #define SPI_HEADER_SIZE         16
+
+/** Alias: SPI_HDR_SIZE is the short name used in some modules */
+#define SPI_HDR_SIZE            SPI_HEADER_SIZE
 
 /** CRC-32 trailer size */
 #define SPI_CRC32_SIZE          4

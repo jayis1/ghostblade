@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "spi_protocol.h"
 
 /* Forward declarations from other modules */
 extern void watchdog_feed(void);
@@ -54,12 +55,6 @@ static void secure_wipe(void *ptr, size_t len) {
 /* ========================================================================
  * Protocol Constants (must match apex_bridge_regs.h on RK3576 side)
  * ======================================================================== */
-
-#define SPI_SYNC_BYTE           0xAA
-#define SPI_HDR_SIZE            16
-#define SPI_MAX_PAYLOAD         4092
-#define SPI_CRC32_SIZE          4
-#define SPI_FRAME_SIZE_MAX      (SPI_HDR_SIZE + SPI_MAX_PAYLOAD + SPI_CRC32_SIZE)
 
 /* Command opcodes — Host to MCU */
 #define CMD_NOP                 0xFF

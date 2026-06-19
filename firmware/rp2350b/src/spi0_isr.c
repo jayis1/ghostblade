@@ -316,6 +316,10 @@ static void spi0_process_byte(uint8_t byte) {
                 /* Validate payload CRC-32 */
                 if (validate_payload_crc32(spi0_rx.buf, spi0_rx.payload_len)) {
                     spi0_stats.frames_validated++;
+                    spi0_stats.frames_received++;
+                    /* Ensure buffer writes are visible before setting
+                     * frame_ready flag that the main loop polls. */
+                    __asm__ volatile ("dmb" ::: "memory");
                     spi0_rx.state = FRAME_STATE_COMPLETE;
                     spi0_rx.frame_ready = true;
                 } else {
@@ -367,7 +371,6 @@ void spi0_handler(void) {
     while (spi[SPI_SSPSR / 4] & SPI_SSPSR_RNE) {
         uint8_t byte = (uint8_t)(spi[SPI_SSPDR / 4] & 0xFF);
         spi0_process_byte(byte);
-        spi0_stats.frames_received++;
     }
 
     /* Clear all pending SPI0 interrupts */
@@ -410,6 +413,11 @@ bool spi0_rx_get_frame(const uint8_t **buf, uint16_t *len) {
     if (!spi0_rx.frame_ready)
         return false;
 
+    /* Ensure we see the ISR's data before returning the buffer.
+     * The ISR sets frame_ready after writing the buffer, but
+     * without a barrier we might see stale data. */
+    __asm__ volatile ("dmb" ::: "memory");
+
     *buf = spi0_rx.buf;
     *len = spi0_rx.pos;
 
@@ -424,6 +432,15 @@ bool spi0_rx_get_frame(const uint8_t **buf, uint16_t *len) {
  * begin receiving the next frame.
  */
 void spi0_rx_release_frame(void) {
+    /* Securely wipe the frame buffer to prevent residual sensitive
+     * data (NFC keys, RF config) from persisting in SRAM. */
+    volatile uint8_t *p = (volatile uint8_t *)spi0_rx.buf;
+    for (uint16_t i = 0; i < spi0_rx.pos; i++)
+        p[i] = 0;
+
+    /* Ensure wipe completes before resetting state (visible to ISR) */
+    __asm__ volatile ("dmb" ::: "memory");
+
     spi0_rx.frame_ready = false;
     spi0_rx.pos = 0;
     spi0_rx.payload_len = 0;
@@ -446,6 +463,10 @@ void spi0_tx_queue_response(const uint8_t *frame, uint16_t len) {
 
     memcpy(spi0_tx.buf, frame, len);
     spi0_tx.len = len;
+    /* Ensure TX data is visible before setting response_pending flag.
+     * Without this barrier, the ISR could start reading the TX buffer
+     * before the memcpy completes on ARM Cortex-M33 with data cache. */
+    __asm__ volatile ("dmb" ::: "memory");
     spi0_tx.response_pending = true;
 
     /* Assert INT_REQ to notify host */

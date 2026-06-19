@@ -523,7 +523,7 @@ static int apex_bridge_open(struct inode *inode, struct file *filp)
     int ret;
 
     dev = container_of(inode->i_cdev, struct apex_bridge_dev, cdev);
-    if (!dev) {
+    if (IS_ERR_OR_NULL(dev)) {
         pr_err("apex_bridge: device not found\n");
         return -ENODEV;
     }
@@ -552,6 +552,11 @@ static int apex_bridge_release(struct inode *inode, struct file *filp)
     /* Allow device to runtime suspend */
     pm_runtime_put_autosuspend(&dev->spi->dev);
     atomic_set(&dev->open_count, 0);
+
+    /* Securely wipe cached telemetry data on close to prevent
+     * information leakage between user sessions. */
+    memset(&dev->last_telem, 0, sizeof(dev->last_telem));
+
     filp->private_data = NULL;
 
     return 0;
@@ -1737,13 +1742,17 @@ static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
         kfree(rx);
     }
 
-    /* Free DMA-coherent buffers */
+    /* Free DMA-coherent buffers (wipe sensitive data first) */
     if (eng->bufs) {
         for (i = 0; i < eng->buf_count; i++) {
-            if (eng->bufs[i].dma_virt)
+            if (eng->bufs[i].dma_virt) {
+                /* Securely wipe DMA buffer before freeing to prevent
+                 * leakage of IQ samples or sensor data. */
+                memset(eng->bufs[i].dma_virt, 0, eng->buf_size);
                 dma_free_coherent(&dev->spi->dev, eng->buf_size,
                                   eng->bufs[i].dma_virt,
                                   eng->bufs[i].dma_phys);
+            }
         }
         kfree(eng->bufs);
         eng->bufs = NULL;

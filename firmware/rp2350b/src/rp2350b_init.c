@@ -24,6 +24,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* Forward declaration: watchdog_kick is defined in watchdog.c */
+extern void watchdog_kick(void);
+
 /* ========================================================================
  * RP2350B Register Base Addresses
  * ======================================================================== */
@@ -147,13 +150,10 @@
  * CRC-64 and CRC-32 computation (for SPI frame integrity)
  * ======================================================================== */
 
-/* CRC-64 using polynomial 0x42F0E1EBA9EA3693 (ECMA-182) */
-static const uint64_t crc64_table[256] = {
-    /* Generated from polynomial 0x42F0E1EBA9EA3693 */
-    /* Table omitted for brevity — initialize at runtime with crc64_init() */
-};
-
-static uint64_t crc64_table_init[256];
+/* CRC-64 using polynomial 0x42F0E1EBA9EA3693 (ECMA-182)
+ * Runtime-initialized to avoid wasting SRAM on a 2 KB table that
+ * would be all zeros if left as a const array. */
+static uint64_t crc64_table[256];
 static int crc64_initialized = 0;
 
 static void crc64_init(void) {
@@ -166,9 +166,11 @@ static void crc64_init(void) {
             else
                 crc >>= 1;
         }
-        crc64_table_init[i] = crc;
+        crc64_table[i] = crc;
     }
     crc64_initialized = 1;
+    /* Ensure table is visible to all contexts (ISR may use CRC) */
+    __asm__ volatile ("dmb" ::: "memory");
 }
 
 static uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
@@ -176,7 +178,7 @@ static uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
         crc64_init();
     uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
     for (uint32_t i = 0; i < len; i++) {
-        crc = crc64_table_init[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+        crc = crc64_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
     }
     return crc ^ 0xFFFFFFFFFFFFFFFFULL;
 }
@@ -198,6 +200,7 @@ static void crc32_init(void) {
         crc32_table[i] = crc;
     }
     crc32_initialized = 1;
+    __asm__ volatile ("dmb" ::: "memory");
 }
 
 static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
@@ -306,6 +309,11 @@ static void gpio_init(void) {
     REG32(RP2350B_IO_BANK0_BASE + 0x04 * PIN_SPI0_CSN + 0x00) = (1 << 0);  /* SPI0 CSn */
     REG32(RP2350B_IO_BANK0_BASE + 0x04 * PIN_SPI0_SCK + 0x00) = (1 << 0);  /* SPI0 SCK */
     REG32(RP2350B_IO_BANK0_BASE + 0x04 * PIN_SPI0_TX + 0x00) = (1 << 0);   /* SPI0 TX */
+
+    /* NFC SPI2 pins (function 1 = SPI) */
+    REG32(RP2350B_IO_BANK0_BASE + 0x04 * PIN_NFC_SPI_SCK + 0x00) = (1 << 0);  /* SPI2 SCK */
+    REG32(RP2350B_IO_BANK0_BASE + 0x04 * PIN_NFC_SPI_TX  + 0x00) = (1 << 0);  /* SPI2 TX  */
+    REG32(RP2350B_IO_BANK0_BASE + 0x04 * PIN_NFC_SPI_RX  + 0x00) = (1 << 0);  /* SPI2 RX  */
 
     /* Output pins (function 1 = SIO, controlled by SIO_GPIO registers) */
     /* Antenna switch */
@@ -598,10 +606,10 @@ static void adc_init(void) {
     /* Configure FIFO: threshold = 1, no DMA, no shift (right-aligned 12-bit) */
     adc[0x14 / 4] = (1 << 24);  /* FCS_THRESH = 1 */
 
-    /* Enable temperature sensor (channel 4) */
+    /* Enable temperature sensor (channel 4) and select ADC channel 0 for
+     * battery voltage. Both are configured in the same register (CS), so
+     * we preserve the TEMP_EN bit when setting INSEL. */
     adc[0x04 >> 2] |= (1U << 4);  /* CS_TEMP_EN */
-
-    /* Select channel 0 for battery voltage */
     adc[0x04 >> 2] = (adc[0x04 >> 2] & ~0x7U);  /* INSEL = ADC0 (VBAT) */
 }
 
@@ -644,18 +652,25 @@ void rp2350b_init(void) {
     /* Step 1: Configure system clocks (150 MHz SYS_CLK) */
     clocks_init();
 
+    /* Watchdog may already be enabled from bootloader or early init.
+     * Feed it periodically during this lengthy initialization to
+     * prevent a reset before the main loop starts kicking it. */
+    watchdog_kick();
+
     /* Step 2: Configure GPIO directions and initial states */
     gpio_init();
 
     /* Step 3: Initialize CRC tables */
     crc64_init();
     crc32_init();
+    watchdog_kick();  /* CRC init is computationally heavy */
 
     /* Step 4: Initialize ADC (battery voltage, temperature) */
     adc_init();
 
     /* Step 5: Initialize SPI1 master (SDR + CC1101 control) */
     spi1_master_init();
+    watchdog_kick();
 
     /* Step 6: Initialize SPI2 master (NFC ST25R3916) */
     spi2_master_init();
@@ -663,15 +678,18 @@ void rp2350b_init(void) {
     /* Step 7: Initialize PIO blocks */
     pio0_ant_switch_init();   /* Antenna switching state machine */
     pio1_cc_tx_init();        /* CC1101 bit-bang TX (disabled until needed) */
+    watchdog_kick();
 
     /* Step 8: Initialize SPI0 slave LAST (after all other peripherals are ready) */
     spi0_slave_init();
-
     /* Step 9: Configure NVIC interrupts */
     nvic_init();
 
     /* Step 10: MCU signals readiness by keeping INT_REQ deasserted (HIGH).
      * This was already done in gpio_init(). No additional action needed. */
+
+    /* Final watchdog kick before entering main loop */
+    watchdog_kick();
 
     /* System is now ready for SPI communication with RK3576 */
 }
@@ -685,6 +703,7 @@ void rp2350b_init(void) {
 static uint8_t spi_rx_buf[SPI_RX_BUF_SIZE];
 static volatile uint32_t spi_rx_head = 0;
 static volatile uint32_t spi_rx_tail = 0;
+static volatile uint32_t spi_rx_overrun = 0;  /* Overflow counter for diagnostics */
 
 /* TX response buffer */
 #define SPI_TX_BUF_SIZE  4096
@@ -702,11 +721,20 @@ void spi0_handler(void) {
         uint32_t next_head = (spi_rx_head + 1) % SPI_RX_BUF_SIZE;
         if (next_head != spi_rx_tail) {
             spi_rx_buf[spi_rx_head] = byte;
+            /*
+             * Ensure data write completes before updating head index,
+             * so the consumer (main loop) sees the data before
+             * seeing the advanced head. Use DMB for correctness on
+             * ARM Cortex-M33 with data cache.
+             */
+            __asm__ volatile ("dmb" ::: "memory");
             spi_rx_head = next_head;
         } else {
-            /* Buffer overflow — data is lost. This should never happen
-             * with proper flow control. The host should not send data
-             * faster than the MCU can process it. */
+            /* Buffer overflow — data is lost. Increment diagnostic
+             * counter. The host should not send data faster than
+             * the MCU can process it. INT_REQ flow control should
+             * prevent this under normal operation. */
+            spi_rx_overrun++;
         }
     }
 
