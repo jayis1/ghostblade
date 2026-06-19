@@ -173,11 +173,11 @@ static const struct cc1101_reg_entry cc1101_config_868mhz[] = {
     { CC1101_FSCTRL0,  0x00 },  /* No frequency offset */
 
     /* Frequency Control: 868.0 MHz
-     * f_carrier = FREQ * 26e6 / 2^16 = 0x216323 * 26e6 / 65536 = 868.00 MHz
+     * f_carrier = FREQ * 26e6 / 2^16 = 0x216276 * 26e6 / 65536 = 867.9999 MHz ≈ 868.00 MHz
      */
     { CC1101_FREQ2,    0x21 },  /* FREQ[23:16] */
-    { CC1101_FREQ1,    0x63 },  /* FREQ[15:8] */
-    { CC1101_FREQ0,    0x23 },  /* FREQ[7:0] */
+    { CC1101_FREQ1,    0x62 },  /* FREQ[15:8] */
+    { CC1101_FREQ0,    0x76 },  /* FREQ[7:0] */
 
     /* Modem Configuration: GFSK, 250 kbps, 540 kHz RX filter BW
      * MDMCFG4: RX filter BW = f_xtal / (8 * (4+CHANBW_M) * 2^(2*CHANBW_E))
@@ -245,7 +245,200 @@ static const struct cc1101_reg_entry cc1101_config_868mhz[] = {
     { CC1101_RCCTRL0,  0x00 },  /* RC oscillator configuration */
 };
 
-#define CC1101_CONFIG_TABLE_SIZE  (sizeof(cc1101_config_868mhz) / sizeof(cc1101_config_868mhz[0]))
+#define CC1101_CONFIG_TABLE_SIZE_868  (sizeof(cc1101_config_868mhz) / sizeof(cc1101_config_868mhz[0]))
+
+/* ========================================================================
+ * CC1101 Configuration Table: 433 MHz ISM Band
+ *
+ * SmartRF Studio settings for 433 MHz, GFSK, 250 kbps:
+ *   f_carrier = 433.0 MHz
+ *   FREQ = 433e6 * 2^16 / 26e6 = 1090399.2 → 0x10A8DF
+ *   XTAL: 26 MHz, data rate: 250 kbps
+ *   Deviation: 127 kHz, channel BW: 540 kHz
+ * ======================================================================== */
+
+static const struct cc1101_reg_entry cc1101_config_433mhz[] = {
+    /* I/O Pin Configuration */
+    { CC1101_IOCFG2,   0x0B },  /* GDO2: Reserved (default) */
+    { CC1101_IOCFG1,   0x2E },  /* GDO1: Reserved, high impedance */
+    { CC1101_IOCFG0,   0x06 },  /* GDO0: Sync word detect */
+
+    /* FIFO Thresholds */
+    { CC1101_FIFOTHR,  0x07 },  /* RX/TX threshold = 32 */
+
+    /* Sync Word: 0xD391 (default) */
+    { CC1101_SYNC1,    0xD3 },
+    { CC1101_SYNC0,    0x91 },
+
+    /* Packet Control */
+    { CC1101_PKTLEN,   0xFF },  /* Variable packet length */
+    { CC1101_PKTCTRL1, 0x04 },  /* Append status, no addr check */
+    { CC1101_PKTCTRL0, 0x05 },  /* Variable length, CRC enabled */
+
+    /* Device Address */
+    { CC1101_ADDR,     0x00 },
+
+    /* Channel Number */
+    { CC1101_CHANNR,   0x00 },  /* Channel 0 */
+
+    /* Frequency Synthesizer Control */
+    { CC1101_FSCTRL1,  0x0C },  /* IF = 304.7 kHz */
+    { CC1101_FSCTRL0,  0x00 },  /* No freq offset */
+
+    /* Frequency Control: 433.0 MHz
+     * f_carrier = FREQ * 26e6 / 2^16 = 0x10A762 * 26e6 / 65536 = 432.9998 MHz
+     */
+    { CC1101_FREQ2,    0x10 },  /* FREQ[23:16] */
+    { CC1101_FREQ1,    0xA7 },  /* FREQ[15:8] */
+    { CC1101_FREQ0,    0x62 },  /* FREQ[7:0] */
+
+    /* Modem Configuration: GFSK, 250 kbps, 540 kHz RX filter BW */
+    { CC1101_MDMCFG4,  0x0D },  /* CHANBW_E=0, CHANBW_M=3, DRATE_E=13 */
+    { CC1101_MDMCFG3,  0x55 },  /* DRATE_M = 85 → ~249.7 kbps */
+    { CC1101_MDMCFG2,  0x13 },  /* GFSK, 16/16 sync word */
+    { CC1101_MDMCFG1,  0x22 },  /* FEC=0, CHANSPC_E=2, 4-byte preamble */
+    { CC1101_MDMCFG0,  0x22 },  /* Channel spacing ~199.95 kHz */
+
+    /* Modem Deviation: ~139.4 kHz */
+    { CC1101_DEVIATN,  0x63 },  /* DEVIATION_E=6, DEVIATION_M=3 */
+
+    /* Main Radio Control State Machine */
+    { CC1101_MCSM2,    0x07 },  /* No RX timeout */
+    { CC1101_MCSM1,    0x30 },  /* CCA always, TX off = IDLE */
+    { CC1101_MCSM0,    0x18 },  /* Auto-calibrate, PO_TIMEOUT ~149 μs */
+
+    /* Frequency Offset Compensation */
+    { CC1101_FOCCFG,   0x16 },  /* FOE enabled */
+
+    /* Bit Synchronization */
+    { CC1101_BSCFG,    0x6C },
+
+    /* AGC Control */
+    { CC1101_AGCCTRL2, 0x03 },
+    { CC1101_AGCCTRL1, 0x40 },
+    { CC1101_AGCCTRL0, 0x91 },
+
+    /* Wake-on-Radio (disabled) */
+    { CC1101_WOREVT1,  0x87 },
+    { CC1101_WOREVT0,  0x6B },
+    { CC1101_WORCTRL,  0xFB },
+
+    /* Front-End TX Configuration */
+    { CC1101_FREND1,   0x56 },
+    { CC1101_FREND0,   0x10 },  /* PA_POWER=1 (0 dBm) */
+
+    /* Frequency Synthesizer Calibration */
+    { CC1101_FSCAL3,   0xE9 },
+    { CC1101_FSCAL2,   0x2A },
+    { CC1101_FSCAL1,   0x00 },
+    { CC1101_FSCAL0,   0x1F },
+
+    /* RC Oscillator */
+    { CC1101_RCCTRL1,  0x41 },
+    { CC1101_RCCTRL0,  0x00 },
+};
+
+#define CC1101_CONFIG_TABLE_SIZE_433  (sizeof(cc1101_config_433mhz) / sizeof(cc1101_config_433mhz[0]))
+
+/* ========================================================================
+ * CC1101 Configuration Table: 915 MHz ISM Band
+ *
+ * SmartRF Studio settings for 915 MHz, GFSK, 250 kbps:
+ *   f_carrier = 915.0 MHz
+ *   FREQ = 915e6 * 2^16 / 26e6 = 2303169.2 → 0x232711
+ *   XTAL: 26 MHz, data rate: 250 kbps
+ *   Deviation: 127 kHz, channel BW: 540 kHz
+ * ======================================================================== */
+
+static const struct cc1101_reg_entry cc1101_config_915mhz[] = {
+    /* I/O Pin Configuration */
+    { CC1101_IOCFG2,   0x0B },
+    { CC1101_IOCFG1,   0x2E },
+    { CC1101_IOCFG0,   0x06 },
+
+    /* FIFO Thresholds */
+    { CC1101_FIFOTHR,  0x07 },
+
+    /* Sync Word */
+    { CC1101_SYNC1,    0xD3 },
+    { CC1101_SYNC0,    0x91 },
+
+    /* Packet Control */
+    { CC1101_PKTLEN,   0xFF },
+    { CC1101_PKTCTRL1, 0x04 },
+    { CC1101_PKTCTRL0, 0x05 },
+
+    /* Device Address */
+    { CC1101_ADDR,     0x00 },
+
+    /* Channel Number */
+    { CC1101_CHANNR,   0x00 },
+
+    /* Frequency Synthesizer Control */
+    { CC1101_FSCTRL1,  0x0C },  /* IF = 304.7 kHz */
+    { CC1101_FSCTRL0,  0x00 },
+
+    /* Frequency Control: 915.0 MHz
+     * f_carrier = FREQ * 26e6 / 2^16 = 0x23313B * 26e6 / 65536 = 914.99997 MHz
+     */
+    { CC1101_FREQ2,    0x23 },  /* FREQ[23:16] */
+    { CC1101_FREQ1,    0x31 },  /* FREQ[15:8] */
+    { CC1101_FREQ0,    0x3B },  /* FREQ[7:0] */
+
+    /* Modem Configuration: GFSK, 250 kbps */
+    { CC1101_MDMCFG4,  0x0D },
+    { CC1101_MDMCFG3,  0x55 },
+    { CC1101_MDMCFG2,  0x13 },
+    { CC1101_MDMCFG1,  0x22 },
+    { CC1101_MDMCFG0,  0x22 },
+
+    /* Modem Deviation */
+    { CC1101_DEVIATN,  0x63 },
+
+    /* Main Radio Control State Machine */
+    { CC1101_MCSM2,    0x07 },
+    { CC1101_MCSM1,    0x30 },
+    { CC1101_MCSM0,    0x18 },
+
+    /* Frequency Offset Compensation */
+    { CC1101_FOCCFG,   0x16 },
+    { CC1101_BSCFG,    0x6C },
+
+    /* AGC Control */
+    { CC1101_AGCCTRL2, 0x03 },
+    { CC1101_AGCCTRL1, 0x40 },
+    { CC1101_AGCCTRL0, 0x91 },
+
+    /* Wake-on-Radio (disabled) */
+    { CC1101_WOREVT1,  0x87 },
+    { CC1101_WOREVT0,  0x6B },
+    { CC1101_WORCTRL,  0xFB },
+
+    /* Front-End TX Configuration */
+    { CC1101_FREND1,   0x56 },
+    { CC1101_FREND0,   0x10 },  /* PA_POWER=1 (0 dBm) */
+
+    /* Frequency Synthesizer Calibration */
+    { CC1101_FSCAL3,   0xE9 },
+    { CC1101_FSCAL2,   0x2A },
+    { CC1101_FSCAL1,   0x00 },
+    { CC1101_FSCAL0,   0x1F },
+
+    /* RC Oscillator */
+    { CC1101_RCCTRL1,  0x41 },
+    { CC1101_RCCTRL0,  0x00 },
+};
+
+#define CC1101_CONFIG_TABLE_SIZE_915  (sizeof(cc1101_config_915mhz) / sizeof(cc1101_config_915mhz[0]))
+
+/* ========================================================================
+ * CC1101 Band Selection
+ * ======================================================================== */
+
+/* Band identifier for cc1101_set_band() */
+#define CC1101_BAND_433  0
+#define CC1101_BAND_868  1
+#define CC1101_BAND_915  2
 
 /* ========================================================================
  * Forward Declarations
@@ -401,7 +594,7 @@ int cc1101_init(void) {
      * We use individual writes from the config table to allow
      * non-contiguous and ordered initialization.
      */
-    for (int i = 0; i < (int)CC1101_CONFIG_TABLE_SIZE; i++) {
+    for (int i = 0; i < (int)CC1101_CONFIG_TABLE_SIZE_868; i++) {
         cc1101_write_reg(cc1101_config_868mhz[i].addr,
                          cc1101_config_868mhz[i].val);
     }
@@ -580,4 +773,99 @@ int16_t cc1101_get_rssi_dbm(uint8_t rssi_dec) {
 int16_t cc1101_get_rssi_x10(void) {
     uint8_t rssi_raw = cc1101_read_status(CC1101_RSSI);
     return cc1101_get_rssi_dbm(rssi_raw) * 10;
+}
+
+/* ========================================================================
+ * CC1101 Band Selection
+ * ======================================================================== */
+
+/**
+ * cc1101_set_band — Switch CC1101 to a different ISM band configuration
+ *
+ * Reconfigures the CC1101 for the specified frequency band. This performs
+ * a full re-initialization: IDLE state, flush FIFOs, write config table,
+ * PATABLE write, SCAL strobe, and ID verification.
+ *
+ * @band: CC1101_BAND_433 (433 MHz), CC1101_BAND_868 (868 MHz),
+ *        or CC1101_BAND_915 (915 MHz)
+ *
+ * Returns: 0 on success, -1 on invalid band, -4 on calibration timeout,
+ *          other negative values on init errors
+ */
+int cc1101_set_band(int band) {
+    const struct cc1101_reg_entry *table;
+    int table_size;
+    uint8_t partnum;
+    int timeout;
+
+    /* Select configuration table */
+    switch (band) {
+    case CC1101_BAND_433:
+        table = cc1101_config_433mhz;
+        table_size = (int)CC1101_CONFIG_TABLE_SIZE_433;
+        break;
+    case CC1101_BAND_868:
+        table = cc1101_config_868mhz;
+        table_size = (int)CC1101_CONFIG_TABLE_SIZE_868;
+        break;
+    case CC1101_BAND_915:
+        table = cc1101_config_915mhz;
+        table_size = (int)CC1101_CONFIG_TABLE_SIZE_915;
+        break;
+    default:
+        return -1;  /* Invalid band */
+    }
+
+    /* Enter IDLE state first */
+    cc1101_strobe(CC1101_SIDLE);
+
+    /* Wait for IDLE */
+    for (timeout = 0; timeout < 1000; timeout++) {
+        uint8_t marcstate = cc1101_read_status(CC1101_MARCSTATE) & 0x1F;
+        if (marcstate == 0x01)  /* MARCSTATE = IDLE */
+            break;
+    }
+    if (timeout >= 1000) {
+        return -4;  /* Not responding */
+    }
+
+    /* Flush both FIFOs */
+    cc1101_strobe(CC1101_SFRX);
+    cc1101_strobe(CC1101_SFTX);
+
+    /* Write the configuration registers for the selected band */
+    for (int i = 0; i < table_size; i++) {
+        cc1101_write_reg(table[i].addr, table[i].val);
+    }
+
+    /* Write PATABLE: 0 dBm for all configurations */
+    apex_cc1101_cs_assert();
+    apex_cc1101_spi_xfer(CC1101_WRITE_BURST(0x3E));  /* PATABLE burst write */
+    for (int i = 0; i < 8; i++)
+        apex_cc1101_spi_xfer(0x60);
+    apex_cc1101_cs_release();
+
+    /* Calibrate frequency synthesizer */
+    cc1101_strobe(CC1101_SCAL);
+
+    /* Wait for calibration to complete */
+    for (timeout = 0; timeout < 1000; timeout++) {
+        uint8_t marcstate = cc1101_read_status(CC1101_MARCSTATE) & 0x1F;
+        if (marcstate == 0x01)  /* MARCSTATE = IDLE */
+            break;
+    }
+    if (timeout >= 1000) {
+        return -4;  /* Calibration timeout */
+    }
+
+    /* Verify chip identity */
+    partnum = cc1101_read_status(CC1101_PARTNUM);
+    if (partnum != 0x00) {
+        return -1;  /* Unexpected part number */
+    }
+
+    /* Return to IDLE (should already be there) */
+    cc1101_strobe(CC1101_SIDLE);
+
+    return 0;
 }

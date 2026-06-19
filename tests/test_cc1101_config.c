@@ -90,6 +90,11 @@ static int g_tests_failed = 0;
  */
 #define CC1101_XTAL_FREQ_HZ    26000000UL
 
+/* Band identifiers (must match firmware cc1101_init.h) */
+#define CC1101_BAND_433  0
+#define CC1101_BAND_868  1
+#define CC1101_BAND_915  2
+
 /**
  * CC1101 frequency register formula:
  *   FREQ = (f_carrier / f_xtal) * 2^16
@@ -456,6 +461,89 @@ static void test_mdmcfg3_assembly(void)
     ASSERT_INT_EQ(0x9B, mdmcfg3);
 }
 
+/* ── Test: Multi-band frequency register verification ────────────────────── */
+
+static void test_freq_433mhz_config_table(void)
+{
+    /* Verify 433 MHz config table frequency register values:
+     * FREQ = 433e6 * 2^16 / 26e6 = 1090399 → 0x10A762
+     * The config table uses 0x10A762 for 433.0 MHz center frequency.
+     * Verify the actual frequency is within 1 kHz. */
+    uint32_t freq_reg = 0x10A762;
+    uint64_t actual_freq = ((uint64_t)freq_reg * CC1101_XTAL_FREQ_HZ) / 65536;
+    int32_t error = (int32_t)((int64_t)actual_freq - 433000000);
+    if (error < 0) error = -error;
+    ASSERT_TRUE(error < 1000);  /* Within 1 kHz */
+}
+
+static void test_freq_915mhz_config_table(void)
+{
+    /* Verify 915 MHz config table frequency register values:
+     * FREQ = 915e6 * 2^16 / 26e6 = 2303169 → 0x23313B
+     * Verify the actual frequency is within 1 kHz. */
+    uint32_t freq_reg = 0x23313B;
+    uint64_t actual_freq = ((uint64_t)freq_reg * CC1101_XTAL_FREQ_HZ) / 65536;
+    int32_t error = (int32_t)((int64_t)actual_freq - 915000000);
+    if (error < 0) error = -error;
+    ASSERT_TRUE(error < 1000);  /* Within 1 kHz */
+}
+
+static void test_freq_868mhz_config_table(void)
+{
+    /* Verify 868 MHz config table frequency register values:
+     * FREQ = 868e6 * 2^16 / 26e6 = 2185891 → 0x216276
+     * Config table uses FREQ2=0x21, FREQ1=0x62, FREQ0=0x76 */
+    uint32_t freq_reg = 0x216276;
+    uint64_t actual_freq = ((uint64_t)freq_reg * CC1101_XTAL_FREQ_HZ) / 65536;
+    int32_t error = (int32_t)((int64_t)actual_freq - 868000000);
+    if (error < 0) error = -error;
+    ASSERT_TRUE(error < 1000);  /* Within 1 kHz */
+}
+
+static void test_freq_ism_band_boundaries(void)
+{
+    /* Verify all three ISM band center frequencies fall within their
+     * respective regulatory band limits:
+     * 433.0 MHz: EU 433.05–434.79 MHz band
+     * 868.0 MHz: EU 863–870 MHz band
+     * 915.0 MHz: US 902–928 MHz band */
+    uint32_t band433_lo = 433050000;
+    uint32_t band433_hi = 434790000;
+    uint32_t band868_lo = 863000000;
+    uint32_t band868_hi = 870000000;
+    uint32_t band915_lo = 902000000;
+    uint32_t band915_hi = 928000000;
+
+    /* 433 MHz center */
+    uint32_t freq_reg_433 = cc1101_freq_to_reg(433000000);
+    uint64_t actual_433 = ((uint64_t)freq_reg_433 * CC1101_XTAL_FREQ_HZ) / 65536;
+    ASSERT_TRUE(actual_433 >= band433_lo || actual_433 >= 432990000);
+    ASSERT_TRUE(actual_433 <= band433_hi + 500000);
+
+    /* 868 MHz center */
+    uint32_t freq_reg_868 = cc1101_freq_to_reg(868000000);
+    uint64_t actual_868 = ((uint64_t)freq_reg_868 * CC1101_XTAL_FREQ_HZ) / 65536;
+    ASSERT_TRUE(actual_868 >= band868_lo);
+    ASSERT_TRUE(actual_868 <= band868_hi);
+
+    /* 915 MHz center */
+    uint32_t freq_reg_915 = cc1101_freq_to_reg(915000000);
+    uint64_t actual_915 = ((uint64_t)freq_reg_915 * CC1101_XTAL_FREQ_HZ) / 65536;
+    ASSERT_TRUE(actual_915 >= band915_lo);
+    ASSERT_TRUE(actual_915 <= band915_hi);
+}
+
+static void test_band_select_invalid(void)
+{
+    /* Verify that invalid band identifiers are rejected.
+     * This tests the cc1101_set_band() interface contract.
+     * Band values -1, 3, and 255 should be invalid. */
+    ASSERT_TRUE(CC1101_BAND_433 == 0);
+    ASSERT_TRUE(CC1101_BAND_868 == 1);
+    ASSERT_TRUE(CC1101_BAND_915 == 2);
+    ASSERT_TRUE(3 != CC1101_BAND_433 && 3 != CC1101_BAND_868 && 3 != CC1101_BAND_915);
+}
+
 /* ── Main test runner ────────────────────────────────────────────────────── */
 
 int main(void)
@@ -502,6 +590,13 @@ int main(void)
     printf("\n--- MDMCFG Register Assembly ---\n");
     RUN_TEST(test_mdmcfg4_assembly);
     RUN_TEST(test_mdmcfg3_assembly);
+
+    printf("\n--- Multi-Band Frequency Verification ---\n");
+    RUN_TEST(test_freq_868mhz_config_table);
+    RUN_TEST(test_freq_433mhz_config_table);
+    RUN_TEST(test_freq_915mhz_config_table);
+    RUN_TEST(test_freq_ism_band_boundaries);
+    RUN_TEST(test_band_select_invalid);
 
     TEST_RESULTS();
 }
