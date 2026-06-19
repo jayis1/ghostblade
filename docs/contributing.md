@@ -172,6 +172,9 @@ make check
 | `test_watchdog.c` | Watchdog timer behavior |
 | `test_power_states.c` | Power state machine transitions |
 | `test_libapex.c` | Userspace library API, error codes, telemetry flags, frequency calculations |
+| `test_sdr_dma.c` | SDR DMA ring buffer management, overrun/underrun detection |
+| `test_spi0_isr.c` | SPI0 ISR frame assembly state machine, sync detection, CRC validation |
+| `test_st25r3916_init.c` | ST25R3916 NFC register map, SPI encoding, init sequence, voltage conversion |
 
 ### Adding New Tests
 
@@ -254,3 +257,5 @@ Use the following prefixes:
 ## Questions?
 
 Open an issue at https://github.com/jayis1/ghostblade/issues for bugs, feature requests, or questions.
+
+For security vulnerabilities, see [SECURITY.md](../SECURITY.md) — **do not report security issues through public GitHub issues.**

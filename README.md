@@ -232,6 +232,7 @@ ghostblade/
 │       ├── ghostblade-rk3576.dts              # Device tree source
 │       ├── ghostblade-options.dts              # Optional hardware overlay
 │       ├── ghostblade-sdr-overlay.dts          # SDR MIPI-CSI-2 + DMA overlay
+│       ├── ghostblade-nfc-overlay.dts          # NFC (ST25R3916) configuration overlay
 │       └── Makefile                            # DTS compile & validate targets
 ├── tests/
 │   ├── Makefile                               # Test build & run targets
@@ -243,10 +244,12 @@ ghostblade/
 │   ├── test_sdr_dma.c                        # SDR DMA ring buffer tests
 │   ├── test_spi0_isr.c                        # SPI0 ISR frame assembly tests
 │   ├── test_libapex.c                          # libapex userspace library tests
+│   ├── test_st25r3916_init.c                   # ST25R3916 NFC controller init tests
 │   ├── test_apex_bridge.c                     # Kernel module test harness
 │   └── hil_spi_bridge_test.sh                 # HIL SPI bridge test script
 ├── tools/
-│   └── generate_gerbers.py                    # Gerber/fab-note generation script
+│   ├── generate_gerbers.py                    # Gerber/fab-note generation script
+│   └── check_links.py                         # Markdown link checker
 ├── .clang-format                               # Linux kernel-style formatting config
 ├── .codespell.ignore                           # Project-specific spellcheck ignore list
 ├── .editorconfig                               # Cross-editor formatting rules
@@ -258,6 +261,7 @@ ghostblade/
 ├── stats.json                                  # Dynamic badge data (auto-updated)
 ├── CONTRIBUTING.md
 ├── LICENSE
+├── SECURITY.md
 └── README.md
 ```
 
@@ -412,6 +416,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. In short:
 2. Create a feature branch (`git checkout -b feature/my-feature`)
 3. Commit your changes with clear descriptions
 4. Push to your fork and open a Pull Request
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting guidelines.
 
 ---
 

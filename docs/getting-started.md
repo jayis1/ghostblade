@@ -362,6 +362,25 @@ Tests the SPI0 slave interrupt handler's frame assembly state machine: sync
 byte detection, header and payload CRC validation, error recovery, resync,
 back-to-back frame processing, and statistics tracking.
 
+### ST25R3916 NFC Controller Unit Tests
+
+```bash
+make test_st25r3916_init
+./test_st25r3916_init
+```
+
+Expected output:
+```
+=== ST25R3916 NFC Controller Init Unit Tests ===
+...
+=== Results: XX/XX passed, 0 failed ===
+```
+
+Tests the ST25R3916 NFC controller initialization: register address and value
+validation, SPI protocol encoding (read/write/burst/direct command), Space B
+gateway mechanism, IRQ status bit definitions, initialization sequence ordering,
+and voltage measurement conversion.
+
 ### Run All Userspace Tests
 
 ```bash

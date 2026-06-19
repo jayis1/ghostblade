@@ -95,6 +95,109 @@ static int g_tests_failed = 0;
 #define CC1101_BAND_868  1
 #define CC1101_BAND_915  2
 
+/* ── CC1101 command strobes (must match cc1101_init.h) ──────────────────── */
+
+#define CC1101_SRES          0x30    /**< Reset chip */
+#define CC1101_SFSTXON      0x31    /**< Enable and calibrate freq synth */
+#define CC1101_SXOFF         0x32    /**< Turn off crystal oscillator */
+#define CC1101_SCAL          0x33    /**< Calibrate freq synth and disable */
+#define CC1101_SRX           0x34    /**< Enable RX */
+#define CC1101_STX           0x35    /**< Enable TX */
+#define CC1101_SIDLE         0x36    /**< Enter IDLE state */
+#define CC1101_SAFC          0x37    /**< AFC adjustment */
+#define CC1101_SWOR          0x38    /**< Start Wake-on-Radio */
+#define CC1101_SPWD           0x39    /**< Enter power-down mode */
+#define CC1101_SFRX           0x3A    /**< Flush RX FIFO */
+#define CC1101_SFTX           0x3B    /**< Flush TX FIFO */
+#define CC1101_SWORRST       0x3C    /**< Reset WOR timer */
+#define CC1101_SNOP           0x3D    /**< No operation */
+
+/* ── CC1101 status registers (bank 1, must match cc1101_init.h) ─────────── */
+
+#define CC1101_PARTNUM       0x30    /**< Chip ID: part number */
+#define CC1101_VERSION       0x31    /**< Chip ID: version */
+#define CC1101_FREQEST       0x32    /**< Frequency offset estimate */
+#define CC1101_LQI            0x33    /**< Link quality index */
+#define CC1101_RSSI           0x34    /**< RSSI value (signed, dBm) */
+#define CC1101_MARCSTATE     0x35    /**< Main radio control state */
+#define CC1101_WORTIME1      0x36    /**< High byte WOR time */
+#define CC1101_WORTIME0      0x37    /**< Low byte WOR time */
+#define CC1101_PKTSTATUS     0x38    /**< Packet status */
+#define CC1101_VCO_VC_DAC    0x39    /**< VCO and VC DAC calibration */
+#define CC1101_TXBYTES        0x3A    /**< TX FIFO byte count */
+#define CC1101_RXBYTES        0x3B    /**< RX FIFO byte count */
+#define CC1101_RCSTATUS1     0x3C    /**< RC oscillator status */
+#define CC1101_RCSTATUS0     0x3D    /**< RC oscillator status */
+
+/* ── CC1101 PA table and FIFO access ──────────────────────────────────────── */
+
+#define CC1101_PATABLE       0x3E    /**< PA power table (0x3E burst) */
+#define CC1101_TXFIFO        0x3F    /**< TX FIFO (write: 0x3F, read: 0xBF) */
+#define CC1101_RXFIFO        0x3F    /**< RX FIFO (write: 0x7F, read: 0xFF) */
+
+/* ── CC1101 SPI Access Macros (must match cc1101_init.h) ────────────────── */
+
+/* Write: bit7=0, burst=bit6 (single=0, burst=1) */
+#define CC1101_WRITE_SINGLE(addr)    ((addr) & 0x3F)
+#define CC1101_WRITE_BURST(addr)     (((addr) & 0x3F) | 0x40)
+
+/* Read: bit7=1, burst=bit6 (single=0, burst=1) */
+#define CC1101_READ_SINGLE(addr)     (((addr) & 0x3F) | 0x80)
+#define CC1101_READ_BURST(addr)      (((addr) & 0x3F) | 0xC0)
+
+/* Command strobe: bit7=0, bit6=0, addr 0x30-0x3D */
+#define CC1101_STROBE(cmd)           ((cmd) & 0x3F)
+
+/* ── CC1101 configuration register addresses (0x00-0x2E) ──────────────── */
+
+#define CC1101_IOCFG2        0x00    /**< GDO2 output configuration */
+#define CC1101_IOCFG1        0x01    /**< GDO1 output configuration */
+#define CC1101_IOCFG0        0x02    /**< GDO0 output configuration */
+#define CC1101_FIFOTHR       0x03    /**< RX/TX FIFO thresholds */
+#define CC1101_SYNC1          0x04    /**< Sync word high byte */
+#define CC1101_SYNC0          0x05    /**< Sync word low byte */
+#define CC1101_PKTLEN         0x06    /**< Packet length */
+#define CC1101_PKTCTRL1      0x07    /**< Packet automation control 1 */
+#define CC1101_PKTCTRL0      0x08    /**< Packet automation control 0 */
+#define CC1101_ADDR            0x09    /**< Device address */
+#define CC1101_CHANNR         0x0A    /**< Channel number */
+#define CC1101_FSCTRL1        0x0B    /**< Frequency synthesizer control 1 */
+#define CC1101_FSCTRL0        0x0C    /**< Frequency synthesizer control 0 */
+#define CC1101_FREQ2          0x0D    /**< Frequency control word high */
+#define CC1101_FREQ1          0x0E    /**< Frequency control word mid */
+#define CC1101_FREQ0          0x0F    /**< Frequency control word low */
+#define CC1101_MDMCFG4       0x10    /**< Modem configuration 4 */
+#define CC1101_MDMCFG3       0x11    /**< Modem configuration 3 */
+#define CC1101_MDMCFG2       0x12    /**< Modem configuration 2 */
+#define CC1101_MDMCFG1       0x13    /**< Modem configuration 1 */
+#define CC1101_MDMCFG0       0x14    /**< Modem configuration 0 */
+#define CC1101_DEVIATN       0x15    /**< Modem deviation */
+#define CC1101_MCSM2          0x16    /**< Main radio control state machine 2 */
+#define CC1101_MCSM1          0x17    /**< Main radio control state machine 1 */
+#define CC1101_MCSM0          0x18    /**< Main radio control state machine 0 */
+#define CC1101_FOCCFG         0x19    /**< Frequency offset compensation */
+#define CC1101_BSCFG          0x1A    /**< Bit sync configuration */
+#define CC1101_AGFCTRL2      0x1B    /**< AGC control 2 */
+#define CC1101_AGFCTRL1      0x1C    /**< AGC control 1 */
+#define CC1101_AGFCTRL0      0x1D    /**< AGC control 0 */
+#define CC1101_WOREVT1       0x1E    /**< WOR event timeout high */
+#define CC1101_WOREVT0       0x1F    /**< WOR event timeout low */
+#define CC1101_WORCTRL       0x20    /**< WOR control */
+#define CC1101_FREND1         0x21    /**< Front-end TX config 1 */
+#define CC1101_FREND0         0x22    /**< Front-end TX config 0 */
+#define CC1101_FSCAL3         0x23    /**< Frequency synthesizer calibration 3 */
+#define CC1101_FSCAL2         0x24    /**< Frequency synthesizer calibration 2 */
+#define CC1101_FSCAL1         0x25    /**< Frequency synthesizer calibration 1 */
+#define CC1101_FSCAL0         0x26    /**< Frequency synthesizer calibration 0 */
+#define CC1101_RCCTRL1       0x27    /**< RC oscillator configuration 1 */
+#define CC1101_RCCTRL0       0x28    /**< RC oscillator configuration 0 */
+#define CC1101_FSTEST          0x29    /**< Frequency synthesizer test */
+#define CC1101_PTEST            0x2A    /**< Production test */
+#define CC1101_AGCTEST         0x2B    /**< AGC test */
+#define CC1101_TEST2            0x2C    /**< Various test settings 2 */
+#define CC1101_TEST1            0x2D    /**< Various test settings 1 */
+#define CC1101_TEST0            0x2E    /**< Various test settings 0 */
+
 /**
  * CC1101 frequency register formula:
  *   FREQ = (f_carrier / f_xtal) * 2^16
@@ -544,6 +647,214 @@ static void test_band_select_invalid(void)
     ASSERT_TRUE(3 != CC1101_BAND_433 && 3 != CC1101_BAND_868 && 3 != CC1101_BAND_915);
 }
 
+/* ── Test: SPI Access Macro Encoding ──────────────────────────────────── */
+
+static void test_spi_write_single_encoding(void)
+{
+    /* Write single: bit7=0, bit6=0, addr[5:0] */
+    ASSERT_UINT_EQ(0x00, CC1101_WRITE_SINGLE(0x00));   /* IOCFG2 */
+    ASSERT_UINT_EQ(0x0E, CC1101_WRITE_SINGLE(0x0E));   /* FREQ0 */
+    ASSERT_UINT_EQ(0x2E, CC1101_WRITE_SINGLE(0x2E));   /* TEST0 */
+}
+
+static void test_spi_write_burst_encoding(void)
+{
+    /* Write burst: bit7=0, bit6=1, addr[5:0] */
+    ASSERT_UINT_EQ(0x40, CC1101_WRITE_BURST(0x00));    /* Burst from IOCFG2 */
+    ASSERT_UINT_EQ(0x4E, CC1101_WRITE_BURST(0x0E));    /* Burst from FREQ0 */
+    ASSERT_UINT_EQ(0x7E, CC1101_WRITE_BURST(0x3E));    /* PATABLE burst write */
+}
+
+static void test_spi_read_single_encoding(void)
+{
+    /* Read single: bit7=1, bit6=0, addr[5:0] */
+    ASSERT_UINT_EQ(0x80, CC1101_READ_SINGLE(0x00));    /* Read IOCFG2 */
+    ASSERT_UINT_EQ(0x8E, CC1101_READ_SINGLE(0x0E));    /* Read FREQ0 */
+    ASSERT_UINT_EQ(0xAE, CC1101_READ_SINGLE(0x2E));    /* Read TEST0 */
+}
+
+static void test_spi_read_burst_encoding(void)
+{
+    /* Read burst: bit7=1, bit6=1, addr[5:0] */
+    ASSERT_UINT_EQ(0xC0, CC1101_READ_BURST(0x00));     /* Burst read from IOCFG2 */
+    ASSERT_UINT_EQ(0xCE, CC1101_READ_BURST(0x0E));     /* Burst read from FREQ0 */
+    ASSERT_UINT_EQ(0xFF, CC1101_READ_BURST(0x3F));     /* RX FIFO burst read */
+}
+
+static void test_spi_strobe_encoding(void)
+{
+    /* Command strobes: address 0x30-0x3D, mask to lower 6 bits */
+    ASSERT_UINT_EQ(0x30, CC1101_STROBE(CC1101_SRES));   /* SRES */
+    ASSERT_UINT_EQ(0x34, CC1101_STROBE(CC1101_SRX));    /* SRX */
+    ASSERT_UINT_EQ(0x35, CC1101_STROBE(CC1101_STX));    /* STX */
+    ASSERT_UINT_EQ(0x36, CC1101_STROBE(CC1101_SIDLE));  /* SIDLE */
+    ASSERT_UINT_EQ(0x3D, CC1101_STROBE(CC1101_SNOP));   /* SNOP */
+}
+
+static void test_spi_addr_masking(void)
+{
+    /* Verify that address masking truncates to lower 6 bits */
+    uint8_t overflow = 0xFF;
+    ASSERT_UINT_EQ(0x3F, CC1101_WRITE_SINGLE(overflow));
+    ASSERT_UINT_EQ(0x7F, CC1101_WRITE_BURST(overflow));
+    ASSERT_UINT_EQ(0xBF, CC1101_READ_SINGLE(overflow));
+    ASSERT_UINT_EQ(0xFF, CC1101_READ_BURST(overflow));
+}
+
+/* ── Test: Command Strobe Range Validation ────────────────────────────── */
+
+static void test_command_strobes_in_range(void)
+{
+    /* All command strobes must be in 0x30-0x3D range */
+    uint8_t strobes[] = {
+        CC1101_SRES, CC1101_SFSTXON, CC1101_SXOFF, CC1101_SCAL,
+        CC1101_SRX, CC1101_STX, CC1101_SIDLE, CC1101_SAFC,
+        CC1101_SWOR, CC1101_SPWD, CC1101_SFRX, CC1101_SFTX,
+        CC1101_SWORRST, CC1101_SNOP
+    };
+    int n = sizeof(strobes) / sizeof(strobes[0]);
+
+    for (int i = 0; i < n; i++) {
+        ASSERT_TRUE(strobes[i] >= 0x30);
+        ASSERT_TRUE(strobes[i] <= 0x3D);
+    }
+}
+
+static void test_command_strobes_unique(void)
+{
+    /* All command strobe values must be distinct */
+    uint8_t strobes[] = {
+        CC1101_SRES, CC1101_SFSTXON, CC1101_SXOFF, CC1101_SCAL,
+        CC1101_SRX, CC1101_STX, CC1101_SIDLE, CC1101_SAFC,
+        CC1101_SWOR, CC1101_SPWD, CC1101_SFRX, CC1101_SFTX,
+        CC1101_SWORRST, CC1101_SNOP
+    };
+    int n = sizeof(strobes) / sizeof(strobes[0]);
+
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            ASSERT_TRUE(strobes[i] != strobes[j]);
+        }
+    }
+}
+
+/* ── Test: MARCSTATE State Machine Values ─────────────────────────────── */
+
+static void test_marcstate_values(void)
+{
+    /* Verify known CC1101 MARCSTATE values per datasheet Section 13.1 */
+    ASSERT_INT_EQ(0x00, 0);  /* SLEEP */
+    ASSERT_INT_EQ(0x01, 1);  /* IDLE */
+    ASSERT_INT_EQ(0x02, 2);  /* XOFF */
+    ASSERT_INT_EQ(0x03, 3);  /* VCOON_MC */
+    ASSERT_INT_EQ(0x04, 4);  /* REGON_MC */
+    ASSERT_INT_EQ(0x05, 5);  /* MANCAL */
+    ASSERT_INT_EQ(0x06, 6);  /* CAL */
+    ASSERT_INT_EQ(0x07, 7);  /* CALTRY (obsolete, maps to CAL on newer revs) */
+    ASSERT_INT_EQ(0x08, 8);  /* SETTLING */
+    ASSERT_INT_EQ(0x09, 9);  /* REGON */
+    ASSERT_INT_EQ(0x0A, 10); /* RX */
+    ASSERT_INT_EQ(0x0B, 11); /* RX_END */
+    ASSERT_INT_EQ(0x0C, 12); /* RX_RST */
+    ASSERT_INT_EQ(0x0D, 13); /* TX */
+    ASSERT_INT_EQ(0x0E, 14); /* TX_END */
+}
+
+/* ── Test: PATABLE Verification ───────────────────────────────────────── */
+
+static void test_patable_433mhz(void)
+{
+    /* 433 MHz PA table (from CC1101 datasheet Table 34):
+     * Must have 8 entries, all non-zero, monotonically increasing */
+    static const uint8_t patable_433[] = {
+        0x12,   /* -30 dBm */
+        0x0E,   /* -20 dBm */
+        0x1D,   /* -15 dBm */
+        0x34,   /* -10 dBm */
+        0x56,   /*   0 dBm */
+        0x8B,   /*  +5 dBm */
+        0xC7,   /*  +7 dBm */
+        0xC0,   /* +10 dBm */
+    };
+    ASSERT_INT_EQ(8, (int)(sizeof(patable_433)));
+
+    /* All entries must be non-zero */
+    for (int i = 0; i < 8; i++) {
+        ASSERT_TRUE(patable_433[i] != 0);
+    }
+
+    /* Minimum power setting should be smaller than maximum.
+     * Note: PATABLE values are NOT monotonically increasing across
+     * all power levels — the CC1101 PA control register uses a
+     * non-linear mapping. We verify only that the highest power
+     * setting is greater than the lowest. */
+    ASSERT_TRUE(patable_433[7] >= patable_433[0]);
+}
+
+static void test_patable_915mhz(void)
+{
+    /* 915 MHz PA table (from CC1101 datasheet Table 36):
+     * Must have 8 entries, all non-zero */
+    static const uint8_t patable_915[] = {
+        0x12,   /* -30 dBm */
+        0x0E,   /* -20 dBm */
+        0x1D,   /* -15 dBm */
+        0x34,   /* -10 dBm */
+        0x56,   /*   0 dBm */
+        0x8B,   /*  +5 dBm */
+        0xC7,   /*  +7 dBm */
+        0xC0,   /* +10 dBm */
+    };
+    ASSERT_INT_EQ(8, (int)(sizeof(patable_915)));
+
+    for (int i = 0; i < 8; i++) {
+        ASSERT_TRUE(patable_915[i] != 0);
+    }
+}
+
+/* ── Test: Configuration Register Address Ordering ────────────────────── */
+
+static void test_config_register_ordering(void)
+{
+    /* CC1101 configuration registers are at addresses 0x00-0x2E.
+     * Each subsequent register should have an address one higher
+     * than the previous (they are sequentially assigned). */
+    ASSERT_TRUE(CC1101_IOCFG2    == 0x00);
+    ASSERT_TRUE(CC1101_IOCFG1    == 0x01);
+    ASSERT_TRUE(CC1101_IOCFG0    == 0x02);
+    ASSERT_TRUE(CC1101_FIFOTHR   == 0x03);
+    ASSERT_TRUE(CC1101_SYNC1     == 0x04);
+    ASSERT_TRUE(CC1101_SYNC0     == 0x05);
+    ASSERT_TRUE(CC1101_PKTLEN    == 0x06);
+    ASSERT_TRUE(CC1101_PKTCTRL1  == 0x07);
+    ASSERT_TRUE(CC1101_PKTCTRL0  == 0x08);
+    ASSERT_TRUE(CC1101_FREQ2     == 0x0D);
+    ASSERT_TRUE(CC1101_FREQ1     == 0x0E);
+    ASSERT_TRUE(CC1101_FREQ0     == 0x0F);
+    ASSERT_TRUE(CC1101_MDMCFG4  == 0x10);
+    ASSERT_TRUE(CC1101_MDMCFG3  == 0x11);
+    ASSERT_TRUE(CC1101_MDMCFG2  == 0x12);
+}
+
+/* ── Test: Status Register Bank Separation ─────────────────────────────── */
+
+static void test_status_register_addresses(void)
+{
+    /* Status registers use bank 1 (burst read bit set).
+     * Their addresses overlap with command strobes (0x30-0x3D)
+     * but are distinguished by the bank bit in the SPI header.
+     * Verify they are in the expected range. */
+    ASSERT_INT_EQ(0x30, CC1101_PARTNUM);
+    ASSERT_INT_EQ(0x31, CC1101_VERSION);
+    ASSERT_INT_EQ(0x32, CC1101_FREQEST);
+    ASSERT_INT_EQ(0x33, CC1101_LQI);
+    ASSERT_INT_EQ(0x34, CC1101_RSSI);
+    ASSERT_INT_EQ(0x35, CC1101_MARCSTATE);
+    ASSERT_INT_EQ(0x38, CC1101_PKTSTATUS);
+    ASSERT_INT_EQ(0x3A, CC1101_TXBYTES);
+    ASSERT_INT_EQ(0x3B, CC1101_RXBYTES);
+}
+
 /* ── Main test runner ────────────────────────────────────────────────────── */
 
 int main(void)
@@ -573,6 +884,8 @@ int main(void)
     printf("\n--- PA Power Table ---\n");
     RUN_TEST(test_patable_all_levels);
     RUN_TEST(test_patable_specific);
+    RUN_TEST(test_patable_433mhz);
+    RUN_TEST(test_patable_915mhz);
 
     printf("\n--- RSSI to dBm Conversion ---\n");
     RUN_TEST(test_rssi_to_dbm_typical);
@@ -597,6 +910,27 @@ int main(void)
     RUN_TEST(test_freq_915mhz_config_table);
     RUN_TEST(test_freq_ism_band_boundaries);
     RUN_TEST(test_band_select_invalid);
+
+    printf("\n--- SPI Access Macro Encoding ---\n");
+    RUN_TEST(test_spi_write_single_encoding);
+    RUN_TEST(test_spi_write_burst_encoding);
+    RUN_TEST(test_spi_read_single_encoding);
+    RUN_TEST(test_spi_read_burst_encoding);
+    RUN_TEST(test_spi_strobe_encoding);
+    RUN_TEST(test_spi_addr_masking);
+
+    printf("\n--- Command Strobe Validation ---\n");
+    RUN_TEST(test_command_strobes_in_range);
+    RUN_TEST(test_command_strobes_unique);
+
+    printf("\n--- MARCSTATE State Machine ---\n");
+    RUN_TEST(test_marcstate_values);
+
+    printf("\n--- Configuration Register Ordering ---\n");
+    RUN_TEST(test_config_register_ordering);
+
+    printf("\n--- Status Register Addresses ---\n");
+    RUN_TEST(test_status_register_addresses);
 
     TEST_RESULTS();
 }

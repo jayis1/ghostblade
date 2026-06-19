@@ -46,10 +46,11 @@ Be respectful, constructive, and professional. We're all here to build something
 1. Keep `ghostblade-rk3576.dts` in sync with `GhostBlade.mf` manifest
 2. Optional hardware goes in `ghostblade-options.dts` overlay
 3. SDR-specific configuration goes in `ghostblade-sdr-overlay.dts`
-4. Verify DTS nodes/properties match `GhostBlade.mf` before submitting
-5. Ensure pinctrl entries have correct drive-strength and bias settings matching the schematic
-6. Run `cd software/dts && make validate` to validate syntax before submitting
-7. Use `cd software/dts && make all` to compile DTB/DTBO outputs
+4. NFC (ST25R3916) configuration goes in `ghostblade-nfc-overlay.dts`
+5. Verify DTS nodes/properties match `GhostBlade.mf` before submitting
+6. Ensure pinctrl entries have correct drive-strength and bias settings matching the schematic
+7. Run `cd software/dts && make validate` to validate syntax before submitting
+8. Use `cd software/dts && make all` to compile DTB/DTBO outputs
 
 ### Documentation
 
@@ -73,6 +74,10 @@ Before submitting a PR, ensure:
    - test_cc1101_config (37 tests): CC1101 register configuration validation
    - test_watchdog (72 tests): Watchdog timer constants, brownout magic values, reset reasons
    - test_power_states (57 tests): Power state machine transitions, voltage thresholds
+   - test_sdr_dma (52 tests): SDR DMA ring buffer management, overrun/underrun detection
+   - test_spi0_isr (42 tests): SPI0 ISR frame assembly, sync detection, CRC validation
+   - test_st25r3916_init: ST25R3916 NFC register map, SPI encoding, init sequence
+   - test_libapex: Userspace library API, error codes, telemetry flags
 4. **DTS validates**: `cd software/dts && make validate`
 5. **Markdown lints clean**: `markdownlint docs/ README.md CONTRIBUTING.md`
 6. **No spelling errors**: `codespell --config .codespell.ignore`
@@ -106,3 +111,7 @@ By contributing, you agree that your work will be licensed under:
 - Hardware: CERN-OHL-S v2
 - Software: GPL-2.0-or-later
 - Documentation: CC-BY-SA 4.0
+
+## Security
+
+Found a security vulnerability? Please see [SECURITY.md](SECURITY.md) for responsible disclosure guidelines. **Do not report security issues through public GitHub issues.**

@@ -112,6 +112,112 @@ Time    Rail                Notes
 
 ## Current Budget
 
+### Power-On Timing Diagram
+
+```
+           ┌──────────────────────────────────────────────────────────────────────┐
+  Time(ms) │ 0   2   5   8  10  15  20  25  30  50  60  100  120  150            │
+           │                                                                      │
+  VCC_SYS  │████████████████████████████████████████████████████████████████████ │
+  (3.4V)   │ ↑ Power-good at t=0                                                │
+           │                                                                      │
+  VDD_LOGIC│  ████████████████████████████████████████████████████████████████  │
+  (1.8V)   │  ↑ t=2ms                                                            │
+           │                                                                      │
+  VDD_CORE │     ██████████████████████████████████████████████████████████████ │
+  (0.9V)   │     ↑ t=5ms                                                          │
+           │                                                                      │
+  VDD_DDR  │        ████████████████████████████████████████████████████████████ │
+  (1.1V)   │        ↑ t=8ms                                                       │
+           │                                                                      │
+  VDDQ_DDR │          █████████████████████████████████████████████████████████ │
+  (0.6V)   │          ↑ t=10ms                                                    │
+           │                                                                      │
+  VCC_3V3  │               ████████████████████████████████████████████████████ │
+  (3.3V)   │               ↑ t=15ms                                               │
+           │                                                                      │
+  VCC_SDIO │                    ██████████████████████████████████████████████  │
+  (3.3V)   │                    ↑ t=20ms                                          │
+           │                                                                      │
+  VCC_SDR  │                    ██████████████████████████████████████████████  │
+  (1.8V)   │                    ↑ t=20ms                                          │
+           │                                                                      │
+  VCC_SDR  │                         █████████████████████████████████████████ │
+  (1.1V)   │                         ↑ t=25ms                                    │
+           │                                                                      │
+  VCC_SDR  │                              ████████████████████████████████████ │
+  (3.3V)   │                              ↑ t=30ms                               │
+           │                                                                      │
+  VCC_3V3  │                                        ████████████████████████    │
+  _RP      │                                        ↑ t=50ms                    │
+           │                                                                      │
+  MCU_RST │············································  ██████████████████████  │
+  deassert │                                        ↑ t=60ms                    │
+           │                                                                      │
+  VCC_NFC  │                                                  ████████████████  │
+           │                                                  ↑ t=100ms          │
+           │                                                                      │
+  VCC_SUBGHZ│                                                 ████████████████ │
+           │                                                  ↑ t=100ms          │
+           │                                                                      │
+  HOST_RDY │                                                        ████████████│
+  assert   │                                                        ↑ t=120ms    │
+           │                                                                      │
+  PCIe pwr │                                                            █████████│
+           │                                                            ↑ t=150ms │
+           └──────────────────────────────────────────────────────────────────────┘
+
+  Key:  ████ = rail active    ···· = reset asserted (low)
+        ↑ = rail power-good / signal transition
+```
+
+### Voltage Rail Dependency Chain
+
+```
+  VBAT (3.0–4.2V) ──► RK817 PMIC ──► VCC_SYS (3.4V) ──┬──► VDD_LOGIC (1.8V)
+  USB-C PD 5V  ──► RK817 PMIC                          │       │
+                                                       │       └──► VDD_CORE (0.9V)
+                                                       │              │
+                                                       │              └──► VDD_DDR (1.1V)
+                                                       │                     │
+                                                       │                     └──► VDDQ_DDR (0.6V)
+                                                       │                            │
+                                                       │                            └──► VCC_3V3 ──┬──► VCC_SDIO
+                                                       │                                           ├──► VCC_SDR 1V8 ──► VCC_SDR 1V1 ──► VCC_SDR 3V3
+                                                       │                                           ├──► VCC_3V3_RP ──► MCU_RESET ──► VCC_NFC
+                                                       │                                           │                            │          └──► VCC_SUBGHZ
+                                                       │                                           │                            │
+                                                       │                                           │                     HOST_RDY
+                                                       │                                           │
+                                                       │                                           └──► PCIe power
+```
+
+### PMIC Sequencer Constraints
+
+| Constraint | Min | Max | Unit | Notes |
+|------------|-----|-----|------|-------|
+| VCC_SYS → VDD_LOGIC delay | 1 | 5 | ms | Buck1 ramp time |
+| VDD_LOGIC → VDD_CORE delay | 1 | 5 | ms | Buck2 soft-start |
+| VDD_CORE → VDD_DDR delay | 1 | 3 | ms | Buck3 soft-start |
+| VDD_DDR → VDDQ_DDR delay | 0.5 | 2 | ms | LDO2 tracking |
+| VDDQ_DDR → VCC_3V3 delay | 2 | 10 | ms | LDO3 soft-start |
+| VCC_3V3 → peripheral rails | 5 | 50 | ms | Switched rails, inrush limit |
+| MCU_RESET deassert hold | 50 | — | ms | RP2350B boot time |
+| RP2350B → HOST_RDY | 60 | 200 | ms | Firmware init time |
+
+### Critical Timing Margins
+
+| Parameter | Target | Margin | Notes |
+|-----------|--------|--------|-------|
+| RK3576 PLL lock after VDD_CORE | 3 ms | 2 ms | Within 5 ms VDD_DDR start |
+| LPDDR5 init after VDDQ stable | 5 ms | 5 ms | Training must complete before VCC_3V3 |
+| LMS7002M PLL lock after 1V1 | 10 ms | 5 ms | 1.1V must be stable before 3.3V PA |
+| RP2350B boot after reset deassert | 50 ms | 10 ms | Flash XIP + stack init |
+| ST25R3916 oscillator start | 1 ms | 1 ms | 27.12 MHz crystal settling |
+| CC1101 crystal start | 0.5 ms | 0.5 ms | 26 MHz crystal settling |
+
+## Current Budget
+
 | Rail | Voltage | Max Current | Source | Notes |
 |------|---------|-------------|--------|-------|
 | VCC_SYS | 3.4V | 3A | RK817 buck | System power |

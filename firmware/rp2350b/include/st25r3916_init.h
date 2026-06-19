@@ -155,6 +155,7 @@
 
 /* TX FIFO (Space A, write-only) */
 #define ST25R3916_REG_TX_FIFO              0x1F    /**< TX FIFO write (write-only) */
+#define ST25R3916_REG_RX_FIFO              0x1F    /**< RX FIFO read (read-only, Space A) */
 
 /* ========================================================================
  * ST25R3916 Space B Registers (accessed via Space B gateway at 0x40)

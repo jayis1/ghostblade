@@ -780,6 +780,38 @@ int16_t cc1101_get_rssi_x10(void) {
  * ======================================================================== */
 
 /**
+ * cc1101_get_marcstate — Read the CC1101 main radio control state machine state
+ *
+ * Returns: MARCSTATE value (lower 5 bits of status register)
+ *   0x00 = SLEEP, 0x01 = IDLE, 0x02 = XOFF,
+ *   0x03 = VCOON_MC, 0x04 = REGON_MC, 0x05 = MANCAL,
+ *   0x06 = CAL, 0x07 = CALTRY, 0x08 = SETTLING,
+ *   0x09 = REGON, 0x0A = RX, 0x0B = RX_END,
+ *   0x0C = RX_RST, 0x0D = TX, 0x0E = TX_END
+ */
+uint8_t cc1101_get_marcstate(void) {
+    return cc1101_read_status(CC1101_MARCSTATE) & 0x1F;
+}
+
+/**
+ * cc1101_get_partnum — Read the CC1101 part number
+ *
+ * Returns: PARTNUM register value (should be 0x00 for CC1101)
+ */
+uint8_t cc1101_get_partnum(void) {
+    return cc1101_read_status(CC1101_PARTNUM);
+}
+
+/**
+ * cc1101_get_version — Read the CC1101 chip version
+ *
+ * Returns: VERSION register value (0x14 for rev B, 0x04 for rev A)
+ */
+uint8_t cc1101_get_version(void) {
+    return cc1101_read_status(CC1101_VERSION);
+}
+
+/**
  * cc1101_set_band — Switch CC1101 to a different ISM band configuration
  *
  * Reconfigures the CC1101 for the specified frequency band. This performs

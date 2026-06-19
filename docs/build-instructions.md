@@ -197,6 +197,7 @@ make test_power_states
 make test_sdr_dma
 make test_spi0_isr
 make test_libapex
+make test_st25r3916_init
 ```
 
 You can also build from the project root:
@@ -228,7 +229,7 @@ make all
 make DTS_INCLUDE_PATHS="-I/path/to/linux/include/dt-bindings -I/path/to/linux/arch/arm64/boot/dts/rockchip"
 ```
 
-Output: `ghostblade-rk3576.dtb`, `ghostblade-options.dtbo`, `ghostblade-sdr-overlay.dtbo`
+Output: `ghostblade-rk3576.dtb`, `ghostblade-options.dtbo`, `ghostblade-sdr-overlay.dtbo`, `ghostblade-nfc-overlay.dtbo`
 
 ### 7.3 Applying Overlays on Target
 
@@ -240,6 +241,7 @@ cp ghostblade-rk3576.dtb /boot/dtbs/rockchip/rk3576-ghostblade.dtb
 # Copy overlays
 cp ghostblade-options.dtbo /boot/overlays/
 cp ghostblade-sdr-overlay.dtbo /boot/overlays/
+cp ghostblade-nfc-overlay.dtbo /boot/overlays/
 
 # Add to /boot/extlinux.conf or /boot/armbianEnv.txt:
 # overlay_prefix=ghostblade-

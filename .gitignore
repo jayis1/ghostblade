@@ -74,3 +74,4 @@ tests/test_apex_bridge
 tests/test_sdr_dma
 tests/test_spi0_isr
 tests/test_libapex
+tests/test_st25r3916_init

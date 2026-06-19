@@ -43,11 +43,13 @@ make check          # Same as 'make run'
 make test_spi_protocol
 make test_sdr_dma
 make test_spi0_isr
+make test_st25r3916_init
 
 # Run individual tests
 ./test_spi_protocol
 ./test_sdr_dma
 ./test_spi0_isr
+./test_st25r3916_init
 ```
 
 The kernel module test (`test_apex_bridge.c`) must be built and loaded on the RK3576 target:
@@ -165,6 +167,7 @@ Every code change should include appropriate tests:
 
 - **Protocol/communication code**: Add tests to `test_spi_protocol.c` or `test_spi0_isr.c`
 - **Hardware abstraction**: Add tests to the corresponding module's test file
+- **NFC controller**: Add tests to `test_st25r3916_init.c`
 - **Kernel driver**: Add tests to `test_apex_bridge.c` (must run on target)
 - **Userspace library**: Add tests to `test_libapex.c`
 

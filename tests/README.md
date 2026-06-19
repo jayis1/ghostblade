@@ -200,6 +200,33 @@ make test_spi0_isr
 ./test_spi0_isr
 ```
 
+### `test_st25r3916_init.c` — ST25R3916 NFC Controller Unit Tests
+
+Unit tests for the ST25R3916 NFC controller initialization, register map, SPI protocol encoding, and voltage measurement conversion. Validates register address ranges, bit field constraints, initialization sequence ordering, direct command addresses, and IRQ status register bit definitions.
+
+**Test coverage:**
+- Register address validation (Space A: 0x00–0x3F)
+- Space B register access via gateway mechanism
+- Register value constraints (valid bit ranges, reserved bits must be zero)
+- Initialization sequence ordering invariants
+- SPI protocol encoding (read/write/burst/direct command byte construction)
+- IRQ status register bit definitions (IRQ1–IRQ5)
+- Direct command address range validation (0xC1–0xD3)
+- NFC command opcode verification (REQA, WUPA, ANTICOL, SELECT, HALT, RATS, REQB, ATTRIB)
+- Voltage measurement conversion (raw ADC → millivolts)
+- Antenna calibration register constraints
+- TX/RX FIFO status register validation
+
+**Build:**
+```bash
+make test_st25r3916_init
+```
+
+**Run:**
+```bash
+./test_st25r3916_init
+```
+
 ### `test_apex_bridge.c` — Kernel Module Test Harness
 
 In-kernel test harness for the `apex_bridge` SPI bridge driver. Runs as a loadable kernel module on the RK3576 target platform.

@@ -161,7 +161,7 @@ timeouts:
 ### LMS7002M SDR not responding
 
 1. Verify SPI1 bus connectivity (RP2350B → LMS7002M)
-2. Check LMS7002M reset GPIO (GPIO7 on RP2350B)
+2. Check LMS7002M reset GPIO (GPIO31 on RP2350B)
 3. Ensure VDD_3V3 and 1.8V rails are stable before LMS7002M reset release
 4. Check MIPI CSI-2 lanes between LMS7002M and RK3576
 5. Verify LMS7002M register 0x002F (reset) reads back correctly
@@ -179,7 +179,7 @@ timeouts:
 1. Verify NFC antenna coil is connected (J7 header)
 2. Check ST25R3916 SPI2 bus connectivity
 3. Measure antenna tuning: expect ~5Vpp at 13.56 MHz across the coil
-4. Verify the IRQ line (GPIO17 on RP2350B) is not stuck
+4. Verify the IRQ line (GPIO44 on RP2350B) is not stuck
 5. Try `apex_nfc_field_on()` and measure field strength with telemetry
 
 ### Overheating / thermal shutdown

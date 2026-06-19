@@ -35,6 +35,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 |----------|-------------|
 | [Contributing](contributing.md) | Code, documentation, and hardware contribution workflow |
 | [Contributor Onboarding](getting-started-contributors.md) | Step-by-step checklist for new contributors |
+| [Security Policy](../SECURITY.md) | Vulnerability reporting and responsible disclosure |
 
 ## Engineering Phases (Detailed Design)
 

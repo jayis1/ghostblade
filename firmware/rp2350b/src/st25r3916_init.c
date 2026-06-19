@@ -442,6 +442,154 @@ void st25r3916_stop_polling(void) {
 }
 
 /**
+ * st25r3916_start_polling — Start NFC tag detection polling
+ *
+ * Activates the 13.56 MHz carrier field and begins polling for
+ * ISO 14443A tags. The sequence is:
+ *   1. Clear any pending interrupt flags
+ *   2. Enable TX and RX in operation control
+ *   3. Turn on the RF field (TX_ON command)
+ *   4. Send REQA (0x26) to detect Type A tags in the field
+ *
+ * After calling this function, poll PIN_NFC_IRQ (GPIO44) for
+ * tag detection events, or call st25r3916_iso14443a_reqa()
+ * periodically to check for tags.
+ */
+void st25r3916_start_polling(void) {
+    /* Clear any stale interrupt flags before starting */
+    st25r3916_send_command(ST25R3916_CMD_CLEAR_IRQS);
+
+    /* Enable TX and RX in operation control */
+    st25r3916_write_reg(ST25R3916_REG_OP_CTRL, 0x03);
+    /* OP_CTRL: TX_EN=1, RX_EN=1 */
+
+    /* Turn on the 13.56 MHz carrier field */
+    st25r3916_send_command(ST25R3916_CMD_TX_ON);
+}
+
+/**
+ * st25r3916_transact — Perform a full NFC command transaction
+ *
+ * @cmd:       NFC command opcode (NFC_CMD_REQA, etc.)
+ * @tx_data:   TX data buffer (may be NULL for no-TX commands)
+ * @tx_len:    TX data length in bytes
+ * @rx_data:   RX data buffer (may be NULL for no-RX commands)
+ * @rx_len:    Pointer to RX buffer size on input, received bytes on output
+ * @timeout_ms: Response timeout in milliseconds (0 = default 100 ms)
+ *
+ * Performs a complete NFC transaction:
+ *   1. Clear interrupts
+ *   2. Configure TX byte count
+ *   3. Write TX data to FIFO (if any)
+ *   4. Start transmission (TX_ON)
+ *   5. Wait for RX complete or timeout
+ *   6. Read RX data from FIFO (if any)
+ *   7. Turn off field
+ *
+ * Returns: 0 on success, negative on error
+ *   -1: Timeout waiting for response
+ *   -2: CRC error in response
+ *   -3: Invalid parameters
+ */
+int st25r3916_transact(uint8_t cmd,
+                       const uint8_t *tx_data, uint16_t tx_len,
+                       uint8_t *rx_data, uint16_t *rx_len,
+                       uint32_t timeout_ms) {
+    uint8_t irq1 = 0, irq2 = 0, irq3 = 0;
+    uint32_t timeout_count;
+    uint16_t rx_bytes = 0;
+
+    /* Parameter validation */
+    if ((tx_len > 0 && tx_data == NULL) ||
+        (rx_len != NULL && *rx_len > 0 && rx_data == NULL)) {
+        return -3;
+    }
+
+    /* Default timeout: 100 ms → ~150000 nop iterations at 150 MHz */
+    if (timeout_ms == 0)
+        timeout_ms = 100;
+    timeout_count = timeout_ms * 1500U;  /* Approximate nop-loop cycles per ms */
+
+    /* Step 1: Clear all pending interrupts */
+    st25r3916_send_command(ST25R3916_CMD_CLEAR_IRQS);
+
+    /* Step 2: Configure TX byte count */
+    if (tx_len > 0 || cmd == NFC_CMD_REQA || cmd == NFC_CMD_WUPA) {
+        uint16_t bytes = (tx_len > 0) ? tx_len : 1;
+        st25r3916_write_reg(ST25R3916_REG_NUM_TX_BYTES1,
+                            (uint8_t)(bytes & 0xFF));
+        st25r3916_write_reg(ST25R3916_REG_NUM_TX_BYTES2,
+                            (uint8_t)((bytes >> 8) & 0xFF));
+        st25r3916_write_reg(ST25R3916_REG_NUM_TX_BYTES3,
+                            0x00);
+    }
+
+    /* Step 3: Write TX data to FIFO */
+    if (tx_len > 0 && tx_data != NULL) {
+        /* Burst write TX data to FIFO */
+        for (uint16_t i = 0; i < tx_len; i++) {
+            st25r3916_write_reg(ST25R3916_REG_TX_FIFO, tx_data[i]);
+        }
+    } else if (cmd == NFC_CMD_REQA || cmd == NFC_CMD_WUPA) {
+        /* Short frame commands: write the command byte directly */
+        st25r3916_write_reg(ST25R3916_REG_TX_FIFO, cmd);
+    }
+
+    /* Step 4: Start transmission */
+    st25r3916_send_command(ST25R3916_CMD_TX_ON);
+
+    /* Step 5: Wait for RX complete or timeout */
+    for (uint32_t i = 0; i < timeout_count; i++) {
+        irq1 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS1);
+        irq2 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS2);
+        irq3 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS3);
+
+        if (irq1 & ST25R3916_IRQ1_RXE) {
+            /* RX complete */
+            break;
+        }
+        if (irq3 & ST25R3916_IRQ3_CRC) {
+            /* CRC error in received data */
+            st25r3916_send_command(ST25R3916_CMD_CLEAR_IRQS);
+            st25r3916_send_command(ST25R3916_CMD_TX_OFF);
+            return -2;
+        }
+    }
+
+    /* Clear all IRQ flags */
+    st25r3916_clear_interrupts(&irq1, &irq2, &irq3, NULL, NULL);
+
+    /* Check for timeout */
+    if (!(irq1 & ST25R3916_IRQ1_RXE)) {
+        /* No response within timeout */
+        st25r3916_send_command(ST25R3916_CMD_TX_OFF);
+        return -1;
+    }
+
+    /* Step 6: Read RX data from FIFO */
+    if (rx_data != NULL && rx_len != NULL) {
+        /* Read number of received bytes */
+        rx_bytes = (uint16_t)st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES1) |
+                   ((uint16_t)st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES2) << 8);
+
+        /* Limit to buffer size */
+        if (rx_bytes > *rx_len)
+            rx_bytes = *rx_len;
+
+        /* Read RX data */
+        for (uint16_t i = 0; i < rx_bytes; i++) {
+            rx_data[i] = st25r3916_read_reg(ST25R3916_REG_RX_FIFO);
+        }
+        *rx_len = rx_bytes;
+    }
+
+    /* Step 7: Turn off the field */
+    st25r3916_send_command(ST25R3916_CMD_TX_OFF);
+
+    return 0;
+}
+
+/**
  * st25r3916_get_field_strength_mv — Read NFC field strength in mV
  *
  * Measures the amplitude of the 13.56 MHz carrier field using the
@@ -460,7 +608,7 @@ uint16_t st25r3916_get_field_strength_mv(void) {
      * Poll the IRQ register for completion rather than using a fixed
      * delay, with a timeout to avoid hanging if the chip is unresponsive. */
     for (int timeout = 0; timeout < 5000; timeout++) {
-        uint8_t irq1 = st25r3916_read_reg(ST25R3916_REG_IRQ1);
+        uint8_t irq1 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS1);
         if (irq1 & 0x01)  /* MEASURE_AMPLITUDE_DONE bit */
             break;
     }
