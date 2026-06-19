@@ -252,8 +252,10 @@ static void sdr_dma_start_block(uint8_t block_idx) {
  *
  * Must be called after SPI1 master is initialized.
  * Does not start DMA — call sdr_dma_start() to begin streaming.
+ *
+ * Returns: 0 on success (always succeeds; ring buffer is statically allocated)
  */
-void sdr_dma_init(void) {
+int sdr_dma_init(void) {
     /* Clear ring buffer */
     memset(sdr_ring_buf, 0, SDR_RING_BUF_SIZE);
 
@@ -275,6 +277,8 @@ void sdr_dma_init(void) {
 
     /* Disable all DMA interrupts */
     REG32(DMA_INTE0) = 0;
+
+    return 0;
 }
 
 /**

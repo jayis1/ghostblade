@@ -32,15 +32,45 @@
 /** ADC resolution (12-bit) */
 #define BATT_ADC_RESOLUTION         4095
 
-/** Voltage divider ratio (R1=R2=100kΩ, so Vout = Vin/2) */
-#define BATT_DIVIDER_NUMERATOR      2
-#define BATT_DIVIDER_DENOMINATOR    1
+/*
+ * Voltage divider for battery voltage measurement:
+ *
+ *   VBAT ──[R1=100kΩ]──┬──[R2=33kΩ]── GND
+ *                       │
+ *                    ADC0 (GPIO 26)
+ *
+ * V_ADC = VBAT × R2 / (R1 + R2)
+ * VBAT  = V_ADC × (R1 + R2) / R2
+ *
+ * With R1=100kΩ and R2=33kΩ:
+ *   Divider ratio = (100000 + 33000) / 33000 = 133000 / 33000 = 4.0303
+ *
+ * For a 12-bit ADC with VREF = 3.3V:
+ *   V_ADC = ADC_RESULT × 3.3 / 4095
+ *   VBAT  = V_ADC × 4.0303
+ *   VBAT_mV ≈ (ADC_RESULT × 3249 + 500) / 1000
+ */
+#define BATT_R1_OHM                 100000UL   /* Upper resistor in ohms */
+#define BATT_R2_OHM                 33000UL    /* Lower resistor in ohms */
+#define BATT_DIVIDER_NUMERATOR      (BATT_R1_OHM + BATT_R2_OHM)
+#define BATT_DIVIDER_DENOMINATOR    BATT_R2_OHM
 
-/** Brownout threshold in millivolts */
-#define BATT_BROWNOUT_THRESHOLD_MV  3000
+/** Brownout detection threshold in millivolts
+ *
+ * Set to 2800 mV (below 3.0V critical, above RP2350B minimum 1.8V)
+ * to catch deep voltage sags caused by high-current bursts (SDR TX, NFC field).
+ */
+#define BATT_BROWNOUT_THRESHOLD_MV  2800
 
-/** Brownout recovery threshold (hysteresis) in millivolts */
-#define BATT_BROWNOUT_RECOVERY_MV    3300
+/** Brownout recovery hysteresis in millivolts
+ *
+ * A brownout condition clears only when VBAT rises above
+ * BROWNOUT_THRESHOLD + BROWNOUT_HYSTERESIS = 2800 + 200 = 3000 mV.
+ */
+#define BATT_BROWNOUT_HYSTERESIS_MV 200
+
+/** Brownout recovery threshold in millivolts (computed) */
+#define BATT_BROWNOUT_RECOVERY_MV   (BATT_BROWNOUT_THRESHOLD_MV + BATT_BROWNOUT_HYSTERESIS_MV)
 
 /** Number of ADC samples to average for each reading */
 #define BATT_ADC_OVERSAMPLE          8

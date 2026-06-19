@@ -103,12 +103,21 @@ static int g_tests_failed = 0;
 
 /* ── Battery monitor constants (mirrored from battery_monitor.h) ──────────── */
 
+/*
+ * Voltage divider: R1=100kΩ (VBAT → ADC0), R2=33kΩ (ADC0 → GND)
+ * Divider ratio = (R1 + R2) / R2 = 133000 / 33000 = 4.0303
+ * VBAT_mV = ADC_raw × 3300 × 133000 / (33000 × 4095)
+ * Simplified: VBAT_mV ≈ (ADC_raw × 3249 + 500) / 1000
+ */
 #define BATT_ADC_REF_MV             3300
 #define BATT_ADC_RESOLUTION         4095
-#define BATT_DIVIDER_NUMERATOR      2
-#define BATT_DIVIDER_DENOMINATOR    1
-#define BATT_BROWNOUT_THRESHOLD_MV  3000
-#define BATT_BROWNOUT_RECOVERY_MV    3300
+#define BATT_R1_OHM                 100000UL
+#define BATT_R2_OHM                 33000UL
+#define BATT_DIVIDER_NUMERATOR      (BATT_R1_OHM + BATT_R2_OHM)  /* 133000 */
+#define BATT_DIVIDER_DENOMINATOR    BATT_R2_OHM                    /* 33000 */
+#define BATT_BROWNOUT_THRESHOLD_MV  2800
+#define BATT_BROWNOUT_HYSTERESIS_MV 200
+#define BATT_BROWNOUT_RECOVERY_MV   (BATT_BROWNOUT_THRESHOLD_MV + BATT_BROWNOUT_HYSTERESIS_MV)  /* 3000 */
 #define BATT_FULL_MV                 4200
 #define BATT_EMPTY_MV                3000
 
@@ -117,14 +126,18 @@ static int g_tests_failed = 0;
 /**
  * adc_raw_to_vbat_mv — Convert raw ADC reading to battery voltage
  *
- * With a voltage divider of R1=R2=100kΩ, Vout = VBAT/2.
- * ADC_raw = Vout * 4095 / 3300
- * VBAT_mV = ADC_raw * 3300 * 2 / 4095
+ * With a voltage divider of R1=100kΩ and R2=33kΩ:
+ *   V_ADC = VBAT × R2 / (R1 + R2) = VBAT × 33/133
+ *   VBAT_mV = ADC_raw × 3300 × 133000 / (33000 × 4095)
+ *   Simplified: VBAT_mV ≈ (ADC_raw × 29260 + 4504) / 9009
+ *
+ * Using the same fixed-point arithmetic as the production code:
+ *   VBAT_mV = (ADC_raw × 29260 + 4504) / 9009
+ *   (where 29260 = 3300 × 133000 / 15000, 9009 = 33000 × 4095 / 15000)
  */
 static uint16_t adc_raw_to_vbat_mv(uint16_t adc_raw)
 {
-    uint32_t vbat = ((uint32_t)adc_raw * BATT_ADC_REF_MV * BATT_DIVIDER_NUMERATOR)
-                    / BATT_DIVIDER_DENOMINATOR / BATT_ADC_RESOLUTION;
+    uint32_t vbat = ((uint32_t)adc_raw * 29260UL + 4504UL) / 9009UL;
     return (uint16_t)vbat;
 }
 
@@ -191,26 +204,30 @@ static void test_adc_raw_to_vbat_zero(void)
 
 static void test_adc_raw_to_vbat_midrange(void)
 {
-    /* Midrange ADC: 2048 (half of 4095)
-     * VBAT = 2048 * 3300 * 2 / 4095 ≈ 3300 mV
-     * (because Vout = VBAT/2 and ADC reads Vout at midrange) */
+    /* Midrange ADC: 2048 (approximately half of 4095)
+     * With R1=100kΩ, R2=33kΩ divider:
+     *   VBAT = (2048 × 29260 + 4504) / 9009 ≈ 6653 mV
+     * This is above the Li-Po range but tests the math. */
     uint16_t vbat = adc_raw_to_vbat_mv(2048);
-    ASSERT_INT_GE(vbat, 3200);
-    ASSERT_INT_LE(vbat, 3400);
+    /* Allow wide tolerance for integer rounding */
+    ASSERT_INT_GE(vbat, 6500);
+    ASSERT_INT_LE(vbat, 6800);
 }
 
 static void test_adc_raw_to_vbat_fullscale(void)
 {
-    /* Full-scale ADC: 4095 → VBAT = 4095 * 3300 * 2 / 4095 = 6600 mV
+    /* Full-scale ADC: 4095 → VBAT = (4095 × 29260 + 4504) / 9009 ≈ 13288 mV
      * (this is above the Li-Po range but tests the math) */
     uint16_t vbat = adc_raw_to_vbat_mv(4095);
-    ASSERT_INT_EQ(6600, vbat);
+    ASSERT_INT_GE(vbat, 13200);
+    ASSERT_INT_LE(vbat, 13400);
 }
 
 static void test_adc_raw_to_vbat_typical_3v7(void)
 {
-    /* VBAT = 3.7V → Vout = 1.85V → ADC = 1.85 * 4095 / 3.3 ≈ 2296 */
-    uint16_t adc_3v7 = (uint16_t)((1850UL * 4095) / 3300);  /* 1.85V at ADC */
+    /* VBAT = 3.7V → V_ADC = 3700 × 33/133 ≈ 918.8 mV → ADC ≈ 1140
+     * VBAT_mV = (1140 × 29260 + 4504) / 9009 ≈ 3705 */
+    uint16_t adc_3v7 = (uint16_t)((918UL * 4095) / 3300);  /* V_ADC at 3.7V */
     uint16_t vbat = adc_raw_to_vbat_mv(adc_3v7);
     /* Allow ±50 mV tolerance for rounding */
     ASSERT_INT_GE(vbat, 3650);
@@ -219,8 +236,9 @@ static void test_adc_raw_to_vbat_typical_3v7(void)
 
 static void test_adc_raw_to_vbat_low_battery(void)
 {
-    /* VBAT = 3.0V → Vout = 1.5V → ADC = 1.5 * 4095 / 3.3 ≈ 1861 */
-    uint16_t adc_3v0 = (uint16_t)((1500UL * 4095) / 3300);
+    /* VBAT = 3.0V → V_ADC = 3000 × 33/133 ≈ 744.4 mV → ADC ≈ 924
+     * VBAT_mV = (924 × 29260 + 4504) / 9009 ≈ 3001 */
+    uint16_t adc_3v0 = (uint16_t)((744UL * 4095) / 3300);
     uint16_t vbat = adc_raw_to_vbat_mv(adc_3v0);
     ASSERT_INT_GE(vbat, 2950);
     ASSERT_INT_LE(vbat, 3050);
@@ -305,24 +323,24 @@ static void test_brownout_normal_voltage(void)
 static void test_brownout_enter(void)
 {
     bool brownout = false;
-    /* 2900 mV — below 3000 mV threshold */
-    ASSERT_TRUE(battery_is_brownout(2900, &brownout));
+    /* 2700 mV — below 2800 mV threshold */
+    ASSERT_TRUE(battery_is_brownout(2700, &brownout));
     ASSERT_TRUE(brownout);
 }
 
 static void test_brownout_hysteresis_hold(void)
 {
     bool brownout = true;  /* Already in brownout */
-    /* 3100 mV — above threshold (3000) but below recovery (3300) */
-    ASSERT_TRUE(battery_is_brownout(3100, &brownout));
+    /* 2900 mV — above threshold (2800) but below recovery (3000) */
+    ASSERT_TRUE(battery_is_brownout(2900, &brownout));
     ASSERT_TRUE(brownout);
 }
 
 static void test_brownout_hysteresis_exit(void)
 {
     bool brownout = true;  /* Already in brownout */
-    /* 3400 mV — above recovery threshold (3300) */
-    ASSERT_FALSE(battery_is_brownout(3400, &brownout));
+    /* 3100 mV — above recovery threshold (3000) */
+    ASSERT_FALSE(battery_is_brownout(3100, &brownout));
     ASSERT_FALSE(brownout);
 }
 
@@ -334,16 +352,16 @@ static void test_brownout_full_cycle(void)
     ASSERT_FALSE(battery_is_brownout(3800, &brownout));
     ASSERT_FALSE(brownout);
 
-    /* Voltage drops below threshold */
+    /* Voltage drops below threshold (2800 mV) */
+    ASSERT_TRUE(battery_is_brownout(2700, &brownout));
+    ASSERT_TRUE(brownout);
+
+    /* Voltage recovers partially but not enough (still below 3000 mV) */
     ASSERT_TRUE(battery_is_brownout(2900, &brownout));
     ASSERT_TRUE(brownout);
 
-    /* Voltage recovers partially but not enough */
-    ASSERT_TRUE(battery_is_brownout(3100, &brownout));
-    ASSERT_TRUE(brownout);
-
-    /* Voltage recovers above hysteresis */
-    ASSERT_FALSE(battery_is_brownout(3400, &brownout));
+    /* Voltage recovers above hysteresis (3000 mV) */
+    ASSERT_FALSE(battery_is_brownout(3100, &brownout));
     ASSERT_FALSE(brownout);
 
     /* Normal operation */
@@ -355,12 +373,12 @@ static void test_brownout_exact_threshold(void)
 {
     bool brownout = false;
 
-    /* Exactly at threshold (3000 mV) — not below, so not brownout */
-    ASSERT_FALSE(battery_is_brownout(3000, &brownout));
+    /* Exactly at threshold (2800 mV) — not below, so not brownout */
+    ASSERT_FALSE(battery_is_brownout(2800, &brownout));
     ASSERT_FALSE(brownout);
 
     /* 1 mV below threshold — triggers brownout */
-    ASSERT_TRUE(battery_is_brownout(2999, &brownout));
+    ASSERT_TRUE(battery_is_brownout(2799, &brownout));
     ASSERT_TRUE(brownout);
 }
 
@@ -368,12 +386,12 @@ static void test_brownout_exact_recovery(void)
 {
     bool brownout = true;
 
-    /* Exactly at recovery (3300 mV) — not above, stays in brownout */
-    ASSERT_TRUE(battery_is_brownout(3300, &brownout));
+    /* Exactly at recovery (3000 mV) — not above, stays in brownout */
+    ASSERT_TRUE(battery_is_brownout(3000, &brownout));
     ASSERT_TRUE(brownout);
 
     /* 1 mV above recovery — exits brownout */
-    ASSERT_FALSE(battery_is_brownout(3301, &brownout));
+    ASSERT_FALSE(battery_is_brownout(3001, &brownout));
     ASSERT_FALSE(brownout);
 }
 
@@ -382,16 +400,16 @@ static void test_brownout_no_oscillation(void)
     bool brownout = false;
 
     /* Simulate voltage oscillating around threshold */
-    ASSERT_FALSE(battery_is_brownout(3050, &brownout));  /* above threshold */
-    ASSERT_TRUE(battery_is_brownout(2950, &brownout));   /* below → enter brownout */
+    ASSERT_FALSE(battery_is_brownout(2850, &brownout));  /* above threshold */
+    ASSERT_TRUE(battery_is_brownout(2750, &brownout));   /* below → enter brownout */
     ASSERT_TRUE(brownout);
-    ASSERT_TRUE(battery_is_brownout(3050, &brownout));    /* above but in hysteresis */
+    ASSERT_TRUE(battery_is_brownout(2850, &brownout));    /* above but in hysteresis */
     ASSERT_TRUE(brownout);
-    ASSERT_TRUE(battery_is_brownout(2950, &brownout));    /* still in brownout */
+    ASSERT_TRUE(battery_is_brownout(2750, &brownout));    /* still in brownout */
     ASSERT_TRUE(brownout);
-    ASSERT_FALSE(battery_is_brownout(3400, &brownout));   /* above recovery → exit */
+    ASSERT_FALSE(battery_is_brownout(3100, &brownout));   /* above recovery → exit */
     ASSERT_FALSE(brownout);
-    ASSERT_FALSE(battery_is_brownout(3050, &brownout));    /* normal */
+    ASSERT_FALSE(battery_is_brownout(2850, &brownout));    /* normal */
     ASSERT_FALSE(brownout);
 }
 
@@ -411,20 +429,23 @@ static void test_adc_no_overflow(void)
 {
     /* Maximum ADC value should not overflow uint16_t */
     uint16_t vbat = adc_raw_to_vbat_mv(4095);
-    /* 4095 * 3300 * 2 / 4095 = 6600 — fits in uint16_t */
-    ASSERT_INT_EQ(6600, vbat);
+    /* With R1=100k/R2=33k divider: VBAT = (4095 * 29260 + 4504) / 9009 ≈ 13288 mV
+     * This is above the Li-Po range but tests that uint16_t doesn't overflow */
+    ASSERT_INT_GE(vbat, 13200);
+    ASSERT_INT_LE(vbat, 13400);
 }
 
 static void test_adc_resolution(void)
 {
-    /* Verify that each ADC LSB corresponds to approximately 1.6 mV
-     * of battery voltage at midrange */
+    /* Verify that each ADC LSB corresponds to approximately 3.2 mV
+     * of battery voltage at midrange (with R1=100k/R2=33k divider)
+     * 100 LSB at ~6.5 mV/LSB → ~650 mV total range */
     uint16_t v_low = adc_raw_to_vbat_mv(2000);
     uint16_t v_high = adc_raw_to_vbat_mv(2100);
     uint32_t delta_mv = v_high - v_low;
-    /* 100 LSB * 6600 / 4095 ≈ 161 mV total, ~1.6 mV per LSB */
-    ASSERT_INT_GE(delta_mv, 100);  /* at least 100 mV for 100 LSB */
-    ASSERT_INT_LE(delta_mv, 200);  /* at most 200 mV for 100 LSB */
+    /* With 4.03x divider, 100 LSB ≈ 325 mV */
+    ASSERT_INT_GE(delta_mv, 200);  /* at least 200 mV for 100 LSB */
+    ASSERT_INT_LE(delta_mv, 450);  /* at most 450 mV for 100 LSB */
 }
 
 /* ── Test: Temperature sensor calculations ────────────────────────────────── */

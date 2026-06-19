@@ -37,7 +37,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_libapex test_sdr_dma test_spi0_isr
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_libapex test_sdr_dma test_spi0_isr test_st25r3916_init
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -59,6 +59,7 @@ help:
 	@echo "  test_libapex          - Build libapex userspace library unit tests"
 	@echo "  test_sdr_dma          - Build SDR DMA ring buffer unit tests"
 	@echo "  test_spi0_isr         - Build SPI0 ISR frame assembly unit tests"
+	@echo "  test_st25r3916_init   - Build ST25R3916 NFC controller init tests"
 	@echo "  run / check           - Build and run all userspace tests"
 	@echo "  clean                 - Remove build artifacts"
 	@echo ""
@@ -89,6 +90,9 @@ test_sdr_dma: test_sdr_dma.c
 test_spi0_isr: test_spi0_isr.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
+test_st25r3916_init: test_st25r3916_init.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
 run: $(USERSPACE_TARGETS)
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol
@@ -113,6 +117,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running SPI0 ISR Frame Assembly Unit Tests ==="
 	@./test_spi0_isr
+	@echo ""
+	@echo "=== Running ST25R3916 NFC Controller Init Unit Tests ==="
+	@./test_st25r3916_init
 	@echo ""
 
 check: run

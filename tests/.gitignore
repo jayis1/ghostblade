@@ -5,6 +5,9 @@ test_cc1101_config
 test_watchdog
 test_power_states
 test_libapex
+test_sdr_dma
+test_spi0_isr
+test_st25r3916_init
 
 # Build artifacts
 *.o
