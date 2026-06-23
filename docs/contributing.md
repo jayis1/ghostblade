@@ -29,6 +29,8 @@ GhostBlade is a portable dual-processor pentesting device:
 
 The RK3576 communicates with the RP2350B over a high-speed SPI bus, which carries command/response frames and SDR IQ data.
 
+For detailed architecture diagrams, data flow paths, and the full bus map, see [System Architecture](architecture.md).
+
 ## Repository Structure
 
 ```

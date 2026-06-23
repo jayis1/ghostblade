@@ -271,7 +271,7 @@ To add a new attribute, add a `DEVICE_ATTR_RO()` or `DEVICE_ATTR_RW()` definitio
 
 - **Issues**: Open an issue on [GitHub](https://github.com/jayis1/ghostblade/issues)
 - **Discussions**: Use [GitHub Discussions](https://github.com/jayis1/ghostblade/discussions)
-- **Documentation**: See the [`docs/`](../docs/) directory for detailed specifications
+- **Documentation**: See the [`docs/`](./) directory for detailed specifications
 
 ## License
 

@@ -155,6 +155,7 @@ sequenceDiagram
 ghostblade/
 ├── docs/
 │   ├── index.md                              # Documentation index (start here)
+│   ├── architecture.md                        # System architecture, block diagrams, data flows
 │   ├── getting-started.md                      # Dev environment setup & build guide
 │   ├── build-instructions.md                  # Detailed build instructions
 │   ├── flashing-guide.md                      # Firmware flashing & driver loading
@@ -305,6 +306,7 @@ ghostblade/
 | Document | Description |
 |----------|-------------|
 | [Docs Index](docs/index.md) | Central documentation hub with all links |
+| [System Architecture](docs/architecture.md) | Block diagrams, processor architecture, bus map, data flows, security model |
 | [Getting Started](docs/getting-started.md) | Dev environment setup, toolchain, first build |
 | [Build Instructions](docs/build-instructions.md) | Detailed build steps for firmware, driver, libapex |
 | [Flashing Guide](docs/flashing-guide.md) | Firmware flashing, driver loading, recovery |

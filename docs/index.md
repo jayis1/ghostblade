@@ -11,10 +11,11 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Flashing Guide](flashing-guide.md) | Firmware flashing via OpenOCD/picotool/USB, driver loading, recovery |
 | [Changelog](../CHANGELOG.md) | Project changelog and version history |
 
-## Reference
+## Architecture & Reference
 
-| Document | Description |
+|| Document | Description |
 |----------|-------------|
+| [System Architecture](architecture.md) | Block diagrams, processor architecture, bus map, data flows, security model |
 | [Sysfs Attributes](sysfs-attributes.md) | Driver telemetry attributes under `/sys/class/apex/apex_bridge0/` |
 | [SPI Protocol & Timing](spi-protocol-timing.md) | Bridge protocol frame format, timing diagrams, CRC spec |
 | [Power Tree](power-tree.md) | Power domain diagram, rail assignments, sequencing chart |
@@ -28,6 +29,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Hardware Test Procedures](hardware-test-procedures.md) | 17-section manufacturing test plan with pass/fail criteria |
 | [Hardware Contributor Guide](hardware-contributor-guide.md) | Schematic/PCB design rules, DRC constraints, review checklist |
 | [ESD Protection, Reset Circuits & Test Points](hardware-protection-and-testpoints.md) | TVS protection, reset timing, test point map, decoupling requirements |
+| [Pin Assignments](pin-assignments.md) | Cross-reference: schematic net, DTS GPIO, and firmware pin mappings |
 
 ## Contributing
 

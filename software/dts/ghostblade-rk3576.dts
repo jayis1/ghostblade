@@ -5,6 +5,21 @@
  *
  * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+ *
+ * Netlist Cross-Reference (verified against GhostBlade.mf):
+ *
+ * SPI0 Bridge:  GPIO1_A0=MOSI, GPIO1_A1=MISO, GPIO1_A2=SCK, GPIO1_A3=CSn
+ * Bridge IRQ:   GPIO1_B0=INT_REQ, GPIO1_B1=HOST_RDY, GPIO1_B2=MCU_RESET
+ * I2C1 Bridge:  I2C1_SDA, I2C1_SCL (RP2350B I2C0 slave @0x42)
+ * MIPI-CSI-2:   LMS7002M IQ data → RK3576 CSI RX0/RX1
+ * Wi-Fi IRQ:    GPIO1_D4 (MT7922 WIFI_IRQ)
+ * SDMMC0 CD:    GPIO0_D7 (card detect, active-low)
+ * BOOTSEL:      GPIO1_B4 (RP2350B BOOTSEL button)
+ * USER button:  GPIO1_B5 (user button)
+ * STATUS LED:   GPIO1_B6 (heartbeat)
+ * ACTIVITY LED: GPIO1_B7 (cpu0 load)
+ * SDR_RX LED:   GPIO1_C0 (SDR receive indicator)
+ * PWM0:         Display backlight
  */
 
 /dts-v1/;
@@ -288,6 +303,8 @@
 &i2c1 {
 	status = "okay";
 	clock-frequency = <400000>; /* 400 kHz Fast-Mode Plus */
+	pinctrl-0 = <&i2c1_pins>;
+	pinctrl-names = "default";
 
 	/* RP2350B I2C0 slave address for telemetry/monitoring */
 	rp2350b_i2c: mcu@42 {
@@ -363,7 +380,12 @@
 
 		partition@ac0000 {
 			label = "rootfs";
-			reg = <0xac0000 0x0>; /* Rest: Root filesystem */
+			/* Root filesystem occupies remaining eMMC space.
+			 * Size 0x0 is invalid for reg; the boot loader or
+			 * init script should expand this partition to fill
+			 * the disk. Use a placeholder size of 256 MB (0x10000000)
+			 * which will be resized by the flashing tool. */
+			reg = <0xac0000 0x10000000>; /* 256 MB (placeholder, expanded at flash time) */
 		};
 	};
 };
@@ -414,6 +436,27 @@
 	vqmmc-supply = <&vdd_logic>;
 	pinctrl-0 = <&sdmmc0_pins &sdmmc0_det_pin>;
 	pinctrl-names = "default";
+};
+
+/* ================================================================
+ * PWM0 — Display Backlight
+ * ================================================================ */
+
+&pwm0 {
+	status = "okay";
+	pinctrl-0 = <&pwm0_pins>;
+	pinctrl-names = "default";
+};
+
+/* ================================================================
+ * Watchdog — Hardware Watchdog Timer
+ * The RP2350B firmware uses a 5-second watchdog timeout.
+ * The RK3576 watchdog provides a last-resort reset for the SoC.
+ * ================================================================ */
+
+&wdt {
+	status = "okay";
+	timeout-sec = <10>;
 };
 
 /* ================================================================
@@ -598,5 +641,12 @@ display_backlight: backlight {
 		function = "gpio";
 		bias-pull-up;
 		input-enable;
+	};
+
+	pwm0_pins: pwm0-pins {
+		pins = "PWM0"; /* Backlight PWM */
+		function = "pwm0";
+		bias-disable;
+		drive-strength = <4>;
 	};
 };

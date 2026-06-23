@@ -132,11 +132,12 @@ Before opening a PR, verify:
 - [ ] ERC passes with zero violations
 - [ ] DRC passes with zero violations
 - [ ] Netlist is regenerated after schematic changes
-- [ ] DTS GPIO numbers match schematic net names
+- [ ] DTS GPIO numbers match schematic net names (see netlist cross-reference in `software/dts/ghostblade-rk3576.dts`)
 - [ ] New components have symbols, footprints, and 3D model references
 - [ ] Power domain changes are reflected in `docs/power-tree.md`
 - [ ] BOM is updated with new parts
 - [ ] `stats.json` is updated if line counts have changed
+- [ ] DTS pinctrl entries are added for any new GPIO-consuming nodes
 
 ---
 
@@ -170,3 +171,4 @@ hardware/
 - Open an issue at <https://github.com/jayis1/ghostblade/issues>
 - See [CONTRIBUTING.md](../CONTRIBUTING.md) for general contribution guidelines
 - See [getting-started.md](getting-started.md) for dev environment setup
+- See [architecture.md](architecture.md) for system block diagrams and data flow paths
