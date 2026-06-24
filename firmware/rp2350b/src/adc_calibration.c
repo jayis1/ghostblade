@@ -208,7 +208,7 @@ int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv)
     int32_t offset_mv;
     int32_t gain_x1000;
     struct adc_cal_record record;
-    uint8_t *flash_ptr;
+    const uint8_t *flash_ptr;
     uint32_t saved_irq;
 
     /* Validate input voltages */
@@ -343,6 +343,10 @@ int adc_cal_self_test(void)
     vref_raw = adc_read_channel_averaged(4, 16);
     vref_mv = (uint16_t)(((uint32_t)vref_raw * ADC_CAL_REF_MV +
                  ADC_CAL_FULL_SCALE / 2) / ADC_CAL_FULL_SCALE);
+    /* vref_mv is computed for diagnostic purposes but the validation
+     * below uses vref_raw directly, which is more reliable since it
+     * avoids compounding ADC gain/offset errors. */
+    (void)vref_mv;
     if (vref_raw < 1300 || vref_raw > 1700) {
         /* Internal reference out of expected range */
         return -1;

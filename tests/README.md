@@ -227,6 +227,46 @@ make test_st25r3916_init
 ./test_st25r3916_init
 ```
 
+### `test_adc_calibration.c` — ADC Calibration Unit Tests
+
+Unit tests for the ADC calibration module, including voltage reference calibration, temperature sensor linearization, and battery voltage conversion accuracy.
+
+### `test_peripheral_power.c` — Peripheral Power Sequencing Unit Tests
+
+Unit tests for the peripheral power sequencing module, including power rail enable/disable ordering, voltage rail verification, and power domain state transitions.
+
+### `test_cc1101_lms7002m.c` — CC1101 and LMS7002M Initialization Unit Tests
+
+Unit tests for the CC1101 sub-GHz radio configuration tables and the LMS7002M SDR transceiver driver, including PLL parameter calculation, SPI register encoding, gain distribution, and decimation selection.
+
+**Test coverage:**
+- CC1101 register address range validation (all three bands)
+- CC1101 configuration table duplicate address detection
+- CC1101 frequency register calculation (868, 433, 915 MHz ISM bands)
+- CC1101 SPI command byte encoding (read/write/burst/strobe)
+- CC1101 PKTCTRL0 settings (CRC enable, variable length)
+- CC1101 sync word consistency across bands
+- CC1101 FIFO threshold verification
+- CC1101 data rate calculation (~270.6 kbps at 868 MHz)
+- CC1101 configuration table completeness (essential registers present)
+- LMS7002M PLL parameter calculation (868 MHz, 2.4 GHz, 433 MHz, 100 MHz)
+- LMS7002M out-of-range frequency rejection
+- LMS7002M SPI address encoding (14-bit addressing, read/write command framing)
+- LMS7002M gain distribution (LNA + TIA + PGA across 0–116 dB range)
+- LMS7002M decimation factor selection (100 kSPS – 10 MSPS)
+
+**Build:**
+```bash
+make test_cc1101_lms7002m
+```
+
+**Run:**
+```bash
+./test_cc1101_lms7002m
+```
+
+**Result:** 315/315 assertions pass.
+
 ### `test_apex_bridge.c` — Kernel Module Test Harness
 
 In-kernel test harness for the `apex_bridge` SPI bridge driver. Runs as a loadable kernel module on the RK3576 target platform.

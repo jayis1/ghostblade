@@ -721,8 +721,20 @@ void cc1101_enter_sleep(void) {
  *
  * The first byte written should be the packet length (if using
  * variable packet length mode).
+ *
+ * The CC1101 TX FIFO is 64 bytes deep. If len exceeds the FIFO
+ * capacity, only 64 bytes are written to prevent overflow.
  */
 void cc1101_write_tx_fifo(const uint8_t *data, uint8_t len) {
+    /* CC1101 TX FIFO capacity is 64 bytes */
+    const uint8_t max_len = 64;
+
+    if (data == NULL || len == 0)
+        return;
+
+    if (len > max_len)
+        len = max_len;
+
     apex_cc1101_write_burst(0x3F, data, len);  /* TX FIFO register at 0x3F */
 }
 
@@ -734,9 +746,23 @@ void cc1101_write_tx_fifo(const uint8_t *data, uint8_t len) {
  * cc1101_read_rx_fifo — Read data from CC1101 RX FIFO
  *
  * @data: Buffer to store received data
- * @len:  Number of bytes to read
+ * @len:  Number of bytes to read (on entry), actual bytes read (on return)
+ *
+ * The CC1101 RX FIFO is 64 bytes deep. If the requested read length
+ * exceeds 64 bytes, it is clamped to 64 to prevent overflow.
+ * The actual number of bytes available can be checked with
+ * cc1101_get_rx_bytes() before calling this function.
  */
 void cc1101_read_rx_fifo(uint8_t *data, uint8_t len) {
+    /* CC1101 RX FIFO capacity is 64 bytes */
+    const uint8_t max_len = 64;
+
+    if (data == NULL || len == 0)
+        return;
+
+    if (len > max_len)
+        len = max_len;
+
     apex_cc1101_read_burst(0x3F, data, len);  /* RX FIFO register at 0x3F */
 }
 

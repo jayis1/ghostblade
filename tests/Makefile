@@ -14,6 +14,10 @@
 #   test_sdr_dma          — SDR DMA ring buffer logic unit tests
 #   test_spi0_isr         — SPI0 ISR frame assembly state machine unit tests
 #   test_apex_bridge      — Kernel module test harness (for target)
+#   test_st25r3916_init   — ST25R3916 NFC controller init unit tests
+#   test_adc_calibration  — ADC calibration unit tests
+#   test_peripheral_power — Peripheral power sequencing unit tests
+#   test_cc1101_lms7002m  — CC1101 and LMS7002M initialization unit tests
 #   all                   — Build all userspace tests
 #   clean                 — Remove build artifacts
 #
@@ -37,7 +41,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_libapex test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_libapex test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -62,6 +66,7 @@ help:
 	@echo "  test_st25r3916_init   - Build ST25R3916 NFC controller init tests"
 	@echo "  test_adc_calibration  - Build ADC calibration unit tests"
 	@echo "  test_peripheral_power - Build peripheral power sequencing unit tests"
+	@echo "  test_cc1101_lms7002m - Build CC1101 and LMS7002M init unit tests"
 	@echo "  run / check           - Build and run all userspace tests"
 	@echo "  clean                 - Remove build artifacts"
 	@echo ""
@@ -101,6 +106,9 @@ test_adc_calibration: test_adc_calibration.c
 test_peripheral_power: test_peripheral_power.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
+test_cc1101_lms7002m: test_cc1101_lms7002m.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
 run: $(USERSPACE_TARGETS)
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol
@@ -134,6 +142,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running Peripheral Power Sequencing Unit Tests ==="
 	@./test_peripheral_power
+	@echo ""
+	@echo "=== Running CC1101 and LMS7002M Initialization Unit Tests ==="
+	@./test_cc1101_lms7002m
 	@echo ""
 
 check: run

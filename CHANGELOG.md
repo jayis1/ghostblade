@@ -13,6 +13,20 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Added
 
+- LMS7002M SDR transceiver driver for RP2350B (`firmware/rp2350b/src/lms7002m_driver.c`, `include/lms7002m_driver.h`)
+  - PLL frequency synthesis with VCO_L (1.88–3.72 GHz) and VCO_H (3.72–5.8 GHz) range selection
+  - RX/TX gain distribution across LNA (0–73 dB), TIA (12 dB fixed), and PGA (0–31 dB) stages
+  - ADC/DAC sample rate configuration with decimation/interpolation (100 kSPS – 10 MSPS)
+  - DC offset and IQ imbalance calibration routines
+  - SPI register access (single and burst modes) with 4-byte command framing
+  - FIFO-based IQ data streaming with configurable watermark
+  - Channel selection (A/B) for MIMO operation
+- CC1101 and LMS7002M initialization unit tests (`tests/test_cc1101_lms7002m.c`, 315 assertions)
+  - CC1101: register address range, duplicate detection, frequency calculation, SPI encoding, PKTCTRL0, sync words, FIFO threshold, data rate, table completeness
+  - LMS7002M: PLL calculation (868/433/915/2400 MHz), out-of-range rejection, SPI encoding, gain distribution, decimation selection
+- Fixed LMS7002M PLL parameter calculation to use correct VCO range (1.88–5.8 GHz covering both VCO_L and VCO_H)
+- Fixed LMS7002M NINT range to 8-bit (1–255) per LMS7002M datasheet
+
 - Top-level `Makefile` for convenient project-wide builds (firmware, driver, libapex, tests, DTS)
 - DTS Makefile (`software/dts/Makefile`) for compiling and validating device tree sources
 - Unit tests for battery monitor, CC1101 configuration, watchdog timer, and power state machine

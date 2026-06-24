@@ -25,7 +25,7 @@
 #include "spi_protocol.h"
 
 /* Forward declarations from other modules */
-extern void watchdog_feed(void);
+extern void watchdog_kick(void);
 
 /* ── Memory barriers for lock-free ring buffer ────────────────────────────
  *

@@ -498,10 +498,18 @@ int st25r3916_transact(uint8_t cmd,
     uint8_t irq1 = 0, irq2 = 0, irq3 = 0;
     uint32_t timeout_count;
 
+    /* ST25R3916 FIFO depth is 512 bytes */
+    const uint16_t ST25R3916_FIFO_SIZE = 512;
+
     /* Parameter validation */
     if ((tx_len > 0 && tx_data == NULL) ||
         (rx_len != NULL && *rx_len > 0 && rx_data == NULL)) {
         return -3;
+    }
+
+    /* Clamp TX length to FIFO size to prevent overflow */
+    if (tx_len > ST25R3916_FIFO_SIZE) {
+        tx_len = ST25R3916_FIFO_SIZE;
     }
 
     /* Default timeout: 100 ms → ~150000 nop iterations at 150 MHz */
@@ -572,7 +580,9 @@ int st25r3916_transact(uint8_t cmd,
         rx_bytes = (uint16_t)st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES1) |
                    ((uint16_t)st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES2) << 8);
 
-        /* Limit to buffer size */
+        /* Clamp to FIFO size and caller-provided buffer size */
+        if (rx_bytes > ST25R3916_FIFO_SIZE)
+            rx_bytes = ST25R3916_FIFO_SIZE;
         if (rx_bytes > *rx_len)
             rx_bytes = *rx_len;
 

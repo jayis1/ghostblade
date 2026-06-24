@@ -56,7 +56,7 @@
 #include <linux/pm.h>
 #include <linux/scatterlist.h>
 #include <linux/dma-mapping.h>
-#include <linux/highmem.h>
+#include <linux/string.h>
 
 #include "apex_bridge_regs.h"
 
@@ -554,8 +554,9 @@ static int apex_bridge_release(struct inode *inode, struct file *filp)
     atomic_set(&dev->open_count, 0);
 
     /* Securely wipe cached telemetry data on close to prevent
-     * information leakage between user sessions. */
-    memset(&dev->last_telem, 0, sizeof(dev->last_telem));
+     * information leakage between user sessions. Use memzero_explicit()
+     * to prevent the compiler from optimizing away the wipe. */
+    memzero_explicit(&dev->last_telem, sizeof(dev->last_telem));
 
     filp->private_data = NULL;
 
@@ -1383,11 +1384,16 @@ static ssize_t sg_buf_count_show(struct device *dev,
                                    struct device_attribute *attr, char *buf)
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint32_t buf_count;
 
     if (!adev)
         return -ENODEV;
 
-    return sprintf(buf, "%u\n", adev->sg_engine.buf_count);
+    mutex_lock(&adev->sg_engine.sg_lock);
+    buf_count = adev->sg_engine.buf_count;
+    mutex_unlock(&adev->sg_engine.sg_lock);
+
+    return sprintf(buf, "%u\n", buf_count);
 }
 static DEVICE_ATTR_RO(sg_buf_count);
 
@@ -1395,11 +1401,16 @@ static ssize_t sg_buf_size_show(struct device *dev,
                                   struct device_attribute *attr, char *buf)
 {
     struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint32_t buf_size;
 
     if (!adev)
         return -ENODEV;
 
-    return sprintf(buf, "%u\n", adev->sg_engine.buf_size);
+    mutex_lock(&adev->sg_engine.sg_lock);
+    buf_size = adev->sg_engine.buf_size;
+    mutex_unlock(&adev->sg_engine.sg_lock);
+
+    return sprintf(buf, "%u\n", buf_size);
 }
 static DEVICE_ATTR_RO(sg_buf_size);
 
@@ -1815,13 +1826,16 @@ static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
         kfree(rx);
     }
 
-    /* Free DMA-coherent buffers (wipe sensitive data first) */
+    /* Free DMA-coherent buffers (wipe sensitive data before freeing to prevent
+     * leakage of IQ samples or sensor data). Use memzero_explicit() instead of
+     * memset() to prevent the compiler from optimizing away the wipe — the
+     * compiler can prove the memory is about to be freed and remove the
+     * memset, leaving sensitive data in DMA-coherent memory that may be
+     * reallocated to another driver. */
     if (eng->bufs) {
         for (i = 0; i < eng->buf_count; i++) {
             if (eng->bufs[i].dma_virt) {
-                /* Securely wipe DMA buffer before freeing to prevent
-                 * leakage of IQ samples or sensor data. */
-                memset(eng->bufs[i].dma_virt, 0, eng->buf_size);
+                memzero_explicit(eng->bufs[i].dma_virt, eng->buf_size);
                 dma_free_coherent(&dev->spi->dev, eng->buf_size,
                                   eng->bufs[i].dma_virt,
                                   eng->bufs[i].dma_phys);
@@ -1852,9 +1866,13 @@ static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
  * allowing userspace to determine which buffers contain valid data.
  *
  * Uses dma_mmap_coherent() for proper mapping of DMA-coherent memory.
- * This avoids calling virt_to_page() on DMA-coherent allocations, which
- * is incorrect on non-cache-coherent architectures (e.g., ARM with
- * writecombine mappings) and can lead to cache aliasing issues.
+ * This is the correct Linux kernel API for mmap-ing DMA-coherent buffers
+ * and works correctly on both cache-coherent and non-cache-coherent
+ * architectures (including ARM with writecombine mappings).
+ *
+ * Previously used remap_pfn_range() with __phys_to_pfn() which is
+ * incorrect for DMA-coherent allocations and can cause cache aliasing
+ * issues on ARM platforms.
  */
 static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
 {
@@ -1881,47 +1899,15 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
      */
     vma->vm_flags |= VM_DONTEXPAND | VM_IO;
 
-    /* Use remap_pfn_range() per buffer to map DMA-coherent memory.
-     * This avoids the dangerous practice of modifying vma->vm_start/vm_end
-     * which can corrupt the kernel VMA subsystem on certain kernel versions.
-     * Each buffer is mapped as a separate page range within the VMA.
-     */
-    vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-
-    {
-        uint32_t i;
-        unsigned long vma_offset = 0;
-
-        for (i = 0; i < eng->buf_count && vma_offset < vsize; i++) {
-            unsigned long buf_vsize = eng->buf_size;
-            unsigned long phys_addr;
-            unsigned long pfn;
-            unsigned long map_size;
-
-            /* Truncate last buffer mapping if vsize doesn't cover all buffers */
-            if (vma_offset + buf_vsize > vsize)
-                buf_vsize = vsize - vma_offset;
-
-            /* Round mapping size up to page boundary */
-            map_size = PAGE_ALIGN(buf_vsize);
-            if (vma_offset + map_size > vsize)
-                map_size = vsize - vma_offset;
-
-            /* Get physical address of DMA buffer and map it */
-            phys_addr = eng->bufs[i].dma_phys;
-            pfn = __phys_to_pfn(phys_addr);
-
-            ret = remap_pfn_range(vma,
-                                  vma->vm_start + vma_offset,
-                                  pfn,
-                                  map_size,
-                                  vma->vm_page_prot);
-            if (ret)
-                return ret;
-
-            vma_offset += buf_vsize;
-        }
-    }
+    /* Use dma_mmap_coherent() for proper DMA buffer mapping.
+     * This handles cache coherency correctly on all architectures,
+     * including ARM with writecombine mappings. It replaces the
+     * previous per-buffer remap_pfn_range() approach which could
+     * cause cache aliasing issues on non-cache-coherent systems. */
+    ret = dma_mmap_coherent(&dev->spi->dev, vma, eng->bufs[0].dma_virt,
+                             eng->bufs[0].dma_phys, psize);
+    if (ret)
+        return ret;
 
     return 0;
 }

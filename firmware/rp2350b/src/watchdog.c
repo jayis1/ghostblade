@@ -165,7 +165,7 @@ int watchdog_disable(void) {
     if (*wd_ctrl & WD_CTRL_ENABLE) {
         /* Cannot disable — set maximum timeout instead */
         volatile uint32_t *wd_load = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_LOAD);
-        *wd_load = 0xFFFFFFFEUL;  /* Maximum timeout (~4.3 seconds) */
+        *wd_load = 0xFFFFFFFEUL;  /* Maximum timeout (~71.6 minutes at 1 µs/tick) */
         return -1;
     }
 
