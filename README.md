@@ -174,8 +174,11 @@ ghostblade/
 │   │   └── component-selection-and-schematics.md  # BOM, netlists, decoupling
 │   ├── phase3-pcb/
 │   │   └── pcb-blueprints-and-layout.md       # Stackup, impedance, DFM
-│   └── phase4-software/
+│   ├── phase4-software/
 │       └── boot-process-and-mmio.md           # Boot chain, register maps
+│   ├── power-tree-diagram.md                 # Detailed power tree with current budgets
+│   ├── power-sequencing-timing.md            # Cold boot, warm reset, sleep/wake timing
+│   └── reset-circuit-design.md               # Reset circuits for all processors
 ├── firmware/
 │   └── rp2350b/
 │       ├── CMakeLists.txt                      # CMake build (Pico SDK)
@@ -317,6 +320,9 @@ ghostblade/
 | [FAQ & Troubleshooting](docs/faq-troubleshooting.md) | Common issues and solutions |
 | [Pin Assignments](docs/pin-assignments.md) | Cross-reference: schematic, DTS, and firmware pin mappings |
 | [Power Tree](docs/power-tree.md) | Power domain diagram, rail assignments, sequencing |
+| [Power Tree Diagram](docs/power-tree-diagram.md) | Detailed power tree with current budgets, ESD, test points |
+| [Power Sequencing Timing](docs/power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing |
+| [Reset Circuit Design](docs/reset-circuit-design.md) | Reset circuits for all processors and peripherals |
 | [SPI Protocol & Timing](docs/spi-protocol-timing.md) | Bridge protocol, frame format, timing diagrams |
 | [Sysfs Attributes](docs/sysfs-attributes.md) | Driver telemetry attributes, usage examples |
 | [Hardware Test Procedures](docs/hardware-test-procedures.md) | 17-section manufacturing test plan |

@@ -4,7 +4,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 
 ## Quick Start
 
-|| Document | Description |
+| Document | Description |
 |----------|-------------|
 | [Getting Started](getting-started.md) | Dev environment setup, toolchain installation, first build |
 | [Build Instructions](build-instructions.md) | Detailed build steps for firmware, driver, libapex, Python bindings |
@@ -13,17 +13,18 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 
 ## Architecture & Reference
 
-|| Document | Description |
+| Document | Description |
 |----------|-------------|
 | [System Architecture](architecture.md) | Block diagrams, processor architecture, bus map, data flows, security model |
+| [Memory Map & Registers](memory-map.md) | Register reference, SPI bridge protocol, DMA, ioctl interfaces |
 | [Sysfs Attributes](sysfs-attributes.md) | Driver telemetry attributes under `/sys/class/apex/apex_bridge0/` |
 | [SPI Protocol & Timing](spi-protocol-timing.md) | Bridge protocol frame format, timing diagrams, CRC spec |
-|| [Power Tree](power-tree.md) | Power domain diagram, rail assignments, sequencing chart |
-|| [Power Tree Diagram](power-tree-diagram.md) | Detailed power tree with current budgets, ESD, test points |
-|| [Power Sequencing Timing](power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing charts |
-|| [Reset Circuit Design](reset-circuit-design.md) | Reset circuits for all processors and peripherals |
-|| [FAQ & Troubleshooting](faq-troubleshooting.md) | Common issues, error codes, and solutions |
-|| [Pin Assignments](pin-assignments.md) | Cross-reference: schematic, DTS, and firmware pin mappings |
+| [Power Tree](power-tree.md) | Power domain diagram, rail assignments, sequencing chart |
+| [Power Tree Diagram](power-tree-diagram.md) | Detailed power tree with current budgets, ESD, test points |
+| [Power Sequencing Timing](power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing charts |
+| [Reset Circuit Design](reset-circuit-design.md) | Reset circuits for all processors and peripherals |
+| [FAQ & Troubleshooting](faq-troubleshooting.md) | Common issues, error codes, and solutions |
+| [Pin Assignments](pin-assignments.md) | Cross-reference: schematic, DTS, and firmware pin mappings |
 
 ## Hardware
 
@@ -31,10 +32,10 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 |----------|-------------|
 | [Hardware Bring-Up Checklist](hardware-bringup-checklist.md) | Step-by-step board bring-up with expected values and pass/fail criteria |
 | [Hardware Test Procedures](hardware-test-procedures.md) | 17-section manufacturing test plan with pass/fail criteria |
-|| [Hardware Contributor Guide](hardware-contributor-guide.md) | Schematic/PCB design rules, DRC constraints, review checklist |
-|| [ESD Protection, Reset Circuits & Test Points](hardware-protection-and-testpoints.md) | TVS protection, reset timing, test point map, decoupling requirements |
-|| [Reset Circuit Design](reset-circuit-design.md) | Detailed reset circuit schematics for all processors and peripherals |
-|| [Pin Assignments](pin-assignments.md) | Cross-reference: schematic net, DTS GPIO, and firmware pin mappings |
+| [Hardware Contributor Guide](hardware-contributor-guide.md) | Schematic/PCB design rules, DRC constraints, review checklist |
+| [ESD Protection, Reset Circuits & Test Points](hardware-protection-and-testpoints.md) | TVS protection, reset timing, test point map, decoupling requirements |
+| [Reset Circuit Design](reset-circuit-design.md) | Detailed reset circuit schematics for all processors and peripherals |
+| [Pin Assignments](pin-assignments.md) | Cross-reference: schematic net, DTS GPIO, and firmware pin mappings |
 
 ## Contributing
 

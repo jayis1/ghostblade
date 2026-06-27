@@ -2,13 +2,13 @@
   "C": 21459,
   "headers": 3411,
   "dts": 1200,
-  "docs": 9018,
+  "docs": 9423,
   "python": 315,
   "shell": 639,
   "makefiles": 424,
   "cmake": 148,
   "bom_components": 66,
-  "total_files": 117,
-  "total_lines": 36614,
+  "total_files": 120,
+  "total_lines": 37019,
   "last_updated": "2026-06-27"
 }
