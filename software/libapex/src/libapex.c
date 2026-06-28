@@ -533,7 +533,6 @@ int apex_sdr_read_iq(apex_handle_t handle, uint8_t *buf,
 
 int apex_nfc_poll(apex_handle_t handle, uint32_t timeout_ms) {
     apex_nfc_transact_t txn;
-    uint8_t response[2];
 
     if (!handle || handle->fd < 0)
         return APEX_ERR_INVALID_ARG;

@@ -10,6 +10,7 @@
 #   test_cc1101_config    — CC1101 register configuration unit tests
 #   test_watchdog         — Watchdog timer unit tests
 #   test_power_states     — Power state machine unit tests
+#   test_sleep_wake       — Sleep/wake state machine unit tests
 #   test_libapex          — libapex userspace library unit tests
 #   test_sdr_dma          — SDR DMA ring buffer logic unit tests
 #   test_spi0_isr         — SPI0 ISR frame assembly state machine unit tests
@@ -41,7 +42,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_libapex test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -60,6 +61,7 @@ help:
 	@echo "  test_cc1101_config    - Build CC1101 configuration unit tests"
 	@echo "  test_watchdog         - Build watchdog timer unit tests"
 	@echo "  test_power_states     - Build power state machine unit tests"
+	@echo "  test_sleep_wake       - Build sleep/wake state machine unit tests"
 	@echo "  test_libapex          - Build libapex userspace library unit tests"
 	@echo "  test_sdr_dma          - Build SDR DMA ring buffer unit tests"
 	@echo "  test_spi0_isr         - Build SPI0 ISR frame assembly unit tests"
@@ -86,6 +88,9 @@ test_watchdog: test_watchdog.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 test_power_states: test_power_states.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+test_sleep_wake: test_sleep_wake.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 test_libapex: test_libapex.c
@@ -124,6 +129,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running Power State Machine Unit Tests ==="
 	@./test_power_states
+	@echo ""
+	@echo "=== Running Sleep/Wake State Machine Unit Tests ==="
+	@./test_sleep_wake
 	@echo ""
 	@echo "=== Running libapex Unit Tests ==="
 	@./test_libapex

@@ -75,3 +75,13 @@ tests/test_sdr_dma
 tests/test_spi0_isr
 tests/test_libapex
 tests/test_st25r3916_init
+tests/test_adc_calibration
+tests/test_peripheral_power
+tests/test_cc1101_lms7002m
+
+# Coverage / analysis
+*.gcda
+*.gcno
+*.gcov
+coverage/
+lint/

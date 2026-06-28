@@ -210,12 +210,24 @@ sudo cp ghostblade-rk3576.dtb /boot/dtbs/$(uname -r)/rockchip/
 ### Apply as Overlay (if supported)
 
 ```bash
-# Compile overlay
-dtc -I dts -O dtb -@ -o apex_bridge_overlay.dtbo software/dts/apex_bridge_overlay.dts
+# Compile overlays
+dtc -I dts -O dtb -@ -o ghostblade-sdr-overlay.dtbo software/dts/ghostblade-sdr-overlay.dts
+dtc -I dts -O dtb -@ -o ghostblade-nfc-overlay.dtbo software/dts/ghostblade-nfc-overlay.dts
+dtc -I dts -O dtb -@ -o ghostblade-wifi-overlay.dtbo software/dts/ghostblade-wifi-overlay.dts
+dtc -I dts -O dtb -@ -o ghostblade-options.dtbo software/dts/ghostblade-options.dts
 
 # Apply at runtime
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/apex_bridge
-sudo cp apex_bridge_overlay.dtbo /sys/kernel/config/device-tree/overlays/apex_bridge/dtbo
+sudo mkdir -p /sys/kernel/config/device-tree/overlays/sdr
+sudo cp ghostblade-sdr-overlay.dtbo /sys/kernel/config/device-tree/overlays/sdr/dtbo
+
+sudo mkdir -p /sys/kernel/config/device-tree/overlays/nfc
+sudo cp ghostblade-nfc-overlay.dtbo /sys/kernel/config/device-tree/overlays/nfc/dtbo
+
+sudo mkdir -p /sys/kernel/config/device-tree/overlays/wifi
+sudo cp ghostblade-wifi-overlay.dtbo /sys/kernel/config/device-tree/overlays/wifi/dtbo
+
+sudo mkdir -p /sys/kernel/config/device-tree/overlays/options
+sudo cp ghostblade-options.dtbo /sys/kernel/config/device-tree/overlays/options/dtbo
 ```
 
 ---

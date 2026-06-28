@@ -190,6 +190,7 @@ Key cross-reference checks:
 | STATUS_LED | GPIO1_B6 (14) | — | NET_GPIO_STATUS | ✓ |
 | ACTIVITY_LED | GPIO1_B7 (15) | — | NET_GPIO_ACTIVITY | ✓ |
 | SDR_RX_LED | GPIO1_C0 (16) | — | NET_GPIO_SDR_RX | ✓ |
+| WIFI_IRQ | GPIO1_D4 (20) | — | NET_WIFI_IRQ | ✓ |
 
 > **Note:** DTS GPIO numbers use the Linux GPIO numbering scheme
 > (GPIO1_A0 = bank 1 offset 0 = 8 + 0 = 8, GPIO1_B0 = 8 + 8 = 16
@@ -197,6 +198,17 @@ Key cross-reference checks:
 > in `ghostblade-rk3576.dts` must use the same pin names as the
 > schematic netlist.
 
+### Device Tree Overlay Cross-Reference
+
+The following DTS overlays provide runtime-configurable parameters:
+
+| Overlay | Controls | Key Properties |
+|---------|----------|----------------|
+| `ghostblade-sdr-overlay.dts` | LMS7002M SDR | `apex,rx-freq-hz`, `apex,rx-bw-hz`, `apex,sample-rate` |
+| `ghostblade-nfc-overlay.dts` | ST25R3916 NFC | `apex,protocol`, `apex,tx-power`, `apex,poll-interval-ms` |
+| `ghostblade-wifi-overlay.dts` | MT7922 Wi-Fi 6E | `apex,regulatory-domain`, `apex,operating-mode`, `apex,monitor-mode` |
+| `ghostblade-options.dts` | GPS, LNA, BT | UART2 GPS, GPIO LNA enable, UART3 Bluetooth |
+
 ---
 
-*Last updated: 2026-06-27. Generated from GhostBlade.mf, board_pins.h, and ghostblade-rk3576.dts.*
+*Last updated: 2026-06-28. Generated from GhostBlade.mf, board_pins.h, and ghostblade-rk3576.dts.*

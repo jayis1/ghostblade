@@ -580,7 +580,7 @@ int lms7002m_calibrate_dc(struct lms7002m_driver *drv,
         return LMS7002M_ERR_SPI;
 
     drv->cal.dc_offset_i = (int16_t)((result_h << 8) | ((result_l >> 8) & 0xFF));
-    drv->cal.dc_offset_q = (int16_t)(result_l & 0xFF);
+    drv->cal.dc_offset_q = (int16_t)((result_l & 0xFF) - ((result_l & 0x80) ? 0x100 : 0));
     drv->cal.dc_complete = true;
 
     /* Clear calibration enable bit */
@@ -715,12 +715,15 @@ int lms7002m_write_fifo(struct lms7002m_driver *drv,
  * Public API — SPI Register Access
  * ======================================================================== */
 
-int lms7002m_spi_read(struct lms7002m_driver *drv, uint16_t addr)
+int lms7002m_spi_read(const struct lms7002m_driver *drv, uint16_t addr)
 {
     uint32_t cmd, resp;
 
     if (!drv)
         return LMS7002M_ERR_INVALID_PARAM;
+
+    if (!drv->initialized)
+        return LMS7002M_ERR_NOT_INITIALIZED;
 
     cmd = lms7002m_cmd_read(addr);
     resp = lms7002m_platform_spi_xfer(cmd);

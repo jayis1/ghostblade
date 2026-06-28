@@ -439,6 +439,9 @@ void battery_monitor_read(uint16_t *vbat_mv, int16_t *temp_dc10,
  * Returns: true if brownout condition is active
  */
 bool battery_is_brownout(uint16_t vbat_mv, bool *brownout_active) {
+    if (!brownout_active)
+        return false;
+
     if (*brownout_active) {
         /* Brownout is active — clear only when voltage recovers with hysteresis */
         if (vbat_mv >= BROWNOUT_THRESHOLD_MV + BROWNOUT_HYSTERESIS_MV)

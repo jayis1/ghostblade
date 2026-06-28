@@ -1,0 +1,281 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Overlay — GhostBlade Wi-Fi 6E (MT7922) Configuration
+ * Project NullSpectre
+ *
+ * This overlay configures the MediaTek MT7922 Wi-Fi 6E + Bluetooth 5.3
+ * combo module on the GhostBlade board. The MT7922 is connected via
+ * PCIe (Wi-Fi) and UART (Bluetooth HCI) to the RK3576.
+ *
+ * Apply this overlay when the MT7922 module is populated (it is a default
+ * on-board component, but this overlay can be used to change configuration
+ * parameters like Wi-Fi regulatory domain, Bluetooth UART speed, or
+ * power management settings without reflashing the base DTB).
+ *
+ * Usage:
+ *   dtc -I dts -O dtb -@ -o ghostblade-wifi-overlay.dtbo ghostblade-wifi-overlay.dts
+ *   sudo mkdir -p /sys/kernel/config/device-tree/overlays/wifi
+ *   sudo cp ghostblade-wifi-overlay.dtbo /sys/kernel/config/device-tree/overlays/wifi/dtbo
+ *
+ * To remove:
+ *   sudo rmdir /sys/kernel/config/device-tree/overlays/wifi
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	compatible = "ghostblade,nullspectre", "rockchip,rk3576";
+
+	/*
+	 * Fragment 0: PCIe configuration for MT7922 Wi-Fi 6E
+	 *
+	 * The MT7922 Wi-Fi module uses the RK3576's PCIe 2.1 lane 0.
+	 * The mt7921e driver (compatible with MT7922) handles the Wi-Fi
+	 * interface. This fragment configures the PCIe endpoint and
+	 * associates the board's Wi-Fi antenna GPIO controls.
+	 */
+	fragment@0 {
+		target-path = "/";
+
+		__overlay__ {
+			wifi_config: wifi-config {
+				compatible = "apex,wifi-config";
+
+				/*
+				 * Wi-Fi regulatory domain (ISO 3166-1 alpha-2 country code).
+				 * Default: US (United States)
+				 * Common alternatives: EU (European Union), JP (Japan),
+				 *                     AU (Australia), CN (China)
+				 * The driver applies regulatory power and channel restrictions
+				 * based on this code.
+				 */
+				apex,regulatory-domain = "US";
+
+				/*
+				 * Wi-Fi band enable mask.
+				 * Bit 0: 2.4 GHz band
+				 * Bit 1: 5 GHz band
+				 * Bit 2: 6 GHz band (Wi-Fi 6E)
+				 * Default: all bands enabled (0x07)
+				 */
+				apex,wifi-bands = <0x07>;
+
+				/*
+				 * Maximum transmit power in dBm for each band.
+				 * These are regulatory maximums; actual TX power may
+				 * be lower based on regulatory domain and channel.
+				 *   2.4 GHz: typically 20-30 dBm (100 mW - 1 W)
+				 *   5 GHz: typically 20-30 dBm
+				 *   6 GHz: typically 14-27 dBm (Wi-Fi 6E standard power)
+				 */
+				apex,max-tx-power-2ghz-dbm = <30>;   /* 30 dBm = 1 W */
+				apex,max-tx-power-5ghz-dbm = <30>;    /* 30 dBm = 1 W */
+				apex,max-tx-power-6ghz-dbm = <27>;    /* 27 dBm = 500 mW */
+
+				/*
+				 * Wi-Fi power save mode.
+				 * 0 = Disabled (always active, lowest latency)
+				 * 1 = Legacy power save (DTIM-based)
+				 * 2 = U-APSD (Unscheduled Automatic Power Save Delivery)
+				 * Default: 1 (legacy PS for pentesting balance)
+				 */
+				apex,power-save-mode = <1>;
+
+				/*
+				 * Channel bandwidth preference.
+				 * 0 = 20 MHz only
+				 * 1 = 40 MHz
+				 * 2 = 80 MHz
+				 * 3 = 160 MHz (Wi-Fi 6/6E only)
+				 * Default: 2 (80 MHz, good balance of throughput/range)
+				 */
+				apex,channel-bandwidth = <2>;
+
+				/*
+				 * Monitor mode support.
+				 * 0 = Disabled (managed/client mode only)
+				 * 1 = Enabled (allows raw 802.11 frame capture for SDR overlay)
+				 *
+				 * When enabled, the MT7922 can be placed in monitor mode
+				 * via `iw dev wlan0 set type monitor` for packet capture
+				 * and RF analysis. This is essential for pentesting.
+				 */
+				apex,monitor-mode = <1>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 1: Bluetooth UART configuration
+	 *
+	 * The MT7922's Bluetooth core is connected via UART1 (serial)
+	 * with hardware flow control (CTS/RTS).
+	 */
+	fragment@1 {
+		target = <&uart1>;
+
+		__overlay__ {
+			status = "okay";
+
+			bluetooth: bluetooth {
+				compatible = "mediatek,mt7921-bt";
+				max-speed = <3000000>;  /* 3 Mbps HCI UART */
+
+				/*
+				 * BT_REG_ON: GPIO-controlled Bluetooth module power.
+				 * Active-high: drives the MT7922's BT_REG_ON pin.
+				 * Must be asserted before HCI initialization.
+				 */
+				shutdown-gpios = <&gpio1 22 GPIO_ACTIVE_HIGH>;
+				                   /* GPIO1_D6 mapped to BT_REG_ON */
+
+				/*
+				 * Device wake GPIO (BT_HOST_WAKE).
+				 * The MT7922 asserts this to wake the host from sleep.
+				 */
+				device-wakeup-gpios = <&gpio1 23 GPIO_ACTIVE_HIGH>;
+				                       /* GPIO1_D7 mapped to BT_HOST_WAKE */
+
+				/*
+				 * Host wake GPIO (BT_DEV_WAKE).
+				 * The host asserts this to wake the MT7922.
+				 */
+				host-wakeup-gpios = <&gpio1 24 GPIO_ACTIVE_HIGH>;
+				                    /* GPIO1_D0 mapped to BT_DEV_WAKE */
+
+				/*
+				 * Bluetooth power management.
+				 * 0 = Always on (lowest latency, highest power)
+				 * 1 = Auto-sleep (balanced)
+				 * 2 = Deep sleep (lowest power, highest wake latency)
+				 */
+				apex,bt-power-mode = <1>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 2: Wi-Fi module power regulator
+	 *
+	 * The MT7922 Wi-Fi module is powered by VDD_3V3_WIFI (from PMIC)
+	 * with a GPIO-controlled enable for power sequencing.
+	 */
+	fragment@2 {
+		target-path = "/";
+
+		__overlay__ {
+			wifi_vcc: wifi-vcc-regulator {
+				compatible = "regulator-fixed";
+				regulator-name = "vdd_3v3_wifi";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+
+				/*
+				 * Wi-Fi module enable GPIO.
+				 * Must be asserted after PCIe and UART are ready.
+				 */
+				gpio = <&gpio1 25 GPIO_ACTIVE_HIGH>;
+				         /* GPIO1_D1 mapped to WIFI_EN */
+
+				enable-active-high;
+
+				/*
+				 * Power sequencing delays.
+				 * The MT7922 requires:
+				 *   - 10 ms after VDD stable before PCIe link training
+				 *   - 5 ms between BT_REG_ON assertion and HCI commands
+				 */
+				startup-delay-us = <10000>;
+				off-on-delay-us = <5000>;
+
+				vin-supply = <&vdd_3v3>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 3: PCIe lane 0 configuration for Wi-Fi
+	 *
+	 * The RK3576's PCIe 2.1 controller connects to the MT7922.
+	 * This fragment enables the PCIe controller and configures
+	 * the link parameters.
+	 */
+	fragment@3 {
+		target = <&pcie0>;
+
+		__overlay__ {
+			status = "okay";
+
+			/*
+			 * PCIe link speed and width.
+			 * The MT7922 supports PCIe Gen 2 (5 GT/s) x1.
+			 * The RK3576 can negotiate down to Gen 1 (2.5 GT/s)
+			 * for power savings.
+			 */
+			max-link-speed = <2>;  /* PCIe Gen 2 */
+			num-lanes = <1>;
+
+			/*
+			 * PCIe reset GPIO.
+			 * Active-low PERST# signal for the MT7922.
+			 */
+			reset-gpios = <&gpio1 26 GPIO_ACTIVE_LOW>;
+			                  /* GPIO1_D2 mapped to WIFI_PERST# */
+
+			/*
+			 * PCIe link power management.
+			 * ASPM L1.2 is supported for maximum power savings
+			 * during idle periods.
+			 */
+			aspm-no-l0s = <1>;
+			aspm-l1-substates = <1>;
+		};
+	};
+
+	/*
+	 * Fragment 4: Wi-Fi/BT coexistence configuration
+	 *
+	 * MT7922 has built-in Wi-Fi/BT coexistence (coex) via
+	 * three-wire or serialized interface. This fragment configures
+	 * coex parameters for optimal performance during pentesting.
+	 */
+	fragment@4 {
+		target-path = "/";
+
+		__overlay__ {
+			wifi_bt_coex: wifi-bt-coex {
+				compatible = "apex,wifi-bt-coex";
+
+				/*
+				 * Coexistence mode.
+				 * 0 = Disabled (no coex, Wi-Fi and BT operate independently)
+				 * 1 = Three-wire coex (recommended for pentesting)
+				 * 2 = Serialized coex (higher latency, lower power)
+				 *
+				 * During active SDR streaming, coex mode 1 provides the
+				 * best balance of Wi-Fi throughput and BT responsiveness.
+				 */
+				apex,coex-mode = <1>;
+
+				/*
+				 * Wi-Fi priority during coex.
+				 * 0 = Equal priority
+				 * 1 = Wi-Fi high priority (recommended for SDR streaming)
+				 * 2 = BT high priority
+				 */
+				apex,wifi-priority = <1>;
+
+				/*
+				 * Coexistence GPIO (optional).
+				 * If the MT7922's coex interface uses GPIO signals,
+				 * specify them here. For three-wire coex on MT7922,
+				 * these are internal to the module and not exposed.
+				 */
+			};
+		};
+	};
+};

@@ -345,6 +345,10 @@ int main(void)
                 /* Mark brownout in watchdog scratch register so we
                  * can detect it after the inevitable reset */
                 watchdog_mark_brownout();
+                /* Also set the brownout flag in protocol handler */
+                spi_protocol_set_brownout(true);
+            } else if (!brownout_active) {
+                spi_protocol_set_brownout(false);
             }
         }
 

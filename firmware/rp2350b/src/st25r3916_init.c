@@ -36,6 +36,10 @@
  * @val:  Value to write
  */
 void st25r3916_write_reg(uint8_t addr, uint8_t val) {
+    /* Validate register address range — Space A is 0x00-0x3F.
+     * Out-of-range addresses could trigger undefined SPI behavior. */
+    if (addr > 0x3F)
+        return;
     apex_nfc_write_register(addr, val);
 }
 
@@ -43,9 +47,14 @@ void st25r3916_write_reg(uint8_t addr, uint8_t val) {
  * st25r3916_read_reg — Read a single ST25R3916 register
  *
  * @addr: Register address
- * Returns: Register value
+ * Returns: Register value (0xFF if address is out of range)
  */
 uint8_t st25r3916_read_reg(uint8_t addr) {
+    /* Validate register address range — Space A is 0x00-0x3F.
+     * Return 0xFF (all bits set) for invalid addresses to avoid
+     * undefined SPI behavior. */
+    if (addr > 0x3F)
+        return 0xFF;
     return apex_nfc_read_register(addr);
 }
 
@@ -499,7 +508,7 @@ int st25r3916_transact(uint8_t cmd,
     uint32_t timeout_count;
 
     /* ST25R3916 FIFO depth is 512 bytes */
-    const uint16_t ST25R3916_FIFO_SIZE = 512;
+#define ST25R3916_FIFO_SIZE_VAL 512
 
     /* Parameter validation */
     if ((tx_len > 0 && tx_data == NULL) ||
@@ -508,8 +517,8 @@ int st25r3916_transact(uint8_t cmd,
     }
 
     /* Clamp TX length to FIFO size to prevent overflow */
-    if (tx_len > ST25R3916_FIFO_SIZE) {
-        tx_len = ST25R3916_FIFO_SIZE;
+    if (tx_len > ST25R3916_FIFO_SIZE_VAL) {
+        tx_len = ST25R3916_FIFO_SIZE_VAL;
     }
 
     /* Default timeout: 100 ms → ~150000 nop iterations at 150 MHz */
@@ -576,13 +585,16 @@ int st25r3916_transact(uint8_t cmd,
     /* Step 6: Read RX data from FIFO */
     if (rx_data != NULL && rx_len != NULL) {
         uint16_t rx_bytes;
-        /* Read number of received bytes */
-        rx_bytes = (uint16_t)st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES1) |
-                   ((uint16_t)st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES2) << 8);
+        /* Read number of received bytes.
+         * Note: st25r3916_read_reg() returns uint8_t and cannot signal
+         * errors. The register values are masked to 8 bits to avoid
+         * any sign-extension issues. */
+        rx_bytes = (uint16_t)(st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES1) & 0xFF);
+        rx_bytes |= (uint16_t)((st25r3916_read_reg(ST25R3916_REG_NUM_RX_BYTES2) & 0xFF) << 8);
 
         /* Clamp to FIFO size and caller-provided buffer size */
-        if (rx_bytes > ST25R3916_FIFO_SIZE)
-            rx_bytes = ST25R3916_FIFO_SIZE;
+        if (rx_bytes > ST25R3916_FIFO_SIZE_VAL)
+            rx_bytes = ST25R3916_FIFO_SIZE_VAL;
         if (rx_bytes > *rx_len)
             rx_bytes = *rx_len;
 

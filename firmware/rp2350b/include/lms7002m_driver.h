@@ -436,7 +436,7 @@ int lms7002m_calculate_pll_params(uint64_t freq_hz, uint32_t ref_clk,
  *
  * Returns: Register value, or negative error code.
  */
-int lms7002m_spi_read(struct lms7002m_driver *drv, uint16_t addr);
+int lms7002m_spi_read(const struct lms7002m_driver *drv, uint16_t addr);
 
 /**
  * lms7002m_spi_write — Write a 16-bit register over SPI.

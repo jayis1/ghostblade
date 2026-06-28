@@ -203,7 +203,8 @@ ghostblade/
 │   │   ├── ghostblade-bom.csv                  # Full BOM (80+ parts, MPN, price)
 │   │   └── ghostblade-bom-interactive.html     # Interactive HTML BOM
 │   ├── drc/
-│   │   └── ghostblade-drc-rules.kicad_drc     # KiCad custom DRC rules (IPC Class 3)
+│   │   ├── ghostblade-drc-rules.kicad_drc     # KiCad custom DRC rules (IPC Class 3)
+│   │   └── ghostblade-erc-rules.kicad_erc     # KiCad custom ERC rules
 │   └── kicad/
 │       ├── ghostblade.kicad_pro                # KiCad 8 project file
 │       ├── ghostblade.net                      # Schematic netlist (150+ nets)
@@ -237,6 +238,7 @@ ghostblade/
 │       ├── ghostblade-options.dts              # Optional hardware overlay
 │       ├── ghostblade-sdr-overlay.dts          # SDR MIPI-CSI-2 + DMA overlay
 │       ├── ghostblade-nfc-overlay.dts          # NFC (ST25R3916) configuration overlay
+│       ├── ghostblade-wifi-overlay.dts          # Wi-Fi 6E (MT7922) configuration overlay
 │       └── Makefile                            # DTS compile & validate targets
 │   └── toolchain.conf                          # Cross-compilation toolchain setup
 ├── tests/

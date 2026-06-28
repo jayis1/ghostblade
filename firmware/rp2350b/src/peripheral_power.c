@@ -171,9 +171,13 @@ int peripheral_power_on(enum power_rail_id rail)
         return -1;
     }
 
-    /* Already on? */
-    if (pp_state.states[rail] == POWER_RAIL_STABLE ||
-        pp_state.states[rail] == POWER_RAIL_RAMPING) {
+    /* Already on? Idempotent: return success if already stable */
+    if (pp_state.states[rail] == POWER_RAIL_STABLE) {
+        return 0;
+    }
+
+    /* Rail is currently ramping — treat as busy/error */
+    if (pp_state.states[rail] == POWER_RAIL_RAMPING) {
         return -1;
     }
 
@@ -201,9 +205,9 @@ int peripheral_power_off(enum power_rail_id rail)
         return -1;
     }
 
-    /* Already off? */
+    /* Already off? Idempotent: return success */
     if (pp_state.states[rail] == POWER_RAIL_OFF) {
-        return -1;
+        return 0;
     }
 
     /* Drive the GPIO to disable the rail */

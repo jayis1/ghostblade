@@ -494,12 +494,103 @@ graph TB
 
 ---
 
+## SDR Receive Data-Path Timing
+
+The following diagram shows the timing of a single SDR IQ capture request
+from the userspace application through to data delivery.
+
+```mermaid
+sequenceDiagram
+    participant APP as Userspace App
+    participant DRV as apex_bridge Driver
+    participant MCU as RP2350B MCU
+    participant SDR as LMS7002M SDR
+    participant ANT as Antenna
+
+    APP->>DRV: ioctl(APEX_IOC_SDR_TUNE, &tune)
+    DRV->>MCU: SPI0 CMD_SDR_TUNE (freq, bw, gain)
+    MCU->>SDR: SPI1 write LMS7002M registers
+    SDR-->>MCU: PLL lock status (SPI1 read)
+    MCU-->>DRV: SPI0 response (PLL locked, status OK)
+    DRV-->>APP: ioctl returns 0
+
+    APP->>DRV: ioctl(APEX_IOC_SDR_STREAM, 1=start)
+    DRV->>MCU: SPI0 CMD_SDR_STREAM (start)
+    MCU->>SDR: Enable MIPI-CSI-2 output
+
+    loop IQ Streaming
+        ANT->>SDR: RF signal
+        SDR->>MCU: MIPI-CSI-2 IQ samples
+        MCU->>MCU: DMA → ring buffer
+        MCU->>DRV: INT_REQ IRQ (data ready)
+        DRV->>MCU: SPI0 read (SG DMA or read())
+        MCU-->>DRV: CRC-framed IQ data
+        DRV->>APP: read() returns IQ data
+    end
+
+    APP->>DRV: ioctl(APEX_IOC_SDR_STREAM, 0=stop)
+    DRV->>MCU: SPI0 CMD_SDR_STREAM (stop)
+    MCU->>SDR: Disable MIPI-CSI-2 output
+    MCU-->>DRV: ACK
+    DRV-->>APP: ioctl returns 0
+```
+
+### SPI Bridge Transaction Timing
+
+The following diagram details the SPI0 bridge protocol timing at the
+electrical level. All timing values are worst-case at 50 MHz SPI clock.
+
+```
+                    SPI Frame Transaction (CMD + Response)
+    ┌──────────────────────────────────────────────────────────────┐
+    │ Host (RK3576)                                                │
+    │   ──┐   ┌─────────────────────────────────────┐   ┌───────  │
+    │  CSn └───┘  (asserted for entire transaction)  └───┘         │
+    │                                                              │
+    │   ──┐ ┌─┐ ┌─┐ ┌─┐      ┌─┐ ┌─┐ ┌─┐ ┌─┐                    │
+    │  SCK └─┘ └─┘ └─┘ └─ ... └─┘ └─┘ └─┘ └─┘                    │
+    │                                                              │
+    │   ──┐ ┌────────────────┐ ┌──────┐ ┌────────────────┐        │
+    │MOSI └─┘ 0xAA (sync)     └─┘ cmd  └─┘ payload ...     └─ ...  │
+    │                                                              │
+    │   ──────────────────────┐ ┌──────┐ ┌────────────────┐        │
+    │MISO                ┌────┘ ┘ resp └─┘ payload ...     └─ ...  │
+    │                                                              │
+    │         ┌───┐                                              ┌──│
+    │INT_REQ  ┘   └──────────────────────────────────────────────┘  │
+    │         ^       ^                                               │
+    │    MCU asserts   Host polls after                                │
+    │    when data     INT_REQ goes high                               │
+    └──────────────────────────────────────────────────────────────┘
+
+    Timing Parameters:
+    ┌──────────────────────────┬────────────┬──────────────┐
+    │ Parameter                │ Min        │ Max          │
+    ├──────────────────────────┼────────────┼──────────────┤
+    │ CSn setup to SCK        │ 10 ns      │ —            │
+    │ CSn hold after SCK       │ 10 ns      │ —            │
+    │ SCK period (50 MHz)     │ 20 ns      │ —            │
+    │ MOSI setup to SCK rise  │ 5 ns       │ —            │
+    │ MISO valid after SCK    │ —          │ 8 ns         │
+    │ INT_REQ to CSn (poll)   │ —          │ 1 μs         │
+    │ Inter-frame gap          │ 500 ns     │ —            │
+    │ HOST_RDY to MCU response │ 2 μs      │ 100 μs       │
+    └──────────────────────────┴────────────┴──────────────┘
+```
+
+---
+
 ## Related Documents
 
 - [SPI Protocol & Timing](spi-protocol-timing.md) — Frame format, timing diagrams, CRC specification
 - [Power Tree](power-tree.md) — Detailed power rail specifications and sequencing
+- [Power Sequencing & Timing](power-sequencing-timing.md) — PMIC rail sequencing and timing constraints
+- [Reset Circuit Design](reset-circuit-design.md) — Hardware reset architecture and timing
 - [Pin Assignments](pin-assignments.md) — Cross-reference: schematic net → DTS GPIO → firmware pin
+- [Memory Map](memory-map.md) — RK3576 and RP2350B memory maps
 - [Sysfs Attributes](sysfs-attributes.md) — Driver telemetry attributes and usage
 - [Flashing Guide](flashing-guide.md) — How to flash firmware and load drivers
 - [Hardware Test Procedures](hardware-test-procedures.md) — Manufacturing test plan
+- [Hardware Bring-Up Checklist](hardware-bringup-checklist.md) — Step-by-step board bring-up
 - [Getting Started](getting-started.md) — Development environment setup
+- [Contributing Guide](contributing.md) — How to contribute to GhostBlade

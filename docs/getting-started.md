@@ -63,6 +63,8 @@ ghostblade/
 │       ├── ghostblade-rk3576.dts
 │       ├── ghostblade-options.dts
 │       ├── ghostblade-sdr-overlay.dts
+│       ├── ghostblade-nfc-overlay.dts
+│       ├── ghostblade-wifi-overlay.dts
 │       └── Makefile              # DTS compile & validate targets
 ├── hardware/
 │   ├── kicad/                    # KiCad schematic & PCB files

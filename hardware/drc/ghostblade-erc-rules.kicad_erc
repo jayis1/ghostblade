@@ -1,0 +1,34 @@
+(version 1)
+# GhostBlade ERC Rules — Project NullSpectre
+# These rules supplement the KiCad schematic electrical rules checker.
+# Import via: Schematic Editor → Inspect → ERC → Options → Rules
+
+(rule "GhostBlade: SPI bus pins must have pull-ups on CS lines"
+    (condition "A.net_class == 'Default' && A.pin_type == 'CS'")
+    (constraint pull_up (min 1))
+)
+
+(rule "GhostBlade: No floating inputs on active ICs"
+    (condition "A.symbol.in_bom && A.pin_type == 'input' && A.pin_name != 'NC'")
+    (constraint connection (min 1))
+)
+
+(rule "GhostBlade: Power pins must connect to power net"
+    (condition "A.pin_type == 'power_in'")
+    (constraint net_class (allowed 'Power'))
+)
+
+(rule "GhostBlade: Differential pair nets must have matching lengths"
+    (condition "A.net_name =~ 'MIPI_CSI_*' || A.net_name =~ 'DSI_*' || A.net_name =~ 'PCIE_*' || A.net_name =~ 'DDR_*'")
+    (constraint length (min 0.5mm))
+)
+
+(rule "GhostBlade: RF net impedance"
+    (condition "A.net_class == 'RF'")
+    (constraint impedance (min 45) (max 55))
+)
+
+(rule "GhostBlade: All decoupling caps within 2mm of IC power pin"
+    (condition "A.symbol.reference =~ 'C' && A.symbol.value =~ 'uF' && A.net_class == 'Power'")
+    (constraint clearance (max 2mm))
+)

@@ -287,6 +287,7 @@ static struct {
     bool     cc1101_tx_active;     /* CC1101 transmitting */
     bool     nfc_active;           /* NFC polling active */
     bool     nfc_tag_present;      /* NFC tag detected */
+    bool     brownout_active;      /* Brownout condition detected */
     uint32_t uptime_ms;            /* System uptime counter */
     int16_t  last_rssi_dbm_x10;   /* Last SDR RSSI (signed dBm × 10) */
     uint16_t last_vbat_mv;         /* Last battery voltage */
@@ -371,11 +372,13 @@ static void write_le64(uint8_t *p, uint64_t v) {
 static void int_req_assert(void) {
     volatile uint32_t *gpio_out = (volatile uint32_t *)(RP2350B_GPIO_BASE + 0x00);
     *gpio_out &= ~(1UL << PIN_INT_REQ);  /* Active-low: drive LOW */
+    dmb();  /* Ensure GPIO write is visible before subsequent operations */
 }
 
 static void int_req_deassert(void) {
     volatile uint32_t *gpio_out = (volatile uint32_t *)(RP2350B_GPIO_BASE + 0x00);
     *gpio_out |= (1UL << PIN_INT_REQ);   /* Active-low: drive HIGH */
+    dmb();  /* Ensure GPIO write is visible before subsequent operations */
 }
 
 /* ========================================================================
@@ -633,6 +636,13 @@ static int validate_frame_header(void) {
         return -2;
     }
 
+    /* Check reserved field is zero — non-zero indicates protocol version
+     * mismatch or corrupted frame. */
+    if (hdr->reserved != 0) {
+        rx_ctx.frames_crc_error++;
+        return -3;
+    }
+
     /* Check header CRC-64 */
     uint64_t expected_crc = read_le64(&rx_ctx.hdr_buf[8]);
     uint64_t actual_crc = crc64_compute(rx_ctx.hdr_buf, 8);
@@ -734,6 +744,11 @@ void spi_protocol_send_telemetry(void) {
     if (device_state.cc1101_tx_active)  telem.flags |= TELEM_FLAG_CC1101_TX;
     if (device_state.nfc_active)        telem.flags |= TELEM_FLAG_NFC_ACTIVE;
     if (device_state.nfc_tag_present)   telem.flags |= TELEM_FLAG_NFC_TAG_PRESENT;
+    if (device_state.brownout_active)   telem.flags |= TELEM_FLAG_LOW_BATTERY;
+    /* Brownout/battery flag is set by the main loop via
+     * spi_protocol_update_telemetry() when battery_is_brownout()
+     * triggers — not here, since the flag depends on voltage
+     * thresholds that are evaluated in the main loop. */
     telem.uptime_ms = device_state.uptime_ms;
 
     build_response_frame(CMD_TELEMETRY, (const uint8_t *)&telem,
@@ -925,6 +940,9 @@ struct proto_stats_report {
 };
 
 void spi_protocol_get_stats(struct proto_stats_report *report) {
+    if (!report)
+        return;
+
     report->frames_received    = rx_ctx.frames_received;
     report->frames_crc_error   = rx_ctx.frames_crc_error;
     report->frames_sync_error  = rx_ctx.frames_sync_error;
@@ -970,4 +988,15 @@ void spi_protocol_update_telemetry(uint16_t rssi_dbm_x10,
  */
 void spi_protocol_tick(void) {
     device_state.uptime_ms++;
+}
+
+/**
+ * spi_protocol_set_brownout — Set or clear the brownout flag
+ *
+ * Called from the main loop when battery_is_brownout() changes state.
+ * The brownout flag is included in the telemetry flags bitmap sent
+ * to the RK3576 host so the kernel driver can react appropriately.
+ */
+void spi_protocol_set_brownout(bool active) {
+    device_state.brownout_active = active;
 }

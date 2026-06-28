@@ -14,7 +14,7 @@
  * timeout. The main loop must call watchdog_feed() periodically
  * (at least once per timeout interval) to prevent a reset.
  *
- * Timeout: 500 ms (plenty of headroom for 150 MHz MCU)
+ * Timeout: 5 seconds (matching WATCHDOG_TIMEOUT_MS)
  * Feed interval: Every main loop iteration (expected < 100 ms)
  *
  * Reference: RP2350B Datasheet, Section 4.7 (Watchdog)
@@ -67,14 +67,14 @@
  * The RP2350B watchdog counts down from the LOAD value at a rate
  * of 1 tick per μs (1 MHz clock derived from clk_ref).
  *
- * For a 500 ms timeout:
- *   LOAD = 500,000 (500 ms × 1,000,000 ticks/sec)
+ * For a 5-second timeout (matching WATCHDOG_TIMEOUT_MS in watchdog.h):
+ *   LOAD = 5,000,000 (5,000 ms × 1,000,000 ticks/sec)
  *
  * The watchdog generates a chip reset when the counter reaches 0.
  * Writing to WD_LOAD reloads the counter (feeding the watchdog).
  */
 
-#define WD_TIMEOUT_US          500000UL    /* 500 ms timeout */
+#define WD_TIMEOUT_US          5000000UL    /* 5 seconds timeout */
 #define WD_MAGIC_VALUE         0xA7EC1001UL  /* Magic: "APEX1001" encoded in valid hex */
 /* 0xA7EC1001 chosen as recognizable magic: reads as "A7ECl001" pattern */
 
@@ -85,7 +85,7 @@
 /**
  * watchdog_init — Initialize and enable the hardware watchdog timer
  *
- * Configures the watchdog with a 500 ms timeout. The main loop
+ * Configures the watchdog with a 5-second timeout. The main loop
  * must call watchdog_feed() at least once per timeout interval.
  *
  * If the watchdog was previously triggered (check reason register),
@@ -133,7 +133,7 @@ bool watchdog_init(void) {
 /**
  * watchdog_feed — Reset the watchdog counter (kick the dog)
  *
- * Must be called at least once per timeout interval (500 ms).
+ * Must be called at least once per timeout interval (5 seconds).
  * Typically called at the start of each main loop iteration.
  *
  * Writing to WD_LOAD reloads the counter to the timeout value.
@@ -141,6 +141,17 @@ bool watchdog_init(void) {
 void watchdog_feed(void) {
     volatile uint32_t *wd_load = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_LOAD);
     *wd_load = WD_TIMEOUT_US;
+}
+
+/**
+ * watchdog_kick — Alias for watchdog_feed (reset the watchdog counter)
+ *
+ * Provided for compatibility — the main loop and initialization code
+ * reference watchdog_kick(), while the hardware-level function is
+ * watchdog_feed(). Both are equivalent.
+ */
+void watchdog_kick(void) {
+    watchdog_feed();
 }
 
 /**

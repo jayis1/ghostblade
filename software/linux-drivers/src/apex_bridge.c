@@ -57,6 +57,14 @@
 #include <linux/scatterlist.h>
 #include <linux/dma-mapping.h>
 #include <linux/string.h>
+#include <linux/version.h>
+
+/* Kernel 6.4+ changed class_create() to not require THIS_MODULE */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+#define apex_class_create(name) class_create(name)
+#else
+#define apex_class_create(name) class_create(THIS_MODULE, name)
+#endif
 
 #include "apex_bridge_regs.h"
 
@@ -103,6 +111,8 @@ struct apex_bridge_dev {
     struct apex_telemetry last_telem; /* Last telemetry snapshot */
     unsigned long      flags;         /* Driver state flags */
     atomic_t           spi_err_count; /* Cumulative SPI error count */
+    atomic_t           brownout_count; /* Cumulative brownout event count */
+    atomic_t           brownout_prev_flag; /* Previous LOW_BATTERY flag state for edge detection */
     u8                 saved_spi_mode;       /* Saved SPI mode for PM resume */
     u32                saved_spi_max_speed_hz; /* Saved SPI speed for PM resume */
     struct apex_sg_engine sg_engine;  /* Scatter-gather DMA engine */
@@ -114,6 +124,7 @@ static struct apex_bridge_dev *apex_dev;
 #define APEX_FLAG_MCU_READY     0
 #define APEX_FLAG_MCU_RESET    1
 #define APEX_FLAG_SPI_ERROR    2
+#define APEX_FLAG_LOW_BATTERY  3
 
 /* ========================================================================
  * CRC Computation (Kernel Implementation)
@@ -468,9 +479,21 @@ static void apex_rx_work_handler(struct work_struct *work)
     switch (cmd) {
     case APEX_CMD_TELEMETRY:
         if (payload_len == sizeof(struct apex_telemetry)) {
+            uint16_t new_flags;
             spin_lock(&dev->rx_lock);
             memcpy(&dev->last_telem, payload,
                    sizeof(struct apex_telemetry));
+            new_flags = le16_to_cpu(dev->last_telem.flags);
+            /* Update driver flags from MCU telemetry */
+            if (new_flags & APEX_FLAG_LOW_BATTERY) {
+                set_bit(APEX_FLAG_LOW_BATTERY, &dev->flags);
+                /* Edge detection: count brownout transitions (0→1) */
+                if (atomic_xchg(&dev->brownout_prev_flag, 1) == 0)
+                    atomic_inc(&dev->brownout_count);
+            } else {
+                clear_bit(APEX_FLAG_LOW_BATTERY, &dev->flags);
+                atomic_set(&dev->brownout_prev_flag, 0);
+            }
             /* Also push to RX FIFO for user-space read() */
             kfifo_in(&dev->rx_fifo, payload, payload_len);
             spin_unlock(&dev->rx_lock);
@@ -1276,13 +1299,26 @@ static ssize_t brownout_count_show(struct device *dev,
     if (!adev)
         return -ENODEV;
 
-    /* Brownout is tracked via the MCU_FLAGS_LOW_BATTERY bit in telemetry.
-     * Count the number of times we've observed the flag newly set. */
-    return sprintf(buf, "%u\n",
-                   (adev->last_telem.flags & cpu_to_le16(APEX_FLAG_LOW_BATTERY))
-                   ? 1 : 0);
+    /* Return cumulative brownout event count (rising-edge transitions
+     * of the LOW_BATTERY flag). Each time the flag transitions from
+     * cleared to set, the counter increments. This gives a persistent
+     * count of how many brownout events have occurred since boot. */
+    return sprintf(buf, "%u\n", atomic_read(&adev->brownout_count));
 }
 static DEVICE_ATTR_RO(brownout_count);
+
+static ssize_t low_battery_show(struct device *dev,
+                                  struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+
+    if (!adev)
+        return -ENODEV;
+
+    return sprintf(buf, "%u\n",
+                   test_bit(APEX_FLAG_LOW_BATTERY, &adev->flags) ? 1 : 0);
+}
+static DEVICE_ATTR_RO(low_battery);
 
 /* ── Scatter-Gather DMA sysfs attributes ──────────────────────────────────── */
 
@@ -1434,6 +1470,7 @@ static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_rx_fifo_count.attr,
     &dev_attr_tx_fifo_count.attr,
     &dev_attr_brownout_count.attr,
+    &dev_attr_low_battery.attr,
     /* Scatter-gather DMA attributes */
     &dev_attr_sg_state.attr,
     &dev_attr_sg_total_bytes.attr,
@@ -1939,6 +1976,8 @@ static int apex_bridge_probe(struct spi_device *spi)
 
     atomic_set(&dev->open_count, 0);
     atomic_set(&dev->spi_err_count, 0);
+    atomic_set(&dev->brownout_count, 0);
+    atomic_set(&dev->brownout_prev_flag, 0);
     mutex_init(&dev->lock);
     spin_lock_init(&dev->rx_lock);
     spin_lock_init(&dev->tx_lock);
@@ -2013,7 +2052,7 @@ static int apex_bridge_probe(struct spi_device *spi)
     }
 
     /* Create device class */
-    dev->class = class_create(THIS_MODULE, CLASS_NAME);
+    dev->class = apex_class_create(CLASS_NAME);
     if (IS_ERR(dev->class)) {
         ret = PTR_ERR(dev->class);
         dev_err(&spi->dev, "Failed to create class: %d\n", ret);

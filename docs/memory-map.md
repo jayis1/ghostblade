@@ -408,6 +408,7 @@ and `PIN_ANT_SEL1` (PIN_3).
 | CC1101 SPI pins | (shared SPI1) | `PIN_CC_SPI_*` | `ghostblade-sdr-overlay.dts`, `board_pins.h` |
 | NFC SPI2 pins | `spi2_pins` | `PIN_NFC_SPI_*` | `ghostblade-nfc-overlay.dts`, `board_pins.h` |
 | Antenna select | `ant_sel_pins` | `PIN_ANT_SEL0/1` | `ghostblade-rk3576.dts`, `board_pins.h` |
+| Wi-Fi SDIO IRQ | `sdio_irq_pin` | — | `ghostblade-rk3576.dts`, `ghostblade-wifi-overlay.dts` |
 
 For a complete pin-by-pin cross-reference, see [Pin Assignments](pin-assignments.md).
 

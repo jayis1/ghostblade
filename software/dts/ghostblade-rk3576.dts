@@ -649,4 +649,28 @@ display_backlight: backlight {
 		bias-disable;
 		drive-strength = <4>;
 	};
+
+	/* Antenna switch GPIOs (PE42422 SP4T via RP2350B)
+	 * These are documented for cross-reference; actual control
+	 * is via the RP2350B SPI bridge (APEX_IOC_ANT_SELECT ioctl).
+	 * GPIO1_C1 (LNA_EN) is used in the SDR overlay for external
+	 * LNA power control.
+	 */
+	ant_sel_pins: ant-sel-pins {
+		pins = "GPIO1_C1"; /* LNA_EN / ANT_SEL0 control */
+		function = "gpio";
+		drive-strength = <4>;
+		bias-pull-down;
+	};
+
+	/* RP2350B UART debug pins (for reference; not connected
+	 * to RK3576 UART — the MCU UART is brought out to test
+	 * points TP23/TP24 on the board).
+	 */
+	mcu_debug_pins: mcu-debug-pins {
+		pins = "GPIO1_C3"; /* MCU_DEBUG_EN: enables RP2350B UART output */
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
 };

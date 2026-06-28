@@ -148,10 +148,17 @@ static void enter_deep_sleep(void) {
  * exit_deep_sleep — Restore full operation from SLEEP_DEEP
  *
  * Restores clocks and relaunches Core 1.
+ * Also kicks the watchdog since deep sleep may have consumed
+ * significant time from the watchdog timeout window.
  */
 static void exit_deep_sleep(void) {
     /* Restore clocks (same as exit_light_sleep) */
     exit_light_sleep();
+
+    /* Kick the watchdog immediately after restoring clocks.
+     * The watchdog timer may have counted down significantly
+     * during the deep sleep period. */
+    watchdog_kick();
 
     /* Relaunch Core 1 — it will reinitialize SDR DMA.
      * The SDR DMA module handles its own re-init on Core 1

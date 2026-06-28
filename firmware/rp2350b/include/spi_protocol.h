@@ -15,6 +15,7 @@
 #define SPI_PROTOCOL_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /* ── SPI protocol constants ──────────────────────────────────────────────── */
 
@@ -157,5 +158,16 @@ void spi_protocol_update_telemetry(uint16_t rssi_dbm_x10,
  * iteration.
  */
 void spi_protocol_tick(void);
+
+/**
+ * spi_protocol_set_brownout — Set or clear the brownout detection flag
+ *
+ * When active, the LOW_BATTERY flag is set in the telemetry bitmap
+ * sent to the RK3576 host, allowing the kernel driver to react
+ * appropriately (e.g., initiate graceful shutdown).
+ *
+ * @active: true if brownout condition detected, false if cleared
+ */
+void spi_protocol_set_brownout(bool active);
 
 #endif /* SPI_PROTOCOL_H */
