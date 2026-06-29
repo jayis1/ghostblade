@@ -168,9 +168,11 @@ static void crc64_init(void) {
         }
         crc64_table[i] = crc;
     }
-    crc64_initialized = 1;
-    /* Ensure table is visible to all contexts (ISR may use CRC) */
+    /* Ensure table is visible to all contexts (ISR may use CRC)
+     * before setting the initialized flag. DMB guarantees that
+     * all prior writes are globally visible before subsequent writes. */
     __asm__ volatile ("dmb" ::: "memory");
+    crc64_initialized = 1;
 }
 
 static uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
@@ -199,8 +201,9 @@ static void crc32_init(void) {
         }
         crc32_table[i] = crc;
     }
-    crc32_initialized = 1;
+    /* Ensure table is visible before setting flag (ISR may use CRC) */
     __asm__ volatile ("dmb" ::: "memory");
+    crc32_initialized = 1;
 }
 
 static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {

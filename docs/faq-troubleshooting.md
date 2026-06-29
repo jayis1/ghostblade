@@ -173,6 +173,7 @@ timeouts:
 3. Verify CC1101 PA_TABLE register configuration (0x3E7: PATABLE)
 4. Ensure CC1101 is in TX mode (MARCSTATE register should read 0x13)
 5. Check VDD_3V3 rail current (CC1101 draws up to 30mA in TX)
+6. Apply the CC1101 device tree overlay for default configuration: `dtc -I dts -O dtb -@ -o ghostblade-cc1101-overlay.dtbo ghostblade-cc1101-overlay.dts`
 
 ### ST25R3916 NFC not detecting tags
 

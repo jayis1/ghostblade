@@ -215,24 +215,23 @@ int lms7002m_calculate_pll_params(uint64_t freq_hz, uint32_t ref_clk,
      * The LMS7002M has two VCO ranges:
      *   VCO_L: 1.88 – 3.72 GHz (lower frequencies)
      *   VCO_H: 3.72 – 5.8 GHz (higher frequencies)
-     * The chip automatically selects the correct VCO band. */
+     * The chip automatically selects the correct VCO band.
+     *
+     * Divider values: 1, 2, 4, 8, 16, 32 (powers of 2 only). */
+    *div_out = 0;
     for (div = 1; div <= 32; div *= 2) {
         vco_freq = freq_hz * div;
 
         if (vco_freq >= VCO_MIN_HZ && vco_freq <= VCO_MAX_HZ) {
-            break;
-        }
-
-        /* Handle very low frequencies that need the largest divider */
-        if (div == 32) {
-            vco_freq = freq_hz * 32;
-            if (vco_freq < VCO_MIN_HZ)
-                return LMS7002M_ERR_INVALID_PARAM;
+            *div_out = (uint8_t)div;
             break;
         }
     }
 
-    *div_out = (uint8_t)div;
+    /* If no valid VCO frequency found, the requested frequency is
+     * outside the synthesizable range. */
+    if (*div_out == 0)
+        return LMS7002M_ERR_INVALID_PARAM;
 
     /* Determine VCO band */
     /* vco_high is set if VCO frequency >= 3.72 GHz threshold */
@@ -753,6 +752,10 @@ int lms7002m_spi_read_burst(struct lms7002m_driver *drv, uint16_t start_addr,
     if (!drv || !buf)
         return LMS7002M_ERR_INVALID_PARAM;
 
+    /* Prevent register address from wrapping around 16-bit space */
+    if (num_regs == 0 || (uint32_t)start_addr + num_regs > 0x4000)
+        return LMS7002M_ERR_INVALID_PARAM;
+
     for (i = 0; i < num_regs; i++) {
         int val = lms7002m_spi_read(drv, start_addr + i);
         if (val < 0)
@@ -770,6 +773,10 @@ int lms7002m_spi_write_burst(struct lms7002m_driver *drv, uint16_t start_addr,
     int ret;
 
     if (!drv || !data)
+        return LMS7002M_ERR_INVALID_PARAM;
+
+    /* Prevent register address from wrapping around 16-bit space */
+    if (num_regs == 0 || (uint32_t)start_addr + num_regs > 0x4000)
         return LMS7002M_ERR_INVALID_PARAM;
 
     for (i = 0; i < num_regs; i++) {

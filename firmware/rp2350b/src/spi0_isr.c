@@ -366,11 +366,22 @@ static void spi0_process_byte(uint8_t byte) {
  */
 void spi0_handler(void) {
     volatile uint32_t *spi = (volatile uint32_t *)RP2350B_SPI0_BASE;
+    uint32_t max_iterations = 256;  /* Safety: limit bytes processed per ISR invocation */
 
-    /* Read all available data from SPI0 RX FIFO */
+    /* Read all available data from SPI0 RX FIFO.
+     * The max_iterations limit prevents an infinite loop if the RNE
+     * bit is stuck due to a hardware fault. The RP2350B SSP has a
+     * 16-entry RX FIFO, so 256 is far more than needed in normal
+     * operation but provides headroom for burst scenarios. */
     while (spi[SPI_SSPSR / 4] & SPI_SSPSR_RNE) {
         uint8_t byte = (uint8_t)(spi[SPI_SSPDR / 4] & 0xFF);
         spi0_process_byte(byte);
+
+        if (--max_iterations == 0) {
+            /* Safety bail-out: read too many bytes in one ISR invocation.
+             * This should never happen in normal operation. */
+            break;
+        }
     }
 
     /* Clear all pending SPI0 interrupts */

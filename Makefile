@@ -16,7 +16,7 @@
 #   make help        — Show available targets
 # ============================================================================
 
-.PHONY: all firmware driver libapex tests dtb validate check clean help
+.PHONY: all firmware driver libapex tests dtb validate validate-dts check clean help
 
 all: help
 
@@ -31,6 +31,7 @@ help:
 	@echo "  tests       — Build and run unit tests"
 	@echo "  dtb         — Compile device tree sources to DTB/DTBO"
 	@echo "  validate    — Validate DTS syntax"
+	@echo "  validate-dts — Cross-reference DTS GPIOs with firmware and schematic"
 	@echo "  check       — Check toolchain availability"
 	@echo "  clean       — Remove all build artifacts"
 	@echo ""
@@ -76,6 +77,10 @@ dtb:
 
 validate:
 	$(MAKE) -C software/dts validate
+
+validate-dts:
+	@echo "Running DTS cross-reference validation..."
+	python3 tools/validate_dts.py
 
 # ── Clean ────────────────────────────────────────────────────────────────────
 clean:

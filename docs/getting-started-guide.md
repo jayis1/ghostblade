@@ -523,6 +523,7 @@ ghostblade/
 │   └── dts/                        # Device tree overlays
 │       ├── ghostblade-rk3576.dts   # Base device tree
 │       ├── ghostblade-sdr-overlay.dts    # SDR runtime config
+│       ├── ghostblade-cc1101-overlay.dts  # Sub-GHz radio config
 │       ├── ghostblade-nfc-overlay.dts    # NFC runtime config
 │       └── ghostblade-wifi-overlay.dts   # Wi-Fi 6E config
 └── tests/                          # Test suites
@@ -533,6 +534,9 @@ ghostblade/
     ├── hil_spi_bridge_test.sh      # HIL SPI bridge test
     ├── hil_sdr_dma_stream_test.sh  # HIL SDR DMA test
     └── Makefile                    # Test build system
+└── tools/                          # Build & validation tools
+    ├── check_internal_links.py     # Markdown link checker
+    └── validate_dts.py             # DTS GPIO cross-reference validator
 ```
 
 ---

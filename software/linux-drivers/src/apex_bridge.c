@@ -436,14 +436,20 @@ static void apex_rx_work_handler(struct work_struct *work)
 
     dev = container_of(work, struct apex_bridge_dev, rx_work);
 
+    /* Ensure device is awake before SPI transfer.
+     * This is critical because the IRQ handler schedules this work
+     * and the device may have entered runtime suspend between the
+     * interrupt and the work handler execution. */
+    pm_runtime_get_sync(&dev->spi->dev);
+
     rx_frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
     if (!rx_frame)
-        return;
+        goto out_pm_put;
 
     tx_frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
     if (!tx_frame) {
         kfree(rx_frame);
-        return;
+        goto out_pm_put;
     }
 
     /* Send NOP command to trigger MCU to clock out its pending data */
@@ -521,6 +527,9 @@ static void apex_rx_work_handler(struct work_struct *work)
 out_free:
     kfree(rx_frame);
     kfree(tx_frame);
+out_pm_put:
+    pm_runtime_mark_last_busy(&dev->spi->dev);
+    pm_runtime_put_autosuspend(&dev->spi->dev);
 }
 
 /* Forward declaration — mmap is defined in the SG engine section below */
@@ -1302,7 +1311,8 @@ static ssize_t brownout_count_show(struct device *dev,
     /* Return cumulative brownout event count (rising-edge transitions
      * of the LOW_BATTERY flag). Each time the flag transitions from
      * cleared to set, the counter increments. This gives a persistent
-     * count of how many brownout events have occurred since boot. */
+     * count of how many brownout events have occurred since boot.
+     * Use atomic_read for lockless access to the atomic counter. */
     return sprintf(buf, "%u\n", atomic_read(&adev->brownout_count));
 }
 static DEVICE_ATTR_RO(brownout_count);
@@ -1457,6 +1467,23 @@ static ssize_t sg_buf_size_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(sg_buf_size);
 
+static ssize_t sg_frames_crc_err_show(struct device *dev,
+                                         struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    unsigned int frames_crc_err;
+
+    if (!adev)
+        return -ENODEV;
+
+    mutex_lock(&adev->sg_engine.sg_lock);
+    frames_crc_err = adev->sg_engine.frames_crc_err;
+    mutex_unlock(&adev->sg_engine.sg_lock);
+
+    return sprintf(buf, "%u\n", frames_crc_err);
+}
+static DEVICE_ATTR_RO(sg_frames_crc_err);
+
 static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_rssi_dbm_x10.attr,
     &dev_attr_temp_c_x10.attr,
@@ -1479,6 +1506,7 @@ static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_sg_frames_rx.attr,
     &dev_attr_sg_buf_count.attr,
     &dev_attr_sg_buf_size.attr,
+    &dev_attr_sg_frames_crc_err.attr,
     NULL,
 };
 ATTRIBUTE_GROUPS(apex_bridge);
@@ -1926,10 +1954,15 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
     unsigned long psize;
     int ret;
 
-    if (eng->state == APEX_SG_STATE_IDLE)
+    mutex_lock(&eng->sg_lock);
+    if (eng->state == APEX_SG_STATE_IDLE) {
+        mutex_unlock(&eng->sg_lock);
         return -ENODEV;
+    }
 
     psize = (unsigned long)eng->buf_count * eng->buf_size;
+    mutex_unlock(&eng->sg_lock);
+
     if (vsize > psize)
         return -EINVAL;
 
