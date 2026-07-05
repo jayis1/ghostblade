@@ -73,6 +73,11 @@
 #define CLASS_NAME      "apex"
 
 /* Module parameters */
+/* SPI bus speed in Hz. Protected by dev->lock when accessed from
+ * SG DMA context, and by dev->lock in the regular SPI transfer path.
+ * The module_param with 0644 allows runtime changes via sysfs, but
+ * callers should use READ_ONCE()/WRITE_ONCE() for lockless reads
+ * to avoid torn 32-bit values on 32-bit platforms. */
 static int spi_speed_hz = 50000000;  /* 50 MHz default */
 module_param(spi_speed_hz, int, 0644);
 MODULE_PARM_DESC(spi_speed_hz, "SPI bus speed in Hz (default: 50000000)");
@@ -555,10 +560,17 @@ static int apex_bridge_open(struct inode *inode, struct file *filp)
     int ret;
 
     dev = container_of(inode->i_cdev, struct apex_bridge_dev, cdev);
-    if (IS_ERR_OR_NULL(dev)) {
+    /* container_of on a valid cdev within apex_bridge_dev can never return
+     * NULL — it's an offset calculation. Only check for IS_ERR, which
+     * would indicate memory corruption or a serious kernel bug. A NULL
+     * check is unnecessary and masks real errors if it ever occurs. */
+    if (IS_ERR(dev)) {
         pr_err("apex_bridge: device not found\n");
         return -ENODEV;
     }
+    /* Prevent use-after-free: if dev->spi is NULL, the device was removed */
+    if (!dev->spi)
+        return -ENODEV;
 
     filp->private_data = dev;
 
@@ -583,7 +595,11 @@ static int apex_bridge_release(struct inode *inode, struct file *filp)
 
     /* Allow device to runtime suspend */
     pm_runtime_put_autosuspend(&dev->spi->dev);
-    atomic_set(&dev->open_count, 0);
+
+    /* Decrement open count (should go from 1 to 0 for exclusive access).
+     * Use atomic_dec_and_test to catch double-close bugs. */
+    if (!atomic_dec_and_test(&dev->open_count))
+        dev_warn(&dev->spi->dev, "open_count imbalance on release\n");
 
     /* Securely wipe cached telemetry data on close to prevent
      * information leakage between user sessions. Use memzero_explicit()
@@ -741,6 +757,16 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         return -ENOTTY;
     if (_IOC_NR(cmd) < 1 || _IOC_NR(cmd) > 11)
         return -ENOTTY;
+
+    /* Validate ioctl size to prevent integer overflow in subsequent
+     * copy_from_user / copy_to_user calls. Reject ioctls with
+     * unexpectedly large sizes that could cause stack overflow or
+     * excessive allocation. */
+    if (_IOC_SIZE(cmd) > APEX_SPI_MAX_PAYLOAD) {
+        pr_warn_ratelimited("apex_bridge: ioctl size %u too large\n",
+                            _IOC_SIZE(cmd));
+        return -EINVAL;
+    }
 
     /* Validate direction: write ioctls require write access,
      * read ioctls require read access to the user buffer */
@@ -974,6 +1000,70 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         break;
     }
 
+    case APEX_IOC_SOFT_RESET: {
+        uint32_t magic;
+
+        if (copy_from_user(&magic, (uint32_t __user *)arg,
+                           sizeof(magic))) {
+            ret = -EFAULT;
+            break;
+        }
+
+        /* Require magic value to prevent accidental soft reset */
+        if (magic != APEX_RESET_MAGIC) {
+            dev_err(&dev->spi->dev,
+                    "SOFT_RESET: invalid magic 0x%08x (expected 0x%08x)\n",
+                    magic, APEX_RESET_MAGIC);
+            ret = -EINVAL;
+            break;
+        }
+
+        /* Send CMD_RESET_MCU frame with the magic value as payload.
+         * The MCU firmware validates the magic before triggering a
+         * watchdog reset, preventing accidental resets from corrupted
+         * frames. */
+        {
+            uint8_t reset_payload[4];
+            uint8_t *frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+            uint8_t *rx = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+            int frame_len;
+
+            if (!frame || !rx) {
+                kfree_sensitive(frame);
+                kfree_sensitive(rx);
+                ret = -ENOMEM;
+                break;
+            }
+
+            /* Pack magic value as little-endian payload */
+            reset_payload[0] = (uint8_t)(APEX_RESET_MAGIC & 0xFF);
+            reset_payload[1] = (uint8_t)((APEX_RESET_MAGIC >> 8) & 0xFF);
+            reset_payload[2] = (uint8_t)((APEX_RESET_MAGIC >> 16) & 0xFF);
+            reset_payload[3] = (uint8_t)((APEX_RESET_MAGIC >> 24) & 0xFF);
+
+            frame_len = apex_build_frame(APEX_CMD_RESET_MCU,
+                                         reset_payload,
+                                         sizeof(reset_payload),
+                                         frame,
+                                         APEX_SPI_FRAME_SIZE_MAX);
+            if (frame_len > 0) {
+                apex_spi_xfer(dev, frame, frame_len, rx,
+                              APEX_SPI_FRAME_SIZE_MAX);
+                dev_info(&dev->spi->dev,
+                         "SOFT_RESET: MCU soft reset command sent\n");
+                ret = 0;
+            } else {
+                dev_err(&dev->spi->dev,
+                        "SOFT_RESET: failed to build reset frame\n");
+                ret = -EIO;
+            }
+
+            kfree_sensitive(frame);
+            kfree_sensitive(rx);
+        }
+        break;
+    }
+
     case APEX_IOC_GET_STATUS: {
         uint32_t status = 0;
 
@@ -1077,6 +1167,19 @@ static __poll_t apex_bridge_poll(struct file *filp,
     /* Writable when TX FIFO has space (or always if FIFO is large enough) */
     if (kfifo_avail(&dev->tx_fifo) > 0)
         mask |= EPOLLOUT | EPOLLWRNORM;
+
+    /* SG engine: report readable when at least one buffer is READY */
+    if (dev->sg_engine.state == APEX_SG_STATE_RUNNING) {
+        uint32_t i;
+        for (i = 0; i < dev->sg_engine.buf_count; i++) {
+            if (dev->sg_engine.bufs[i].desc.state == APEX_SG_BUF_READY) {
+                mask |= EPOLLIN | EPOLLRDNORM;
+                break;
+            }
+        }
+        /* Also wait on SG waitqueue so poll wakes when a buffer completes */
+        poll_wait(filp, &dev->sg_engine.sg_waitq, wait);
+    }
 
     return mask;
 }
@@ -1584,20 +1687,26 @@ static void apex_sg_buf_set_state(struct apex_sg_engine *eng,
 static void apex_sg_dma_callback(void *context)
 {
     struct apex_sg_engine *eng = context;
-    uint32_t idx = eng->current_idx;
-    uint32_t buf_size = eng->buf_size;
+    /* Read current_idx using acquire semantics to ensure we see
+     * the buffer state written by the work handler before scheduling. */
+    uint32_t idx = smp_load_acquire(&eng->current_idx);
+    uint32_t buf_size = READ_ONCE(eng->buf_size);
 
     /* Mark current buffer as ready */
     eng->bufs[idx].desc.data_len = buf_size;
     eng->bufs[idx].desc.timestamp_ns = ktime_get_real_ns();
     eng->bufs[idx].desc.sequence = eng->sequence++;
-    eng->bufs[idx].desc.state = APEX_SG_BUF_READY;
+    /* Use release semantics so userspace sees the data_len/timestamp
+     * before observing the state transition to READY. */
+    smp_store_release(&eng->bufs[idx].desc.state, APEX_SG_BUF_READY);
 
     eng->total_transferred += buf_size;
     eng->frames_rx++;
 
-    /* Advance to next buffer (round-robin) */
-    eng->current_idx = (eng->current_idx + 1) % eng->buf_count;
+    /* Advance to next buffer (round-robin) with release semantics
+     * so the work handler sees our writes before observing the
+     * updated index. */
+    smp_store_release(&eng->current_idx, (idx + 1) % eng->buf_count);
 
     /* Signal completion so the work function schedules the next transfer */
     complete(&eng->sg_buf_complete);
@@ -1619,7 +1728,9 @@ static void apex_sg_work_handler(struct work_struct *work)
         container_of(eng, struct apex_bridge_dev, sg_engine);
 
     while (eng->state == APEX_SG_STATE_RUNNING) {
-        uint32_t idx = eng->current_idx;
+        /* Read current_idx with acquire semantics to see the value
+         * written by the DMA callback before we access the buffer. */
+        uint32_t idx = smp_load_acquire(&eng->current_idx);
         struct apex_sg_buf *buf = &eng->bufs[idx];
         struct spi_transfer xfer;
         struct spi_message msg;
@@ -1641,9 +1752,11 @@ static void apex_sg_work_handler(struct work_struct *work)
         xfer.rx_buf = buf->dma_virt;
         xfer.len = eng->buf_size;
         /* Use configured SPI speed when running, fall back to
-         * a conservative 10 MHz for error recovery transfers */
+         * a conservative 10 MHz for error recovery transfers.
+         * Use READ_ONCE to safely read the module parameter that
+         * may be changed via sysfs concurrently. */
         xfer.speed_hz = eng->state == APEX_SG_STATE_RUNNING ?
-                         spi_speed_hz : min(spi_speed_hz, 10000000);
+                         READ_ONCE(spi_speed_hz) : min(READ_ONCE(spi_speed_hz), 10000000);
 
         spi_message_init_with_transfers(&msg, &xfer, 1);
 
@@ -1814,7 +1927,7 @@ static int apex_sg_engine_start(struct apex_bridge_dev *dev,
 
     /* Override SPI speed if requested */
     if (config->spi_speed_hz > 0 && config->spi_speed_hz <= 50000000)
-        spi_speed_hz = config->spi_speed_hz;
+        WRITE_ONCE(spi_speed_hz, config->spi_speed_hz);
 
     /* Initialize work item */
     INIT_WORK(&eng->sg_work, apex_sg_work_handler);
@@ -1952,6 +2065,8 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
     struct apex_sg_engine *eng = &dev->sg_engine;
     unsigned long vsize = vma->vm_end - vma->vm_start;
     unsigned long psize;
+    void *dma_virt;
+    dma_addr_t dma_phys;
     int ret;
 
     mutex_lock(&eng->sg_lock);
@@ -1960,7 +2075,20 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
         return -ENODEV;
     }
 
+    /* Validate buffer count and size to prevent multiplication overflow.
+     * buf_count is bounded by APEX_SG_MAX_BUFS (64) and buf_size is bounded
+     * by APEX_SG_BUF_SIZE_MAX (256 KiB), so the product fits in unsigned
+     * long on all platforms. Still, check for the degenerate case. */
+    if (eng->buf_count == 0 || eng->buf_size == 0) {
+        mutex_unlock(&eng->sg_lock);
+        return -EINVAL;
+    }
     psize = (unsigned long)eng->buf_count * eng->buf_size;
+
+    /* Cache the DMA pointers while under lock to prevent TOCTOU:
+     * another thread could free the buffers between unlock and mmap. */
+    dma_virt = eng->bufs[0].dma_virt;
+    dma_phys = eng->bufs[0].dma_phys;
     mutex_unlock(&eng->sg_lock);
 
     if (vsize > psize)
@@ -1981,8 +2109,8 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
      * including ARM with writecombine mappings. It replaces the
      * previous per-buffer remap_pfn_range() approach which could
      * cause cache aliasing issues on non-cache-coherent systems. */
-    ret = dma_mmap_coherent(&dev->spi->dev, vma, eng->bufs[0].dma_virt,
-                             eng->bufs[0].dma_phys, psize);
+    ret = dma_mmap_coherent(&dev->spi->dev, vma, dma_virt,
+                             dma_phys, psize);
     if (ret)
         return ret;
 

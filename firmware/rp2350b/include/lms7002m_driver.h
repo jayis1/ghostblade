@@ -412,7 +412,7 @@ int lms7002m_write_fifo(struct lms7002m_driver *drv,
  *
  * Returns: LMS7002M_OK on success.
  */
-int lms7002m_get_status(struct lms7002m_driver *drv,
+int lms7002m_get_status(const struct lms7002m_driver *drv,
                          uint16_t *fifo_fill, bool *pll_locked);
 
 /**
@@ -457,7 +457,7 @@ int lms7002m_spi_write(struct lms7002m_driver *drv, uint16_t addr, uint16_t data
  *
  * Returns: Number of registers read, or negative error code.
  */
-int lms7002m_spi_read_burst(struct lms7002m_driver *drv, uint16_t start_addr,
+int lms7002m_spi_read_burst(const struct lms7002m_driver *drv, uint16_t start_addr,
                               uint16_t *buf, uint16_t num_regs);
 
 /**

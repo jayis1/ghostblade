@@ -49,6 +49,10 @@ set(FW_SOURCES
     src/st25r3916_init.c
     src/battery_monitor.c
     src/watchdog.c
+    src/sleep_wake.c
+    src/peripheral_power.c
+    src/lms7002m_driver.c
+    src/adc_calibration.c
 )
 
 set(FW_HEADERS
@@ -61,6 +65,10 @@ set(FW_HEADERS
     include/st25r3916_init.h
     include/battery_monitor.h
     include/watchdog.h
+    include/sleep_wake.h
+    include/peripheral_power.h
+    include/lms7002m_driver.h
+    include/adc_calibration.h
 )
 
 # ── Create executable ─────────────────────────────────────────────────────────

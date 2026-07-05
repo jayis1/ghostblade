@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "spi_protocol.h"
+#include "watchdog.h"
 
 /* Forward declarations from other modules */
 extern void watchdog_kick(void);
@@ -272,6 +273,8 @@ static struct {
     uint32_t cmd_ant_select_rx;
     uint32_t cmd_cc1101_cfg_rx;
     uint32_t cmd_nfc_transact_rx;
+    uint32_t cmd_telemetry_req_rx;
+    uint32_t cmd_unknown_rx;
     uint32_t telemetry_sent;
     uint32_t iq_chunks_sent;
     uint32_t tx_overruns;
@@ -478,17 +481,28 @@ static void handle_cmd_nop(void) {
  *   - gain_db_x10: LNA gain in dB × 10
  */
 static void handle_cmd_sdr_tune(const uint8_t *payload, uint16_t len) {
-    struct sdr_tune_cmd tune;
-
     proto_stats.cmd_sdr_tune_rx++;
 
-    if (len < sizeof(tune))
+    if (len < 8)  /* struct sdr_tune_cmd is 8 bytes */
         return;
 
-    memcpy(&tune, payload, sizeof(tune));
+    /* Extract fields from potentially unaligned payload buffer.
+     * Using byte-level reads to avoid HardFault on ARM Cortex-M33
+     * if payload is not 32-bit/16-bit aligned. */
+    uint32_t freq_hz     = read_le32(&payload[0]);
+    uint16_t bw_khz      = read_le16(&payload[4]);
+    uint16_t gain_db_x10 = read_le16(&payload[6]);
 
     /* Validate frequency range (100 kHz – 3.8 GHz) */
-    if (tune.freq_hz < 100000UL || tune.freq_hz > 3800000000UL)
+    if (freq_hz < 100000UL || freq_hz > 3800000000UL)
+        return;
+
+    /* Validate bandwidth */
+    if (bw_khz == 0 || bw_khz > 20000)
+        return;
+
+    /* Validate gain */
+    if (gain_db_x10 > 730)  /* Max LNA gain ~73 dB */
         return;
 
     /* Configure LMS7002M via SPI1:
@@ -497,10 +511,11 @@ static void handle_cmd_sdr_tune(const uint8_t *payload, uint16_t len) {
      * 3. Set LNA gain
      *
      * Detailed LMS7002M register programming is implemented in
-     * lms7002m_driver.c (future module). For now, store parameters
-     * and set GPIO enables.
+     * lms7002m_driver.c. Store parameters and set GPIO enables.
      */
-    (void)tune;  /* Will be used when LMS7002M driver is integrated */
+    (void)freq_hz;
+    (void)bw_khz;
+    (void)gain_db_x10;
 }
 
 /**
@@ -558,32 +573,36 @@ static void handle_cmd_ant_select(const uint8_t *payload, uint16_t len) {
  *   - data[]:    Register values
  */
 static void handle_cmd_cc1101_cfg(const uint8_t *payload, uint16_t len) {
-    const struct cc1101_cfg_cmd *cfg;
     proto_stats.cmd_cc1101_cfg_rx++;
 
     if (len < 2)  /* At minimum: addr + len */
         return;
 
-    cfg = (struct cc1101_cfg_cmd *)payload;
+    /* Extract fields from unaligned payload buffer to avoid
+     * potential HardFault on ARM Cortex-M33. The payload buffer
+     * comes from the SPI frame assembly and may not be aligned
+     * to struct cc1101_cfg_cmd boundaries. */
+    uint8_t reg_addr = payload[0];
+    uint8_t reg_len  = payload[1];
 
     /* Validate register address range (0x00-0x2E config, 0x30-0x3D command/status).
      * Address 0x2F is reserved/invalid on CC1101. */
-    if (cfg->reg_addr > 0x3D || cfg->reg_addr == 0x2F)
+    if (reg_addr > 0x3D || reg_addr == 0x2F)
         return;
 
     /* Validate reg_len does not exceed remaining payload */
-    if (len < (uint16_t)(2 + cfg->reg_len))
+    if (len < (uint16_t)(2 + reg_len))
         return;
 
     /* Prevent burst write from wrapping past the register space boundary.
      * CC1101 burst writes auto-increment the address, so we must ensure
      * reg_addr + reg_len stays within a valid range. */
-    if (cfg->reg_addr <= 0x2E && (uint16_t)cfg->reg_addr + cfg->reg_len > 0x2F)
+    if (reg_addr <= 0x2E && (uint16_t)reg_addr + reg_len > 0x2F)
         return;
-    if (cfg->reg_addr >= 0x30 && (uint16_t)cfg->reg_addr + cfg->reg_len > 0x3E)
+    if (reg_addr >= 0x30 && (uint16_t)reg_addr + reg_len > 0x3E)
         return;
 
-    apex_cc1101_write_burst(cfg->reg_addr, cfg->data, cfg->reg_len);
+    apex_cc1101_write_burst(reg_addr, &payload[2], reg_len);
 }
 
 /**
@@ -596,20 +615,28 @@ static void handle_cmd_cc1101_cfg(const uint8_t *payload, uint16_t len) {
  *   - data[]:   TX data
  */
 static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
-    struct nfc_transact_cmd *nfc;
+    struct nfc_transact_cmd nfc_cmd;
     proto_stats.cmd_nfc_transact_rx++;
 
     if (len < 4)  /* At minimum: cmd + flags + data_len */
         return;
 
-    nfc = (struct nfc_transact_cmd *)payload;
-    uint16_t data_len = read_le16((const uint8_t *)&nfc->data_len);
-
-    /* Cap data_len to prevent buffer overrun (max 256 bytes) */
-    if (data_len > 256)
+    /* Copy to local struct to avoid unaligned access on ARM Cortex-M33.
+     * The payload pointer may not be 16-bit aligned, so reading
+     * nfc->data_len directly via pointer cast could trigger a HardFault
+     * on ARM without unaligned access enabled. */
+    if (len > sizeof(nfc_cmd) + 256)
         return;
 
-    if (len < (uint16_t)(4 + data_len))
+    nfc_cmd.cmd = payload[0];
+    nfc_cmd.flags = payload[1];
+    nfc_cmd.data_len = read_le16(&payload[2]);
+
+    /* Cap data_len to prevent buffer overrun (max 256 bytes) */
+    if (nfc_cmd.data_len > 256)
+        return;
+
+    if (len < (uint16_t)(4 + nfc_cmd.data_len))
         return;
 
     /* ST25R3916 transaction implementation:
@@ -617,11 +644,9 @@ static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
      * 2. Transmit data via antenna driver
      * 3. Read response via SPI2
      * 4. Build response frame with NFC data
-     *
-     * Full implementation in nfc_driver.c (future module).
      */
-    (void)nfc;
     device_state.nfc_active = true;
+    (void)nfc_cmd;  /* Will be used when NFC driver is fully integrated */
 }
 
 /* ========================================================================
@@ -710,8 +735,35 @@ static void dispatch_frame(void) {
     case CMD_NFC_TRANSACT:
         handle_cmd_nfc_transact(rx_ctx.payload_buf, len);
         break;
+    case CMD_TELEMETRY_REQ:
+        /* Host is explicitly requesting telemetry data.
+         * Respond immediately with the current telemetry snapshot. */
+        spi_protocol_send_telemetry();
+        proto_stats.cmd_telemetry_req_rx++;
+        break;
+    case CMD_RESET_MCU:
+        /* Host requests MCU soft reset. Validate the payload
+         * contains the reset confirmation magic value to prevent
+         * accidental resets from corrupted frames. */
+        if (len >= 4) {
+            uint32_t magic = (uint32_t)rx_ctx.payload_buf[0]       |
+                            ((uint32_t)rx_ctx.payload_buf[1] << 8)  |
+                            ((uint32_t)rx_ctx.payload_buf[2] << 16) |
+                            ((uint32_t)rx_ctx.payload_buf[3] << 24);
+            if (magic == SPI_RESET_MAGIC) {
+                /* Mark scratch register so watchdog_reboot()
+                 * can detect this was an intentional host-triggered
+                 * reset rather than a crash. */
+                watchdog_set_scratch(0, WD_SCRATCH_HOST_RESET_MAGIC);
+                watchdog_reboot(true);
+                /* Does not return */
+            }
+        }
+        break;
     default:
-        /* Unknown command — ignore */
+        /* Unknown command — increment error counter and ignore */
+        rx_ctx.frames_dispatched--;  /* Don't count as dispatched */
+        proto_stats.cmd_unknown_rx++;
         break;
     }
 
@@ -805,7 +857,9 @@ int spi_protocol_process(void) {
 
     /* Drain available bytes from the SPI0 RX ring buffer.
      * Insert a data memory barrier before reading to ensure we
-     * see the latest data written by the ISR. */
+     * see the latest data written by the ISR. On ARM Cortex-M33
+     * with data cache, the ISR's writes to rx_head and the ring
+     * buffer may not be visible to this core without a barrier. */
     dmb();
     while (spi_rx_head != spi_rx_tail) {
         uint8_t byte = spi_rx_buf[spi_rx_tail];
@@ -940,6 +994,8 @@ struct proto_stats_report {
     uint32_t cmd_ant_select_rx;
     uint32_t cmd_cc1101_cfg_rx;
     uint32_t cmd_nfc_transact_rx;
+    uint32_t cmd_telemetry_req_rx;
+    uint32_t cmd_unknown_rx;
     uint32_t telemetry_sent;
     uint32_t iq_chunks_sent;
     uint32_t tx_overruns;
@@ -959,6 +1015,8 @@ void spi_protocol_get_stats(struct proto_stats_report *report) {
     report->cmd_ant_select_rx  = proto_stats.cmd_ant_select_rx;
     report->cmd_cc1101_cfg_rx  = proto_stats.cmd_cc1101_cfg_rx;
     report->cmd_nfc_transact_rx = proto_stats.cmd_nfc_transact_rx;
+    report->cmd_telemetry_req_rx = proto_stats.cmd_telemetry_req_rx;
+    report->cmd_unknown_rx       = proto_stats.cmd_unknown_rx;
     report->telemetry_sent     = proto_stats.telemetry_sent;
     report->iq_chunks_sent     = proto_stats.iq_chunks_sent;
     report->tx_overruns        = proto_stats.tx_overruns;

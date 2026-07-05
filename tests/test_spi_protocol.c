@@ -135,6 +135,7 @@ static uint32_t crc32_compute(const uint8_t *data, size_t len) {
 #define CMD_CC1101_CFG        0x04
 #define CMD_NFC_TRANSACT      0x05
 #define CMD_TELEMETRY_REQ     0x06
+#define CMD_RESET_MCU         0x07
 
 /* Command opcodes (MCU -> Host) */
 #define CMD_TELEMETRY         0x81
@@ -145,6 +146,10 @@ static uint32_t crc32_compute(const uint8_t *data, size_t len) {
 #define ANT_MIMO_RX           1
 #define ANT_SUBGHZ            2
 #define ANT_TERMINATED         3
+
+/* Reset magic value — must match SPI_RESET_MAGIC in firmware and
+ * APEX_RESET_MAGIC in kernel driver */
+#define SPI_RESET_MAGIC        0x52534554UL  /* "RSET" */
 
 /* ========================================================================
  * Frame Builder / Parser (production-accurate)
@@ -1094,6 +1099,219 @@ static void test_frame_size_calculations(void) {
                 "SPI_MAX_PAYLOAD = 4092");
 }
 
+/* Test 26: CMD_RESET_MCU frame with magic value */
+static void test_reset_mcu_frame(void) {
+    uint8_t frame[64];
+    uint8_t payload[4];
+    int frame_len;
+    int ret;
+    uint8_t cmd_out;
+    uint16_t len_out;
+    const uint8_t *payload_out;
+
+    /* Pack the reset magic as little-endian */
+    payload[0] = (uint8_t)(SPI_RESET_MAGIC & 0xFF);        /* 'T' = 0x54 */
+    payload[1] = (uint8_t)((SPI_RESET_MAGIC >> 8) & 0xFF); /* 'E' = 0x45 */
+    payload[2] = (uint8_t)((SPI_RESET_MAGIC >> 16) & 0xFF); /* 'S' = 0x53 */
+    payload[3] = (uint8_t)((SPI_RESET_MAGIC >> 24) & 0xFF); /* 'R' = 0x52 */
+
+    /* Verify magic bytes are correct */
+    ASSERT_EQ_INT(0x54, payload[0], "Reset magic byte 0 = 'T'");
+    ASSERT_EQ_INT(0x45, payload[1], "Reset magic byte 1 = 'E'");
+    ASSERT_EQ_INT(0x53, payload[2], "Reset magic byte 2 = 'S'");
+    ASSERT_EQ_INT(0x52, payload[3], "Reset magic byte 3 = 'R'");
+
+    frame_len = build_spi_frame(CMD_RESET_MCU, payload, 4, frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build CMD_RESET_MCU frame");
+    ASSERT_EQ_INT(24, frame_len, "Reset frame = 16 + 4 + 4 = 24 bytes");
+
+    ret = validate_spi_frame(frame, (size_t)frame_len,
+                              &cmd_out, &len_out, &payload_out);
+    ASSERT_EQ_INT(VALID_OK, ret, "Validate CMD_RESET_MCU frame");
+    ASSERT_EQ_INT(CMD_RESET_MCU, cmd_out, "Command = CMD_RESET_MCU");
+    ASSERT_EQ_INT(4, len_out, "Payload length = 4");
+
+    /* Verify magic value round-trip */
+    uint32_t magic_out = (uint32_t)payload_out[0]       |
+                         ((uint32_t)payload_out[1] << 8)  |
+                         ((uint32_t)payload_out[2] << 16) |
+                         ((uint32_t)payload_out[3] << 24);
+    ASSERT_EQ_INT((int)SPI_RESET_MAGIC, (int)magic_out,
+                  "Reset magic value round-trip");
+}
+
+/* Test 27: CMD_RESET_MCU with wrong magic value */
+static void test_reset_mcu_wrong_magic(void) {
+    uint8_t frame[64];
+    uint8_t payload[4];
+    int frame_len;
+    int ret;
+    uint8_t cmd_out;
+    uint16_t len_out;
+    const uint8_t *payload_out;
+
+    /* Pack a wrong magic value — should still be a valid frame
+     * structurally, but the MCU firmware would reject it. */
+    payload[0] = 0x00;
+    payload[1] = 0x00;
+    payload[2] = 0x00;
+    payload[3] = 0x00;
+
+    frame_len = build_spi_frame(CMD_RESET_MCU, payload, 4, frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build CMD_RESET_MCU with wrong magic");
+
+    ret = validate_spi_frame(frame, (size_t)frame_len,
+                              &cmd_out, &len_out, &payload_out);
+    ASSERT_EQ_INT(VALID_OK, ret, "Frame structure is valid");
+    ASSERT_EQ_INT(CMD_RESET_MCU, cmd_out, "Command = CMD_RESET_MCU");
+
+    /* Wrong magic: MCU should reject, but frame CRC is valid */
+    uint32_t wrong_magic = (uint32_t)payload_out[0]       |
+                           ((uint32_t)payload_out[1] << 8)  |
+                           ((uint32_t)payload_out[2] << 16) |
+                           ((uint32_t)payload_out[3] << 24);
+    ASSERT_TRUE(wrong_magic != SPI_RESET_MAGIC,
+                "Wrong magic != SPI_RESET_MAGIC");
+}
+
+/* Test 28: CMD_TELEMETRY_REQ with zero-length payload */
+static void test_telemetry_req_frame(void) {
+    uint8_t frame[64];
+    int frame_len;
+    int ret;
+    uint8_t cmd_out;
+    uint16_t len_out;
+
+    frame_len = build_spi_frame(CMD_TELEMETRY_REQ, NULL, 0, frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build CMD_TELEMETRY_REQ frame");
+    ASSERT_EQ_INT(20, frame_len, "Telemetry request = 20 bytes (no payload)");
+
+    ret = validate_spi_frame(frame, (size_t)frame_len,
+                              &cmd_out, &len_out, NULL);
+    ASSERT_EQ_INT(VALID_OK, ret, "Validate CMD_TELEMETRY_REQ frame");
+    ASSERT_EQ_INT(CMD_TELEMETRY_REQ, cmd_out, "Command = CMD_TELEMETRY_REQ");
+    ASSERT_EQ_INT(0, len_out, "Payload length = 0");
+}
+
+/* Test 29: Fuzz test — random payload corruption with varying positions */
+static void test_fuzz_payload_positions(void) {
+    uint8_t frame[512];
+    uint8_t payload[64];
+    int frame_len;
+    int failures_detected = 0;
+    int total_tests = 0;
+
+    /* Build a valid frame with a 64-byte payload */
+    for (int i = 0; i < 64; i++)
+        payload[i] = (uint8_t)(i ^ 0xA5);
+
+    frame_len = build_spi_frame(CMD_SDR_STREAM, payload, 64,
+                                frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build frame for payload position fuzz test");
+
+    /* Corrupt each payload byte one at a time — CRC-32 must catch it */
+    for (int offset = SPI_HDR_SIZE; offset < frame_len - SPI_CRC32_SIZE; offset++) {
+        uint8_t saved = frame[offset];
+        frame[offset] ^= 0x01;  /* Flip one bit */
+        total_tests++;
+
+        int ret = validate_spi_frame(frame, (size_t)frame_len, NULL, NULL, NULL);
+        if (ret != VALID_OK)
+            failures_detected++;
+
+        frame[offset] = saved;  /* Restore */
+    }
+
+    ASSERT_TRUE(failures_detected == total_tests,
+                "All single-bit flips in payload detected by CRC-32");
+}
+
+/* Test 30: Fuzz test — random header corruption with varying positions */
+static void test_fuzz_header_positions(void) {
+    uint8_t frame[512];
+    uint8_t payload[64];
+    int frame_len;
+    int failures_detected = 0;
+    int total_tests = 0;
+
+    /* Build a valid frame */
+    for (int i = 0; i < 64; i++)
+        payload[i] = (uint8_t)(i ^ 0x5A);
+
+    frame_len = build_spi_frame(CMD_CC1101_CFG, payload, 64,
+                                frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build frame for header position fuzz test");
+
+    /* Corrupt each header byte (except CRC-64 field itself at offsets 8-15)
+     * — CRC-64 must catch it */
+    for (int offset = 0; offset < SPI_HDR_SIZE; offset++) {
+        if (offset >= 8 && offset <= 15) {
+            /* CRC-64 field — corrupting it would break the CRC value itself,
+             * which would also be detected. Test it too. */
+        }
+        uint8_t saved = frame[offset];
+        frame[offset] ^= 0x80;  /* Flip MSB */
+        total_tests++;
+
+        int ret = validate_spi_frame(frame, (size_t)frame_len, NULL, NULL, NULL);
+        if (ret != VALID_OK)
+            failures_detected++;
+
+        frame[offset] = saved;  /* Restore */
+    }
+
+    ASSERT_TRUE(failures_detected == total_tests,
+                "All single-bit flips in header detected by CRC-64");
+}
+
+/* Test 31: Opcode range and distinctness for all commands including new ones */
+static void test_opcode_range_extended(void) {
+    uint8_t cmds[] = {
+        CMD_NOP, CMD_SDR_TUNE, CMD_SDR_STREAM, CMD_ANT_SELECT,
+        CMD_CC1101_CFG, CMD_NFC_TRANSACT, CMD_TELEMETRY_REQ,
+        CMD_RESET_MCU, CMD_TELEMETRY, CMD_SDR_IQ_CHUNK
+    };
+    int n = sizeof(cmds) / sizeof(cmds[0]);
+
+    /* All opcodes must be distinct */
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            ASSERT_TRUE(cmds[i] != cmds[j],
+                        "All extended opcodes are distinct");
+        }
+    }
+
+    /* CMD_RESET_MCU = 0x07, must be in Host→MCU range (bit 7 clear) */
+    ASSERT_TRUE((CMD_RESET_MCU & 0x80) == 0,
+                "CMD_RESET_MCU has bit 7 clear (Host→MCU)");
+
+    /* CMD_RESET_MCU must not equal any existing opcode */
+    ASSERT_TRUE(CMD_RESET_MCU != CMD_NOP, "CMD_RESET_MCU != CMD_NOP");
+    ASSERT_TRUE(CMD_RESET_MCU != CMD_SDR_TUNE, "CMD_RESET_MCU != CMD_SDR_TUNE");
+    ASSERT_TRUE(CMD_RESET_MCU != CMD_SDR_STREAM, "CMD_RESET_MCU != CMD_SDR_STREAM");
+    ASSERT_TRUE(CMD_RESET_MCU != CMD_ANT_SELECT, "CMD_RESET_MCU != CMD_ANT_SELECT");
+    ASSERT_TRUE(CMD_RESET_MCU != CMD_CC1101_CFG, "CMD_RESET_MCU != CMD_CC1101_CFG");
+    ASSERT_TRUE(CMD_RESET_MCU != CMD_NFC_TRANSACT, "CMD_RESET_MCU != CMD_NFC_TRANSACT");
+    ASSERT_TRUE(CMD_RESET_MCU != CMD_TELEMETRY_REQ, "CMD_RESET_MCU != CMD_TELEMETRY_REQ");
+}
+
+/* Test 32: Reserved field validation — non-zero reserved must be rejected */
+static void test_reserved_field_nonzero(void) {
+    uint8_t frame[64];
+    int frame_len;
+    int ret;
+
+    frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build NOP frame for reserved field test");
+
+    /* Set reserved bytes to non-zero */
+    frame[4] = 0x01;  /* reserved byte 0 */
+    /* Don't update CRC — should fail header CRC */
+
+    ret = validate_spi_frame(frame, (size_t)frame_len, NULL, NULL, NULL);
+    ASSERT_TRUE(ret != VALID_OK, "Non-zero reserved byte detected via CRC-64");
+}
+
 /* ========================================================================
  * Main Test Runner
  * ======================================================================== */
@@ -1132,6 +1350,13 @@ int main(void) {
     RUN_TEST(test_round_trip_all_commands);
     RUN_TEST(test_double_bit_corruption);
     RUN_TEST(test_frame_size_calculations);
+    RUN_TEST(test_reset_mcu_frame);
+    RUN_TEST(test_reset_mcu_wrong_magic);
+    RUN_TEST(test_telemetry_req_frame);
+    RUN_TEST(test_fuzz_payload_positions);
+    RUN_TEST(test_fuzz_header_positions);
+    RUN_TEST(test_opcode_range_extended);
+    RUN_TEST(test_reserved_field_nonzero);
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

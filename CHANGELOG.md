@@ -22,6 +22,16 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 - Hardware bring-up checklist and ESD protection docs linked from `docs/index.md`
 - Missing test files (`test_adc_calibration.c`, `test_peripheral_power.c`, `test_cc1101_lms7002m.c`) added to README repo structure
 - Updated `stats.json` with current line counts and file totals
+- `docs/timing-diagrams.md` — Mermaid sequence diagrams for cold boot, warm reset, power-down, SPI bridge, SDR DMA streaming, NFC transactions, CC1101 TX/RX, sleep/wake state machine, watchdog recovery, and brownout detection
+- `docs/board-quickstart.md` — TL;DR quick-start guide (unpowered to operational in 10 minutes)
+- `software/dts/ghostblade-sleep-overlay.dts` — Device tree overlay for sleep/wake power state management (idle, light sleep, deep sleep, brownout thresholds, thermal scaling)
+- `VERSION` — Project version file (0.1.0-dev) for reproducible builds
+- `.gitattributes` — Line-ending normalization (LF) and binary file markers for consistent cross-platform development
+- DTS: Added `vbat_reg`, `vdd_sdio` fixed regulators, `tsadc` node (thermal shutdown at 105°C), and `saradc` node (battery voltage monitoring) to base DTS
+- DTS: Added `tsadc_pins` and `saradc_pins` pinctrl entries to base DTS
+- DTS Makefile: Added `ghostblade-sleep-overlay.dts` to overlay build targets
+- `docs/index.md` — Added links to board-quickstart, getting-started-guide, and timing-diagrams
+- README — Added links to new documentation files and sleep overlay in repo structure
 
 - LMS7002M SDR transceiver driver for RP2350B (`firmware/rp2350b/src/lms7002m_driver.c`, `include/lms7002m_driver.h`)
   - PLL frequency synthesis with VCO_L (1.88–3.72 GHz) and VCO_H (3.72–5.8 GHz) range selection

@@ -420,6 +420,26 @@ bool apex_is_low_battery(const apex_telemetry_t *telem);
  */
 bool apex_is_overtemp(const apex_telemetry_t *telem);
 
+/**
+ * apex_soft_reset — Trigger a soft reset of the MCU coprocessor
+ *
+ * @handle: Device handle
+ *
+ * Sends a CMD_RESET_MCU command to the RP2350B via the SPI bridge.
+ * The MCU firmware validates a magic value before triggering a
+ * watchdog reset, preventing accidental resets from corrupted frames.
+ *
+ * After a successful reset, the MCU will reboot and assert MCU_READY
+ * once initialization completes (~200 ms).
+ *
+ * Returns: APEX_OK on success, negative error code on failure
+ */
+int apex_soft_reset(apex_handle_t handle);
+
+/* Reset magic value — must match APEX_RESET_MAGIC in kernel driver
+ * and SPI_RESET_MAGIC in MCU firmware */
+#define APEX_RESET_MAGIC          0x52534554UL  /* "RSET" */
+
 #ifdef __cplusplus
 }
 #endif

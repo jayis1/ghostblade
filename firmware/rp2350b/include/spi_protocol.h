@@ -43,6 +43,31 @@
 /** Minimum frame size (header + CRC-32, zero-length payload) */
 #define SPI_FRAME_SIZE_MIN      (SPI_HEADER_SIZE + SPI_CRC32_SIZE)
 
+/** Reset confirmation magic value (payload of CMD_RESET_MCU) */
+#define SPI_RESET_MAGIC         0x52534554UL  /* "RSET" — host must send this to confirm reset */
+
+/** Watchdog scratch magic for host-triggered reset detection */
+#define WD_SCRATCH_HOST_RESET_MAGIC 0x48525354UL  /* "HRST" — marks host-initiated reset */
+
+/* ── Telemetry flag bits ───────────────────────────────────────────────── */
+
+/** Telemetry flag: SDR RX is active */
+#define TELEM_FLAG_SDR_RX_ACTIVE    (1 << 0)
+/** Telemetry flag: SDR TX is active */
+#define TELEM_FLAG_SDR_TX_ACTIVE    (1 << 1)
+/** Telemetry flag: CC1101 RX is active */
+#define TELEM_FLAG_CC1101_RX        (1 << 2)
+/** Telemetry flag: CC1101 TX is active */
+#define TELEM_FLAG_CC1101_TX        (1 << 3)
+/** Telemetry flag: NFC is active */
+#define TELEM_FLAG_NFC_ACTIVE       (1 << 4)
+/** Telemetry flag: NFC tag present */
+#define TELEM_FLAG_NFC_TAG_PRESENT  (1 << 5)
+/** Telemetry flag: low battery / brownout */
+#define TELEM_FLAG_LOW_BATTERY      (1 << 6)
+/** Telemetry flag: watchdog reset occurred */
+#define TELEM_FLAG_WD_RESET         (1 << 7)
+
 /* ── Command opcodes ────────────────────────────────────────────────────── */
 
 /** Host → MCU: No operation (keep-alive / status poll) */
@@ -65,6 +90,9 @@
 
 /** Host → MCU: Request telemetry data */
 #define SPI_CMD_TELEMETRY_REQ   0x06
+
+/** Host → MCU: Reset MCU (requires magic value in payload) */
+#define SPI_CMD_RESET_MCU       0x07
 
 /** MCU → Host: Telemetry response */
 #define SPI_CMD_TELEMETRY       0x81

@@ -1,0 +1,106 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Overlay — GhostBlade Sleep/Wake Power States
+ *
+ * This overlay configures power management for the GhostBlade device,
+ * enabling dynamic power state transitions between Active, Idle, Light Sleep,
+ * and Deep Sleep modes.
+ *
+ * Copyright (C) 2026 GhostBlade Project
+ *
+ * Apply with:
+ *   dtc -I dts -O dtb -@ -o ghostblade-sleep-overlay.dtbo ghostblade-sleep-overlay.dts
+ *   mkdir -p /sys/kernel/config/device-tree/overlays/sleep
+ *   cp ghostblade-sleep-overlay.dtbo /sys/kernel/config/device-tree/overlays/sleep/dtbo
+ */
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "ghostblade,nullspectre";
+	fragment@0 {
+		target-path = "/";
+		__overlay__ {
+			/* ============================================================
+			 * Power State Configuration
+			 *
+			 * The RP2350B firmware manages peripheral power rails
+			 * via GPIO. These nodes describe the power states for
+			 * the Linux power management subsystem.
+			 * ============================================================ */
+
+			power-states {
+				compatible = "ghostblade,power-states";
+
+				/*
+				 * Active: All peripherals powered, full performance.
+				 * Idle: Peripherals powered but SPI0 in low-power wait.
+				 * Light Sleep: SDR/CC1101/NFC rails off, SPI0 active.
+				 * Deep Sleep: All peripheral rails off, MCU in deep sleep.
+				 */
+				ghostblade,idle-timeout-ms = <5000>;    /* 5s idle → Idle */
+				ghostblade,sleep-timeout-ms = <30000>;   /* 30s idle → Light Sleep */
+				ghostblade,deep-sleep-threshold-mv = <2800>; /* VBAT < 2.8V → Deep Sleep */
+				ghostblade,brownout-threshold-mv = <2800>;  /* VBAT < 2.8V → brownout flag */
+				ghostblade,recovery-threshold-mv = <3000>;   /* VBAT > 3.0V → exit brownout */
+			};
+		};
+	};
+
+	/* ============================================================
+	 * Fragment 1: Configure apex_bridge for power management
+	 * ============================================================ */
+	fragment@1 {
+		target-path = "/apex_bridge";
+		__overlay__ {
+			ghostblade,enable-sleep-wake = <1>;
+			ghostblade,idle-power-state = "idle";
+			ghostblade,sleep-power-state = "light-sleep";
+			ghostblade,deep-sleep-power-state = "deep-sleep";
+		};
+	};
+
+	/* ============================================================
+	 * Fragment 2: Thermal zone adjustments for power states
+	 *
+	 * When in Light Sleep or Deep Sleep, the thermal polling
+	 * interval increases to reduce wake-ups.
+	 * ============================================================ */
+	fragment@2 {
+		target-path = "/thermal-zones/soc-thermal";
+		__overlay__ {
+			polling-delay-passive = <5000>; /* 5s in passive (was 1s) */
+			polling-delay = <10000>;          /* 10s in active (was 5s) */
+		};
+	};
+
+	/* ============================================================
+	 * Fragment 3: CPU frequency scaling for power states
+	 *
+	 * Active: 1.8 GHz (A72) / 1.4 GHz (A53)
+	 * Idle: 1.2 GHz (A72) / 800 MHz (A53)
+	 * Light Sleep: 800 MHz (A72) / 600 MHz (A53)
+	 * Deep Sleep: 600 MHz (A72) / 400 MHz (A53) — MCU manages
+	 * ============================================================ */
+	fragment@3 {
+		target-path = "/cpus";
+		__overlay__ {
+			/*
+			 * The operating-points-v2 table is defined in the base DTS
+			 * (rk3576.dtsi). This overlay adjusts the dynamic power
+			 * coefficient for the power-state aware governor.
+			 */
+			ghostblade,power-state-opps = <
+				/* Active: 1.8 GHz @ 1.0V */
+				1800000 1000000
+				/* Idle: 1.2 GHz @ 0.9V */
+				1200000 900000
+				/* Light Sleep: 800 MHz @ 0.8V */
+				800000 800000
+				/* Deep Sleep: 600 MHz @ 0.7V */
+				600000 700000
+			>;
+		};
+	};
+};

@@ -198,13 +198,17 @@
 #define APEX_SPI_CLK_DIV_50MHZ    6  /* 300MHz / (2 * (6+1)) = ~21.4 MHz */
 #define APEX_SPI_CLK_DIV_25MHZ    12 /* 300MHz / (2 * (12+1)) = ~11.5 MHz */
 
-/* Command opcodes — Host to MCU */
 #define APEX_CMD_NOP              0xFF
 #define APEX_CMD_SDR_TUNE         0x01
 #define APEX_CMD_SDR_STREAM       0x02
 #define APEX_CMD_ANT_SELECT       0x03
 #define APEX_CMD_CC1101_CFG       0x04
 #define APEX_CMD_NFC_TRANSACT     0x05
+#define APEX_CMD_TELEMETRY_REQ    0x06
+#define APEX_CMD_RESET_MCU        0x07
+
+/* Reset confirmation magic value — must match SPI_RESET_MAGIC in MCU firmware */
+#define APEX_RESET_MAGIC          0x52534554UL  /* "RSET" */
 
 /* Command opcodes — MCU to Host */
 #define APEX_CMD_TELEMETRY        0x81
@@ -288,6 +292,7 @@ struct apex_nfc_transact {
 #define APEX_IOC_SG_START      _IOW(APEX_IOC_MAGIC, 9, struct apex_sg_config)
 #define APEX_IOC_SG_STOP       _IO(APEX_IOC_MAGIC, 10)
 #define APEX_IOC_SG_GET_STATUS _IOR(APEX_IOC_MAGIC, 11, struct apex_sg_status)
+#define APEX_IOC_SOFT_RESET    _IOW(APEX_IOC_MAGIC, 12, __u32)  /* Soft reset MCU (requires APEX_RESET_MAGIC) */
 
 /* ── DMA Scatter-Gather Structures ──────────────────────────────────────── */
 

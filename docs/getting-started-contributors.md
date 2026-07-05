@@ -128,9 +128,10 @@ Key files:
 | `0x02` | Host→MCU | SDR_STREAM | Start/stop SDR IQ streaming |
 | `0x03` | Host→MCU | ANT_SELECT | Select antenna port (1-4) |
 | `0x04` | Host→MCU | CC1101_CFG | Configure sub-GHz radio |
-| `0x05` | Host→MCU | NFC_TRANSACT | Execute NFC transaction |
-| `0x06` | Host→MCU | TELEMETRY_REQ | Request telemetry data |
-| `0x81` | MCU→Host | TELEMETRY | Telemetry response |
+|| `0x05` | Host→MCU | NFC_TRANSACT | Execute NFC transaction |
+|| `0x06` | Host→MCU | TELEMETRY_REQ | Request telemetry data |
+|| `0x07` | Host→MCU | RESET_MCU | Reset MCU (requires magic 0x52534554) |
+|| `0x81` | MCU→Host | TELEMETRY | Telemetry response |
 | `0x82` | MCU→Host | SDR_IQ_CHUNK | IQ sample chunk |
 
 MCU→Host commands have bit 7 set (`0x80`); Host→MCU commands have bit 7 clear (except NOP=`0xFF`).

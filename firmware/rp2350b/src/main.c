@@ -42,6 +42,8 @@
 #include "st25r3916_init.h"
 #include "battery_monitor.h"
 #include "watchdog.h"
+#include "sleep_wake.h"
+#include "peripheral_power.h"
 
 /* ── Binary info for picotool ──────────────────────────────────────────────── */
 bi_decl(bi_program_name("GhostBlade Firmware"))
@@ -188,6 +190,12 @@ static int init_peripherals(void)
         printf("WARN: st25r3916_init failed (%d), NFC unavailable\r\n", ret);
     }
 
+    /* Step 7: Sleep/wake state machine for power management */
+    sleep_wake_init();
+
+    /* Step 8: Peripheral power rails (enables SDR, NFC, sub-GHz rails) */
+    peripheral_power_init();
+
     return 0;
 }
 
@@ -261,7 +269,11 @@ int main(void)
     printf("[MAIN] Initializing peripherals...\r\n");
     if (init_peripherals() != 0) {
         printf("[MAIN] FATAL: Peripheral initialization failed, rebooting\r\n");
-        watchdog_enable(1, true);  /* Trigger immediate watchdog reset */
+        /* Use WATCHDOG_TIMEOUT_MS for the emergency reset rather than
+         * 1 ms — the Pico SDK watchdog_enable() takes (delay_ms, pause_on_debug).
+         * A 1 ms timeout would reset before the printf buffer flushes.
+         * Use the configured timeout to allow diagnostic output. */
+        watchdog_enable(WATCHDOG_TIMEOUT_MS, true);
         while (1) tight_loop_contents();
     }
     printf("[MAIN] Peripherals initialized\r\n");
@@ -275,7 +287,7 @@ int main(void)
     printf("[MAIN] Configuring watchdog (%d ms timeout)...\r\n",
            WATCHDOG_TIMEOUT_MS);
     {
-        bool was_wd_reset = watchdog_init();
+        bool was_wd_reset = watchdog_init();  /* returns true if boot was from WD reset */
         if (was_wd_reset) {
             printf("[MAIN] Recovered from watchdog reset\r\n");
         }
@@ -318,6 +330,20 @@ int main(void)
         /* Kick watchdog at the start of each loop iteration */
         watchdog_kick();
 
+        /* Process sleep/wake state machine for power management.
+         * This checks for SPI inactivity and transitions through
+         * IDLE → LIGHT → DEEP sleep states, or wakes on activity. */
+        enum sleep_state slp = sleep_wake_process();
+        if (slp != SLEEP_IDLE) {
+            /* In a non-idle sleep state, reduce telemetry frequency
+             * and skip battery monitoring to save power. The watchdog
+             * still gets kicked to prevent reset. */
+            if (slp == SLEEP_DEEP) {
+                sleep_ms(10);  /* Longer delay in deep sleep */
+                continue;
+            }
+        }
+
         /* Process SPI commands from RK3576 */
         spi_protocol_process();
 
@@ -340,6 +366,10 @@ int main(void)
         /* Periodic: Brownout detection via battery monitor */
         if (g_state.battery_monitor_ready) {
             uint16_t vbat = battery_monitor_get_vbat_mv();
+            /* If ADC has not been read yet, vbat will be 0. Skip
+             * brownout detection on the first iteration to avoid
+             * false positives. */
+            if (vbat == 0) goto skip_brownout;
             static bool brownout_active = false;
             if (battery_is_brownout(vbat, &brownout_active)) {
                 /* Mark brownout in watchdog scratch register so we
@@ -350,6 +380,7 @@ int main(void)
             } else if (!brownout_active) {
                 spi_protocol_set_brownout(false);
             }
+        skip_brownout:;
         }
 
         /* Yield to avoid 100% CPU usage in idle state */

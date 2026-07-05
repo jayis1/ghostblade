@@ -97,15 +97,14 @@ extern uint32_t lms7002m_platform_timestamp_ms(void);
  * Returns: LMS7002M_OK if the mask matches within the timeout,
  *          LMS7002M_ERR_TIMEOUT otherwise.
  */
-static int wait_for_bitmask(struct lms7002m_driver *drv,
+static int wait_for_bitmask(const struct lms7002m_driver *drv,
                              uint16_t addr, uint16_t mask,
                              uint16_t value, uint32_t timeout_ms)
 {
     uint32_t start = lms7002m_platform_timestamp_ms();
-    int reg_val;
 
     while (1) {
-        reg_val = lms7002m_spi_read(drv, addr);
+        int reg_val = lms7002m_spi_read(drv, addr);
         if (reg_val < 0)
             return reg_val;
 
@@ -187,6 +186,12 @@ void lms7002m_deinit(struct lms7002m_driver *drv)
 
     /* Power down RF sections */
     lms7002m_spi_write(drv, LMS7002M_TOP, 0x0000);
+
+    /* Securely wipe driver state to prevent leakage of PLL config,
+     * gain settings, and frequency parameters after deinitialization. */
+    volatile uint8_t *p = (volatile uint8_t *)drv;
+    for (size_t i = 0; i < sizeof(*drv); i++)
+        p[i] = 0;
 
     drv->initialized = false;
 }
@@ -744,7 +749,7 @@ int lms7002m_spi_write(struct lms7002m_driver *drv, uint16_t addr, uint16_t data
     return LMS7002M_OK;
 }
 
-int lms7002m_spi_read_burst(struct lms7002m_driver *drv, uint16_t start_addr,
+int lms7002m_spi_read_burst(const struct lms7002m_driver *drv, uint16_t start_addr,
                               uint16_t *buf, uint16_t num_regs)
 {
     uint16_t i;
@@ -840,7 +845,7 @@ enum lms7002m_channel lms7002m_get_channel(const struct lms7002m_driver *drv)
  * Public API — Status
  * ======================================================================== */
 
-int lms7002m_get_status(struct lms7002m_driver *drv,
+int lms7002m_get_status(const struct lms7002m_driver *drv,
                          uint16_t *fifo_fill, bool *pll_locked)
 {
     int status;

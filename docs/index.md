@@ -6,7 +6,9 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 
 | Document | Description |
 |----------|-------------|
+| [Board Quick-Start](board-quickstart.md) | TL;DR — from unpowered to operational in 10 minutes |
 | [Getting Started](getting-started.md) | Dev environment setup, toolchain installation, first build |
+| [Getting Started Guide (detailed)](getting-started-guide.md) | Comprehensive build, flash, and test guide with pyapex examples |
 | [Build Instructions](build-instructions.md) | Detailed build steps for firmware, driver, libapex, Python bindings |
 | [Flashing Guide](flashing-guide.md) | Firmware flashing via OpenOCD/picotool/USB, driver loading, recovery |
 | [Changelog](../CHANGELOG.md) | Project changelog and version history |
@@ -23,6 +25,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Power Tree Diagram](power-tree-diagram.md) | Detailed power tree with current budgets, ESD, test points |
 | [Power Sequencing Timing](power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing charts |
 | [Reset Circuit Design](reset-circuit-design.md) | Reset circuits for all processors and peripherals |
+| [Timing Diagrams](timing-diagrams.md) | Mermaid sequence diagrams for boot, power, SPI, SDR, NFC, CC1101, watchdog, brownout |
 | [FAQ & Troubleshooting](faq-troubleshooting.md) | Common issues, error codes, and solutions |
 | [Pin Assignments](pin-assignments.md) | Cross-reference: schematic, DTS, and firmware pin mappings |
 | [GPIO Cross-Reference](gpio-cross-reference.md) | RK3576 DTS ↔ RP2350B board_pins.h ↔ schematic net name mapping |
@@ -48,6 +51,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | `ghostblade-nfc-overlay.dts` | NFC (ST25R3916) runtime config: protocol, TX power, polling interval |
 | `ghostblade-wifi-overlay.dts` | Wi-Fi 6E (MT7922) runtime config: regulatory domain, TX power, monitor mode, BT |
 | `ghostblade-options.dts` | Optional hardware: GPS (u-blox NEO-M10N on UART2), external LNA, Bluetooth |
+| `ghostblade-sleep-overlay.dts` | Power management: sleep/wake state transitions, brownout thresholds, thermal scaling |
 
 ## Contributing
 

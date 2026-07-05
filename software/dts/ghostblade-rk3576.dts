@@ -115,6 +115,25 @@
 		off-on-delay-us = <10000>;
 	};
 
+	vbat_reg: vbat-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vbat";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <4200000>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
+	vdd_sdio: vdd-sdio-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_sdio";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		vin-supply = <&vdd_3v3>;
+		regulator-boot-on;
+		regulator-always-on;
+	};
+
 	/* ================================================================
 	 * Thermal Zones
 	 * ================================================================ */
@@ -225,6 +244,38 @@
 	};
 
 	/* ================================================================
+	 * DMA Controller for SPI0 scatter-gather transfers
+	 * The RK3576 has a DMA330 (PL330) controller that services SPI0.
+	 * ================================================================ */
+	dma_spi0: dma-controller@fe610800 {
+		compatible = "arm,pl330", "arm,primecell";
+		reg = <0x0 0xfe610800 0x0 0x1000>;
+		interrupts = <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>;
+		#dma-cells = <1>;
+		dma-channels = <8>;
+		dma-requests = <16>;
+		clocks = <&cru ACLK_SPI0>;
+		clock-names = "apb_pclk";
+		status = "okay";
+	};
+
+	/* ================================================================
+	 * IOMMU for DMA address translation
+	 * Maps device addresses for scatter-gather DMA buffers
+	 * used by the apex_bridge driver for zero-copy SDR IQ streaming.
+	 * ================================================================ */
+	iommu_spi0: iommu@fe611000 {
+		compatible = "rockchip,iommu";
+		reg = <0x0 0xfe611000 0x0 0x1000>;
+		interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&cru ACLK_SPI0>, <&cru HCLK_SPI0>;
+		clock-names = "aclk", "hclk";
+		#iommu-cells = <0>;
+		status = "okay";
+	};
+
+	/* ================================================================
 	 * SDR (LMS7002M) — MIPI-CSI-2 Interface
 	 * Repurposed from camera to SDR IQ data transport
 	 * ================================================================ */
@@ -257,6 +308,17 @@
 	max-frequency = <50000000>; /* 50 MHz */
 	#address-cells = <1>;
 	#size-cells = <0>;
+
+	/* DMA engine for scatter-gather transfers to/from RP2350B.
+	 * The PL330 DMA controller at fe610800 provides zero-copy
+	 * streaming of SDR IQ data directly into userspace-mappable
+	 * buffers. */
+	dmas = <&dma_spi0 0>, <&dma_spi0 1>;
+	dma-names = "tx", "rx";
+
+	/* IOMMU for DMA address translation — required for
+	 * scatter-gather DMA on systems with >4 GB RAM. */
+	iommus = <&iommu_spi0>;
 
 	apex_bridge_spi: apex-bridge@0 {
 		compatible = "apex,apex-bridge";
@@ -457,6 +519,34 @@
 &wdt {
 	status = "okay";
 	timeout-sec = <10>;
+};
+
+/* ================================================================
+ * TSADC — Thermal Sensor ADC
+ * Used by thermal-zones for SoC temperature monitoring.
+ * The RP2350B reports its own temperature via SPI telemetry;
+ * this node covers the RK3576 die temperature only.
+ * ================================================================ */
+
+&tsadc {
+	status = "okay";
+	rockchip,hw-tshut-temp = <105000>; /* 105°C emergency shutdown */
+	rockchip,hw-tshut-mode = <0>;       /* CRU reset mode */
+	pinctrl-0 = <&tsadc_pins>;
+	pinctrl-names = "default";
+};
+
+/* ================================================================
+ * SARADC — Battery Voltage Monitoring
+ * The RK3576 SARADC monitors the VBAT_SENSE voltage divider
+ * (R1=100kΩ, R2=33kΩ) on ADC channel 0 as a backup check
+ * for the RP2350B primary battery monitor.
+ * ================================================================ */
+
+&saradc {
+	status = "okay";
+	vref-supply = <&vdd_3v3>;
+	clock-frequency = <1000000>; /* 1 MHz SARADC clock */
 };
 
 /* ================================================================
@@ -754,5 +844,26 @@ display_backlight: backlight {
 		function = "pcie_clk";
 		bias-pull-up;
 		drive-strength = <2>;
+	};
+
+	/* TSADC pins — thermal sensor on SoC die
+	 * The TSADC is internal to the RK3576 and does not require
+	 * external pins, but the pinctrl entry is needed for the
+	 * hw-tshut polarity configuration.
+	 */
+	tsadc_pins: tsadc-pins {
+		pins = "TSADC_SHUT";
+		function = "tsadc";
+		bias-pull-up;
+	};
+
+	/* SARADC pin — VBAT_SENSE voltage divider
+	 * ADC channel 0 reads the battery voltage through a
+	 * 100kΩ / 33kΩ divider (VADC = VBAT × 33/133).
+	 */
+	saradc_pins: saradc-pins {
+		pins = "SARADC_VIN0";
+		function = "saradc";
+		bias-pull-up;
 	};
 };

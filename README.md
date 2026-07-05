@@ -164,6 +164,7 @@ ghostblade/
 │   ├── power-tree.md                          # Power tree diagram & rails
 │   ├── spi-protocol-timing.md                # SPI bridge timing diagrams
 │   ├── sysfs-attributes.md                   # Driver sysfs telemetry reference
+│   ├── getting-started-guide.md        # Comprehensive build & test guide (with examples)
 │   ├── hardware-test-procedures.md             # 17-section test plan
 │   ├── hardware-contributor-guide.md          # Hardware design guidelines
 │   ├── contributing.md                        # How to contribute (code, docs, hardware)
@@ -178,7 +179,9 @@ ghostblade/
 │       └── boot-process-and-mmio.md           # Boot chain, register maps
 │   ├── power-tree-diagram.md                 # Detailed power tree with current budgets
 │   ├── power-sequencing-timing.md            # Cold boot, warm reset, sleep/wake timing
-│   └── reset-circuit-design.md               # Reset circuits for all processors
+│   ├── reset-circuit-design.md               # Reset circuits for all processors
+│   ├── timing-diagrams.md                    # Mermaid timing & sequence diagrams
+│   ├── board-quickstart.md                   # TL;DR quick-start guide
 ├── firmware/
 │   └── rp2350b/
 │       ├── CMakeLists.txt                      # CMake build (Pico SDK)
@@ -239,6 +242,7 @@ ghostblade/
 │       ├── ghostblade-sdr-overlay.dts          # SDR MIPI-CSI-2 + DMA overlay
 │       ├── ghostblade-nfc-overlay.dts          # NFC (ST25R3916) configuration overlay
 │       ├── ghostblade-wifi-overlay.dts          # Wi-Fi 6E (MT7922) configuration overlay
+│       ├── ghostblade-sleep-overlay.dts          # Sleep/wake power state overlay
 │       └── Makefile                            # DTS compile & validate targets
 │   └── toolchain.conf                          # Cross-compilation toolchain setup
 ├── tests/
@@ -317,6 +321,7 @@ ghostblade/
 | [Docs Index](docs/index.md) | Central documentation hub with all links |
 | [System Architecture](docs/architecture.md) | Block diagrams, processor architecture, bus map, data flows, security model |
 | [Getting Started](docs/getting-started.md) | Dev environment setup, toolchain, first build |
+| [Getting Started Guide (detailed)](docs/getting-started-guide.md) | Comprehensive build, flash, and test guide with examples |
 | [Build Instructions](docs/build-instructions.md) | Detailed build steps for firmware, driver, libapex |
 | [Flashing Guide](docs/flashing-guide.md) | Firmware flashing, driver loading, recovery |
 | [FAQ & Troubleshooting](docs/faq-troubleshooting.md) | Common issues and solutions |
@@ -326,6 +331,8 @@ ghostblade/
 | [Power Sequencing Timing](docs/power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing |
 | [Reset Circuit Design](docs/reset-circuit-design.md) | Reset circuits for all processors and peripherals |
 | [SPI Protocol & Timing](docs/spi-protocol-timing.md) | Bridge protocol, frame format, timing diagrams |
+| [Timing Diagrams](docs/timing-diagrams.md) | Mermaid sequence diagrams for boot, power, SPI, and recovery |
+| [Board Quick-Start](docs/board-quickstart.md) | TL;DR — from unpowered to operational in 10 minutes |
 | [Sysfs Attributes](docs/sysfs-attributes.md) | Driver telemetry attributes, usage examples |
 | [Hardware Test Procedures](docs/hardware-test-procedures.md) | 17-section manufacturing test plan |
 | [Hardware Bring-Up Checklist](docs/hardware-bringup-checklist.md) | Step-by-step board bring-up with expected values |

@@ -237,6 +237,51 @@ CSn  ┘                                                            └
        │  │     ~100μs        │     ~5ms           │   ~1ms      │
 ```
 
+### 3.6 MCU Software Reset (CMD_RESET_MCU)
+
+```
+  RK3576 (Host)                          RP2350B (MCU)
+       │                                      │
+       │──── RESET_MCU (0x07) ───────────────→│
+       │     payload = 0x52534554             │
+       │     (magic "RSET")                   │── Validate magic value
+       │                                      │── Set scratch[0] = 0x48525354
+       │                                      │    ("HRST" — host-triggered mark)
+       │                                      │── watchdog_reboot(true)
+       │                                      │    (does not return)
+       │                                      │
+       │  ═══ MCU RESET ═══                   │
+       │                                      │
+       │  SPI bus idle (~200 ms)              │
+       │                                      │── Crystal oscillator start (~300μs)
+       │                                      │── RP2350B boot ROM (~5 ms)
+       │                                      │── Firmware initialization:
+       │                                      │   ├── ADC calibration
+       │                                      │   ├── SPI0 slave init
+       │                                      │   ├── CC1101 init (~15 ms)
+       │                                      │   ├── ST25R3916 init (~25 ms)
+       │                                      │   ├── LMS7002M init (~50 ms)
+       │                                      │   └── Watchdog kick
+       │                                      │
+       │←──── MCU_READY signal ────────────────│
+       │                                      │
+       │  Total reset time: ~200 ms typical
+       │  (50 ms min, 500 ms max)
+       │
+       │  If wrong magic value is sent:
+       │──── RESET_MCU (0x07) ───────────────→│
+       │     payload = 0x00000000             │── Magic mismatch
+       │                                      │── cmd_unknown_rx++
+       │                                      │── Frame discarded
+       │←──── Normal response continues ──────│
+```
+
+The software reset uses a two-stage magic value validation (0x52534554
+"RSET") to prevent accidental resets from SPI bus noise or corrupted frames.
+On successful validation, the MCU writes 0x48525354 ("HRST") to watchdog
+scratch register 0 before triggering the reset, allowing the firmware to
+distinguish a host-triggered reset from a watchdog timeout on the next boot.
+
 ## 4. Power Sequencing Timing
 
 ### 4.1 System Power-On Sequence

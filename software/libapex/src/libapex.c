@@ -625,3 +625,26 @@ bool apex_is_overtemp(const apex_telemetry_t *telem) {
     if (!telem) return false;
     return telem->temp_c_x10 > 850;  /* 85.0°C */
 }
+
+/* ========================================================================
+ * MCU Soft Reset
+ * ======================================================================== */
+
+int apex_soft_reset(apex_handle_t handle) {
+    if (!handle || handle->fd < 0)
+        return APEX_ERR_INVALID_ARG;
+
+    /* Send the APEX_RESET_MAGIC value via the soft reset ioctl.
+     * The kernel driver validates the magic and sends a CMD_RESET_MCU
+     * frame to the MCU, which validates the magic again before
+     * triggering a watchdog reset. This two-stage validation prevents
+     * accidental resets from corrupted SPI frames. */
+    uint32_t magic = APEX_RESET_MAGIC;
+    if (ioctl(handle->fd, APEX_IOC_SOFT_RESET, &magic) < 0) {
+        handle->last_error = APEX_ERR_IOCTL_FAILED;
+        return APEX_ERR_IOCTL_FAILED;
+    }
+
+    handle->last_error = APEX_OK;
+    return APEX_OK;
+}

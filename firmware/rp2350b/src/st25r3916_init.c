@@ -524,6 +524,11 @@ int st25r3916_transact(uint8_t cmd,
         tx_len = ST25R3916_FIFO_SIZE_VAL;
     }
 
+    /* Clamp RX length to FIFO size if provided */
+    if (rx_len != NULL && *rx_len > ST25R3916_FIFO_SIZE_VAL) {
+        *rx_len = ST25R3916_FIFO_SIZE_VAL;
+    }
+
     /* Default timeout: 100 ms → ~150000 nop iterations at 150 MHz */
     if (timeout_ms == 0)
         timeout_ms = 100;

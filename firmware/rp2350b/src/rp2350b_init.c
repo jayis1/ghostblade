@@ -663,10 +663,12 @@ void rp2350b_init(void) {
     /* Step 2: Configure GPIO directions and initial states */
     gpio_init();
 
-    /* Step 3: Initialize CRC tables */
-    crc64_init();
-    crc32_init();
-    watchdog_kick();  /* CRC init is computationally heavy */
+    /* Step 3: Initialize CRC tables — these are defined in spi_protocol.c
+     * and initialized by spi_protocol_init() which is called from main().
+     * The static init functions crc64_init/crc32_init are file-local to
+     * spi_protocol.c, so they are called as part of spi_protocol_init().
+     * We just kick the watchdog here as a placeholder during this init step. */
+    watchdog_kick();  /* CRC init happens in spi_protocol_init() */
 
     /* Step 4: Initialize ADC (battery voltage, temperature) */
     adc_init();
@@ -757,8 +759,21 @@ void __attribute__((weak)) spi0_handler(void) {
         }
     }
 
-    /* Clear interrupt */
-    spi[SPI_SSPICR / 4] = spi[SPI_SSPRIS / 4];  /* Clear all pending interrupts */
+    /* Clear only the RX-related interrupt flags. Writing to SSPICR clears
+     * the flags that are set in SSPRIS. However, clearing ALL pending
+     * flags (including TX, overrun, etc.) can mask legitimate error
+     * conditions. Instead, only clear the RX timeout and RX FIFO half-full
+     * flags that this handler services.
+     *
+     * On the RP2350B PL022 SSP:
+     *   SSPRIS bit 0 = TXRIS (TX FIFO half-empty) — leave set
+     *   SSPRIS bit 2 = RXRIS (RX FIFO half-full) — clear this
+     *   SSPRIS bit 1 = TXORIS (TX overrun) — leave for error handler
+     *   SSPRIS bit 3 = RXORIS (RX overrun) — clear to acknowledge
+     *
+     * Writing to SSPICR clears RORIC (bit 0) and RTIC (bit 1) only.
+     * This is safe — other flags are not affected. */
+    spi[SPI_SSPICR / 4] = spi[SPI_SSPRIS / 4];
 }
 
 /* ========================================================================

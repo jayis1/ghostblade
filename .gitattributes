@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: CC0-1.0
+# GhostBlade .gitattributes — line-ending and diff normalization
+#
+# Ensure consistent line endings across all platforms and enable
+# intelligent diffs for specific file types.
+
+# Auto-detect text files and normalize to LF
+* text=auto eol=lf
+
+# Source code — strict LF
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.ld text eol=lf
+*.S text eol=lf
+*.s text eol=lf
+
+# Device tree / hardware description
+*.dts text eol=lf
+*.dtsi text eol=lf
+
+# Build system
+Makefile text eol=lf
+*.mk text eol=lf
+CMakeLists.txt text eol=lf
+*.cmake text eol=lf
+*.ninja text eol=lf
+
+# Config / manifest
+*.conf text eol=lf
+*.json text eol=lf diff=json
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Documentation
+*.md text eol=lf diff=markdown
+*.rst text eol=lf
+*.txt text eol=lf
+*.adoc text eol=lf
+
+# Scripts
+*.sh text eol=lf
+*.py text eol=lf diff=python
+
+# KiCad — text file formats (preserve LF)
+*.kicad_sym text eol=lf
+*.kicad_mod text eol=lf
+*.kicad_pcb text eol=lf
+*.kicad_sch text eol=lf
+*.kicad_drc text eol=lf
+*.kicad_erc text eol=lf
+*.net text eol=lf
+*.drl text eol=lf
+*.pos text eol=lf
+*.rpt text eol=lf
+
+# Binary files — no normalization
+*.bin binary
+*.hex binary
+*.uf2 binary
+*.elf binary
+*.o binary
+*.a binary
+*.so binary
+*.ko binary
+*.dtbo binary
+*.dtb binary
+*.gz binary
+*.xz binary
+*.zip binary
+*.tar binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg binary
+*.pdf binary
+*.step binary
+*.stp binary
+*.wrl binary
+*.3mf binary
