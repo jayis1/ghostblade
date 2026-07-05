@@ -50,6 +50,7 @@
 #define CMD_CC1101_CFG       0x04
 #define CMD_NFC_TRANSACT     0x05
 #define CMD_TELEMETRY_REQ    0x06
+#define CMD_RESET_MCU        0x07
 #define CMD_TELEMETRY        0x81
 #define CMD_SDR_IQ_CHUNK     0x82
 

@@ -54,6 +54,7 @@
 #define APEX_CMD_CC1101_CFG       0x04
 #define APEX_CMD_NFC_TRANSACT     0x05
 #define APEX_CMD_TELEMETRY_REQ    0x06
+#define APEX_CMD_RESET_MCU        0x07
 #define APEX_CMD_TELEMETRY        0x81
 #define APEX_CMD_SDR_IQ_CHUNK     0x82
 

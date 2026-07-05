@@ -346,6 +346,25 @@ pyapex_device_mcu_reset(PyApexDeviceObject *self, PyObject *args)
 }
 
 static PyObject *
+pyapex_device_soft_reset(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
+{
+    int ret;
+
+    if (!self->handle) {
+        PyErr_SetString(PyExc_RuntimeError, "Device not open");
+        return NULL;
+    }
+
+    ret = apex_soft_reset(self->handle);
+    if (ret != APEX_OK) {
+        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+static PyObject *
 pyapex_device_battery_percent(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
 {
     apex_telemetry_t telem;
@@ -524,6 +543,7 @@ static PyMethodDef pyapex_device_methods[] = {
     {"get_status",         (PyCFunction)pyapex_device_get_status,        METH_NOARGS,  "Read device status dict"},
     {"get_firmware_version", (PyCFunction)pyapex_device_get_firmware_version, METH_NOARGS, "Read firmware version string"},
     {"mcu_reset",          (PyCFunction)pyapex_device_mcu_reset,       METH_VARARGS, "MCU reset: mcu_reset(assert)"},
+    {"soft_reset",         (PyCFunction)pyapex_device_soft_reset,      METH_NOARGS,  "Soft reset MCU via SPI command (requires magic)"},
     {"battery_percent",    (PyCFunction)pyapex_device_battery_percent,  METH_NOARGS,  "Get battery charge estimate (0-100)"},
     {NULL, NULL, 0, NULL}
 };
