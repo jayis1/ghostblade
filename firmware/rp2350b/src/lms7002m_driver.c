@@ -4,864 +4,670 @@
  * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * This file implements the LMS7002M wideband SDR transceiver driver
- * for the RP2350B co-processor on the GhostBlade platform. It provides:
+ * This file implements the LMS7002M SDR transceiver control interface
+ * for the GhostBlade board. The LMS7002M is connected to the RP2350B
+ * via SPI1 (dedicated SPI bus with GPIO chip select).
  *
- *   1. Chip initialization and reset sequencing
- *   2. PLL frequency synthesis (VCO_L: 1.88–3.72 GHz, VCO_H: 3.72–5.8 GHz)
- *   3. RX/TX gain distribution across LNA, TIA, and PGA stages
- *   4. ADC/DAC sample rate configuration with decimation/interpolation
- *   5. FIFO-based IQ data streaming
- *   6. DC offset and IQ imbalance calibration
- *   7. SPI register access (single and burst modes)
+ * The LMS7002M is a multi-band RF transceiver supporting:
+ *   - Frequency range: 100 kHz to 3.8 GHz
+ *   - Bandwidth: 2 MHz to 61.44 MHz
+ *   - MIMO: 2×2 (TX/RX)
+ *   - Sample rates: up to 61.44 MSPS per channel
+ *   - 12-bit ADC/DAC resolution
  *
- * The LMS7002M uses a 4-byte SPI command format:
- *   Write: [0][addr13:0][data15:0]
- *   Read:  [1][addr13:0][don't care]  →  response: [data15:0]
+ * On the GhostBlade board:
+ *   - SPI1 master is used for LMS7002M configuration (up to 50 MHz SPI)
+ *   - MIPI-CSI-2 carries IQ data directly to the RK3576
+ *   - GPIO controls TX/RX enable and LNA
+ *   - Active-low reset (PIN_SDR_RESET)
  *
- * The RP2350B communicates with the RK3576 host through the SPI protocol
- * handler (spi_protocol.c), which encapsulates SDR control commands and
- * IQ data streams in framed packets with CRC-16 validation.
- *
- * References:
- *   - LMS7002M Data Sheet v3.1r00 (Lime Microsystems)
- *   - LimeSuite (https://github.com/myriadrf/LimeSuite)
+ * Reference: LMS7002M Datasheet (v3.1r0), LMS7002M Programming and
+ * Calibration Guide (v1.0r1)
  */
 
-#include "lms7002m_driver.h"
+#include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
+#include "lms7002m_driver.h"
+#include "board_pins.h"
 
 /* ========================================================================
- * Internal Constants
+ * LMS7002M SPI Protocol
+ *
+ * The LMS7002M SPI interface uses 16-bit word transfers:
+ *   Write: [0] [1] [R/W=0] [Addr(6:0)] [Data(7:0)]
+ *   Read:  [0] [1] [R/W=1] [Addr(6:0)] [Dummy(7:0)] → [Data(7:0)]
+ *
+ * The full 32-bit SPI frame format:
+ *   Bits [31:30] = 00 (reserved, must be 0)
+ *   Bit  [29]    = R/W (0=write, 1=read)
+ *   Bits [28:16]  = Address (13 bits, but only lower 7 used for reg access)
+ *   Bits [15:0]   = Data (16 bits)
+ *
+ * For register access, the address space is 0x0000-0x7FFF with
+ * 16-bit data per register. Burst mode auto-increments the address.
  * ======================================================================== */
 
-/** Minimum VCO frequency (Hz) — covers both VCO_L and VCO_H ranges */
-#define VCO_MIN_HZ          1880000000ULL   /* 1.88 GHz */
-#define VCO_MAX_HZ           5800000000ULL   /* 5.80 GHz */
-#define VCO_H_THRESHOLD_HZ  3720000000ULL   /* VCO_H starts at 3.72 GHz */
-
-/** Maximum SPI transfer size (bytes) */
-#define LMS7002M_SPI_MAX_XFER  256
-
-/** Chip reset timeout (ms) */
-#define LMS7002M_RESET_TIMEOUT_MS  50
-
-/** PLL lock timeout (ms) */
-#define LMS7002M_PLL_LOCK_TIMEOUT_MS  100
-
-/** Calibration timeouts (ms) */
-#define LMS7002M_DC_CAL_TIMEOUT_MS    500
-#define LMS7002M_IQ_CAL_TIMEOUT_MS    1000
+/* SPI command encoding */
+#define LMS7002M_SPI_WRITE      0x00000000UL
+#define LMS7002M_SPI_READ       0x20000000UL
+#define LMS7002M_SPI_ADDR_MASK  0x3FFF0000UL
+#define LMS7002M_SPI_DATA_MASK  0x0000FFFFUL
+#define LMS7002M_SPI_ADDR_SHIFT  16
 
 /* ========================================================================
- * SPI Interface (hardware-specific, to be implemented by platform)
+ * LMS7002M Register Addresses (Key Configuration Registers)
+ *
+ * These are the primary registers needed for basic SDR configuration.
+ * The full register map is documented in the LMS7002M Programming Guide.
  * ======================================================================== */
 
-/**
- * Platform SPI transfer function.
- * Sends and receives 4 bytes (32 bits) in a single SPI transaction.
- *
- * @param tx_data: 32-bit command word to send
- * @return: 32-bit response word received
- *
- * This function must be implemented by the platform-specific SPI layer.
- * It should handle chip-select assertion/deassertion and bit ordering.
- */
-extern uint32_t lms7002m_platform_spi_xfer(uint32_t tx_data);
+/* General Configuration */
+#define LMS7002M_REG(x)           ((uint16_t)(x))
 
-/**
- * Platform delay function.
- * @param ms: Delay in milliseconds
- */
-extern void lms7002m_platform_delay_ms(uint32_t ms);
+/* Reference clock and PLL registers (0x0020-0x002F) */
+#define REG_REFCLK_DIV             LMS7002M_REG(0x0020)
+#define REG_SYNTH_EN              LMS7002M_REG(0x0021)
+#define REG_CGP_INT               LMS7002M_REG(0x0022)
+#define REG_CGP_FRAC              LMS7002M_REG(0x0023)
+#define REG_VCOCAP                LMS7002M_REG(0x0024)
 
-/**
- * Platform timestamp function.
- * @return: Current timestamp in milliseconds
- */
-extern uint32_t lms7002m_platform_timestamp_ms(void);
+/* TX PLL registers */
+#define REG_TX_PLL_INT             LMS7002M_REG(0x0100)
+#define REG_TX_PLL_FRAC            LMS7002M_REG(0x0101)
+#define REG_TX_PLL_VCOCAP          LMS7002M_REG(0x0102)
+
+/* RX PLL registers */
+#define REG_RX_PLL_INT             LMS7002M_REG(0x0200)
+#define REG_RX_PLL_FRAC            LMS7002M_REG(0x0201)
+#define REG_RX_PLL_VCOCAP          LMS7002M_REG(0x0202)
+
+/* Transceiver configuration (0x0100-0x01FF for TX, 0x0200-0x02FF for RX) */
+#define REG_XBIAS                  LMS7002M_REG(0x0081)
+#define REG_XBUF                   LMS7002M_REG(0x0082)
+#define REG_XRXBUF                 LMS7002M_REG(0x0083)
+#define REG_XTXBUF                 LMS7002M_REG(0x0084)
+
+/* RX and TX enable / data path */
+#define REG_EN_DIR                 LMS7002M_REG(0x0240)
+#define REG_EN_LNA                 LMS7002M_REG(0x0241)
+
+/* LNA and TIA registers (RX path) */
+#define REG_RFE_LNA_GAIN           LMS7002M_REG(0x0250)
+#define REG_RFE_LNA_MODE           LMS7002M_REG(0x0251)
+#define REG_RFE_TIA_GAIN           LMS7002M_REG(0x0252)
+
+/* Baseband filter registers */
+#define REG_TDD_BBFLT              LMS7002M_REG(0x0300)
+#define REG_RX_BBFILT              LMS7002M_REG(0x0301)
+#define REG_TX_BBFILT              LMS7002M_REG(0x0302)
+
+/* Decimation / Interpolation */
+#define REG_RX_DECIMATION          LMS7002M_REG(0x0310)
+#define REG_TX_INTERPOLATION       LMS7002M_REG(0x0311)
+
+/* Power down and enable registers */
+#define REG_POWER_DOWN             LMS7002M_REG(0x0092)
+#define REG_TX_ENABLE              LMS7002M_REG(0x0093)
+#define REG_RX_ENABLE              LMS7002M_REG(0x0094)
+
+/* SPI data interface */
+#define REG_SPI_DATA_IN            LMS7002M_REG(0x0086)
+#define REG_SPI_DATA_OUT           LMS7002M_REG(0x0087)
 
 /* ========================================================================
- * Internal Helpers
+ * SPI1 Master Transfer Functions
+ * ======================================================================== */
+
+/* SPI1 data register for master transfers */
+#define SPI1_SSPDR               (0x48070000UL + 0x008)
+#define SPI1_SSPSR               (0x48070000UL + 0x00C)
+
+#define REG32(addr)               (*(volatile uint32_t *)(addr))
+
+/**
+ * lms7002m_spi_xfer — Transfer 32 bits to/from LMS7002M via SPI1
+ *
+ * @tx_data: 32-bit word to send
+ * Returns: 32-bit word received
+ *
+ * The LMS7002M SPI uses 32-bit transfers with the MSB-first format:
+ *   Bits [31:30] = 00 (reserved)
+ *   Bit  [29]    = R/W (0=write, 1=read)
+ *   Bits [28:16] = Address
+ *   Bits [15:0]  = Data (write) or Dummy (read)
+ */
+static uint32_t lms7002m_spi_xfer(uint32_t tx_data) {
+    volatile uint32_t *dr = (volatile uint32_t *)SPI1_SSPDR;
+    volatile uint32_t *sr = (volatile uint32_t *)SPI1_SSPSR;
+
+    /* Wait until TX FIFO has space */
+    while (!(*sr & (1 << 1)))  /* TNF: TX FIFO not full */
+        ;
+
+    /* Write 32-bit data */
+    *dr = tx_data;
+
+    /* Wait until RX FIFO has data */
+    while (!(*sr & (1 << 2)))  /* RNE: RX FIFO not empty */
+        ;
+
+    /* Read 32-bit data */
+    return *dr;
+}
+
+/**
+ * lms7002m_cs_assert — Assert LMS7002M chip select
+ */
+static void lms7002m_cs_assert(void) {
+    /* Deassert CC1101 CSn first (shared SPI1 bus) */
+    rp2350b_gpio_set(PIN_CC_SPI_CSN, true);
+
+    /* Assert LMS7002M CSn (active-low) */
+    rp2350b_gpio_set(PIN_SDR_SPI_CSN, false);
+
+    /* CS setup time: LMS7002M requires >10 ns */
+    for (volatile int i = 0; i < 2; i++)
+        __asm__("nop");
+}
+
+/**
+ * lms7002m_cs_release — Release LMS7002M chip select
+ */
+static void lms7002m_cs_release(void) {
+    rp2350b_gpio_set(PIN_SDR_SPI_CSN, true);
+
+    /* CS hold time */
+    for (volatile int i = 0; i < 2; i++)
+        __asm__("nop");
+}
+
+/* ========================================================================
+ * LMS7002M Register Access Functions
  * ======================================================================== */
 
 /**
- * wait_for_bitmask — Poll a register until a bitmask matches or timeout.
+ * lms7002m_write_reg — Write a 16-bit value to an LMS7002M register
  *
- * @drv: Driver state
- * @addr: Register address to poll
- * @mask: Bitmask to check
- * @value: Expected value (after masking)
- * @timeout_ms: Maximum time to wait in milliseconds
- *
- * Returns: LMS7002M_OK if the mask matches within the timeout,
- *          LMS7002M_ERR_TIMEOUT otherwise.
+ * @addr: Register address (0x0000-0x7FFF)
+ * @data: 16-bit data to write
  */
-static int wait_for_bitmask(const struct lms7002m_driver *drv,
-                             uint16_t addr, uint16_t mask,
-                             uint16_t value, uint32_t timeout_ms)
-{
-    uint32_t start = lms7002m_platform_timestamp_ms();
+static void lms7002m_write_reg(uint16_t addr, uint16_t data) {
+    uint32_t spi_cmd;
 
-    while (1) {
-        int reg_val = lms7002m_spi_read(drv, addr);
-        if (reg_val < 0)
-            return reg_val;
+    spi_cmd = LMS7002M_SPI_WRITE
+            | ((uint32_t)(addr & 0x3FFF) << LMS7002M_SPI_ADDR_SHIFT)
+            | ((uint32_t)data & 0xFFFF);
 
-        if ((uint16_t)(reg_val & mask) == value)
-            return LMS7002M_OK;
+    lms7002m_cs_assert();
+    lms7002m_spi_xfer(spi_cmd);
+    lms7002m_cs_release();
+}
 
-        if (lms7002m_platform_timestamp_ms() - start >= timeout_ms)
-            return LMS7002M_ERR_TIMEOUT;
+/**
+ * lms7002m_read_reg — Read a 16-bit value from an LMS7002M register
+ *
+ * @addr: Register address (0x0000-0x7FFF)
+ * Returns: 16-bit register value
+ */
+static uint16_t lms7002m_read_reg(uint16_t addr) {
+    uint32_t spi_cmd;
+    uint32_t rx_data;
 
-        lms7002m_platform_delay_ms(1);
+    spi_cmd = LMS7002M_SPI_READ
+            | ((uint32_t)(addr & 0x3FFF) << LMS7002M_SPI_ADDR_SHIFT);
+
+    lms7002m_cs_assert();
+    /* First transfer: send read command */
+    lms7002m_spi_xfer(spi_cmd);
+    lms7002m_cs_release();
+
+    /* Second transfer: read data (send dummy) */
+    lms7002m_cs_assert();
+    rx_data = lms7002m_spi_xfer(0x00000000);
+    lms7002m_cs_release();
+
+    return (uint16_t)(rx_data & 0xFFFF);
+}
+
+/**
+ * lms7002m_write_burst — Write multiple consecutive registers
+ *
+ * @start_addr: Starting register address
+ * @data:        Array of 16-bit values to write
+ * @count:       Number of registers to write
+ */
+static void lms7002m_write_burst(uint16_t start_addr,
+                                    const uint16_t *data, uint16_t count) {
+    for (uint16_t i = 0; i < count; i++) {
+        lms7002m_write_reg(start_addr + i, data[i]);
     }
 }
 
 /* ========================================================================
- * Public API — Initialization
+ * PLL Frequency Calculation
  * ======================================================================== */
 
-int lms7002m_init(struct lms7002m_driver *drv, uint32_t spi_speed_hz)
-{
-    int ret;
+/*
+ * The LMS7002M uses a fractional-N PLL for frequency synthesis.
+ *
+ * The VCO frequency is calculated as:
+ *   f_VCO = f_REF * (N_INT + N_FRAC / 2^23) / 2
+ *
+ * Where:
+ *   f_REF = reference clock frequency (typically 30.72 MHz)
+ *   N_INT = integer part of the PLL division ratio
+ *   N_FRAC = fractional part (0 to 2^23-1)
+ *
+ * The output frequency is:
+ *   f_OUT = f_VCO / DIV_RATIO
+ *
+ * DIV_RATIO is 1, 2, 4, 8, 16, 32, or 64 depending on the
+ * selected VCO divider.
+ *
+ * For the GhostBlade board, the reference clock is 30.72 MHz
+ * from the on-board TCXO.
+ */
 
-    if (!drv)
-        return LMS7002M_ERR_INVALID_PARAM;
+#define LMS7002M_REF_FREQ_HZ       30720000UL   /* 30.72 MHz TCXO */
+#define LMS7002M_FRAC_BITS          23           /* Fractional PLL resolution */
+#define LMS7002M_FRAC_MODULO        (1UL << 23)  /* 2^23 = 8388608 */
 
-    if (spi_speed_hz > 20000000)
-        return LMS7002M_ERR_INVALID_PARAM;
+/**
+ * lms7002m_calc_pll_params — Calculate PLL integer and fractional parameters
+ *
+ * @freq_hz:    Target frequency in Hz (100 kHz to 3.8 GHz)
+ * @n_int:      Output: PLL integer division ratio
+ * @n_frac:     Output: PLL fractional division ratio
+ * @div_ratio:  Output: VCO divider ratio (1, 2, 4, 8, 16, 32, or 64)
+ *
+ * The VCO operates in the range 2.4-3.8 GHz. The divider brings
+ * the output down to the desired frequency.
+ *
+ * Returns: 0 on success, -1 on error (frequency out of range)
+ */
+static int lms7002m_calc_pll_params(uint32_t freq_hz,
+                                      uint16_t *n_int, uint32_t *n_frac,
+                                      uint8_t *div_ratio) {
+    uint32_t vco_freq;
+    uint64_t n_total;
+    uint8_t div;
 
-    memset(drv, 0, sizeof(*drv));
-    drv->spi_speed_hz = spi_speed_hz;
+    /* Validate frequency range */
+    if (freq_hz < 100000UL || freq_hz > 3800000000UL)
+        return -1;
 
-    /* Soft-reset the chip */
-    ret = lms7002m_reset(drv);
-    if (ret != LMS7002M_OK)
-        return ret;
+    /* Select VCO divider based on target frequency.
+     * VCO range: 2.4 - 3.8 GHz
+     * We need f_VCO = freq * div_ratio to be within VCO range. */
+    if (freq_hz >= 2400000000UL) {
+        div = 1;   /* No division needed */
+    } else if (freq_hz >= 1200000000UL) {
+        div = 2;
+    } else if (freq_hz >= 600000000UL) {
+        div = 4;
+    } else if (freq_hz >= 300000000UL) {
+        div = 8;
+    } else if (freq_hz >= 150000000UL) {
+        div = 16;
+    } else if (freq_hz >= 75000000UL) {
+        div = 32;
+    } else {
+        div = 64;
+    }
 
-    /* Verify chip revision */
-    int rev = lms7002m_spi_read(drv, LMS7002M_REV);
-    if (rev < 0)
-        return LMS7002M_ERR_SPI;
+    vco_freq = freq_hz * div;
 
-    /* Configure defaults:
-     *   - RX channel A, gain = 0 dB
-     *   - TX channel A, gain = 0 dB
-     *   - Sample rate = 2 MSPS
-     *   - FIFO watermark = 50% */
-    drv->active_channel = LMS7002M_CH_A;
-    drv->rx_gain.lna_gain = 0;
-    drv->rx_gain.tia_enable = true;
-    drv->rx_gain.pga_gain = 0;
-    drv->tx_gain.tx_gain = 0;
-    drv->rate.sample_rate = 2000000;
-    drv->rate.decimation = 4;
-    drv->rate.interpolation = 4;
-    drv->fifo.watermark = LMS7002M_FIFO_DEPTH / 2;
-    drv->fifo.enabled = false;
-    drv->fifo.format = 0;
-
-    /* Enable power to all RF sections */
-    ret = lms7002m_spi_write(drv, LMS7002M_TOP, 0x0001);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    drv->initialized = true;
-    return LMS7002M_OK;
-}
-
-void lms7002m_deinit(struct lms7002m_driver *drv)
-{
-    if (!drv || !drv->initialized)
-        return;
-
-    /* Stop streaming if active */
-    lms7002m_stop_rx(drv);
-    lms7002m_stop_tx(drv);
-
-    /* Disable FIFO */
-    drv->fifo.enabled = false;
-    lms7002m_spi_write(drv, LMS7002M_FIFO_CTRL, 0x0000);
-
-    /* Power down RF sections */
-    lms7002m_spi_write(drv, LMS7002M_TOP, 0x0000);
-
-    /* Securely wipe driver state to prevent leakage of PLL config,
-     * gain settings, and frequency parameters after deinitialization. */
-    volatile uint8_t *p = (volatile uint8_t *)drv;
-    for (size_t i = 0; i < sizeof(*drv); i++)
-        p[i] = 0;
-
-    drv->initialized = false;
-}
-
-/* ========================================================================
- * Public API — PLL Tuning
- * ======================================================================== */
-
-int lms7002m_calculate_pll_params(uint64_t freq_hz, uint32_t ref_clk,
-                                   uint16_t *nint, uint32_t *nfrac,
-                                   uint8_t *div_out)
-{
-    uint32_t div;
-    uint64_t vco_freq;
-    uint64_t pll_ratio;
-    uint32_t nint_val;
-    uint32_t nfrac_val;
-
-    if (freq_hz < LMS7002M_FREQ_MIN || freq_hz > LMS7002M_FREQ_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    if (!ref_clk || !nint || !nfrac || !div_out)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Select output divider to keep VCO in range (1.88 – 5.8 GHz)
-     * The LMS7002M has two VCO ranges:
-     *   VCO_L: 1.88 – 3.72 GHz (lower frequencies)
-     *   VCO_H: 3.72 – 5.8 GHz (higher frequencies)
-     * The chip automatically selects the correct VCO band.
-     *
-     * Divider values: 1, 2, 4, 8, 16, 32 (powers of 2 only). */
-    *div_out = 0;
-    for (div = 1; div <= 32; div *= 2) {
-        vco_freq = freq_hz * div;
-
-        if (vco_freq >= VCO_MIN_HZ && vco_freq <= VCO_MAX_HZ) {
-            *div_out = (uint8_t)div;
-            break;
+    /* Verify VCO frequency is in range */
+    if (vco_freq < 2400000000UL || vco_freq > 3800000000UL) {
+        /* Try the next divider if possible */
+        if (div < 64) {
+            div *= 2;
+            vco_freq = freq_hz * div;
+            if (vco_freq < 2400000000UL || vco_freq > 3800000000UL)
+                return -1;
+        } else {
+            return -1;
         }
     }
 
-    /* If no valid VCO frequency found, the requested frequency is
-     * outside the synthesizable range. */
-    if (*div_out == 0)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Determine VCO band */
-    /* vco_high is set if VCO frequency >= 3.72 GHz threshold */
-
     /* Calculate PLL parameters:
-     * f_VCO = f_REF × (NINT + NFRAC / 2^24)
-     * → (NINT + NFRAC / 2^24) = f_VCO / f_REF
-     * → PLL ratio = (f_VCO × 2^24) / f_REF
-     * → NINT = PLL ratio >> 24
-     * → NFRAC = PLL ratio & 0xFFFFFF */
-    pll_ratio = (vco_freq << 24) / ref_clk;
-    nint_val = (uint32_t)(pll_ratio >> 24);
-    nfrac_val = (uint32_t)(pll_ratio & 0x00FFFFFFUL);
+     * f_VCO = f_REF * (N_INT + N_FRAC / 2^23) / 2
+     * N_TOTAL = N_INT + N_FRAC / 2^23 = 2 * f_VCO / f_REF
+     */
+    n_total = ((uint64_t)vco_freq * 2 * LMS7002M_FRAC_MODULO) / LMS7002M_REF_FREQ_HZ;
 
-    if (nint_val < LMS7002M_PLL_INT_MIN || nint_val > LMS7002M_PLL_INT_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
+    *n_int = (uint16_t)(n_total / LMS7002M_FRAC_MODULO);
+    *n_frac = (uint32_t)(n_total % LMS7002M_FRAC_MODULO);
+    *div_ratio = div;
 
-    if (nfrac_val > 0x7FFFFFUL)
-        nfrac_val = 0x7FFFFFUL;
-
-    *nint = (uint16_t)nint_val;
-    *nfrac = nfrac_val;
-    return LMS7002M_OK;
-}
-
-int lms7002m_configure_rx(struct lms7002m_driver *drv,
-                           uint64_t freq_hz, uint32_t sample_rate,
-                           enum lms7002m_channel ch)
-{
-    int ret;
-    uint16_t nint;
-    uint32_t nfrac;
-    uint8_t div_out;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    if (freq_hz < LMS7002M_FREQ_MIN || freq_hz > LMS7002M_FREQ_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    if (sample_rate < LMS7002M_SAMPLE_RATE_MIN ||
-        sample_rate > LMS7002M_SAMPLE_RATE_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    if (ch >= LMS7002M_CH_COUNT)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Calculate PLL parameters */
-    ret = lms7002m_calculate_pll_params(freq_hz, LMS7002M_REF_CLK_HZ,
-                                         &nint, &nfrac, &div_out);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    /* Select channel */
-    lms7002m_set_channel(drv, ch);
-
-    /* Program SXR PLL (RX synthesizer) */
-    ret = lms7002m_spi_write(drv, LMS7002M_SXR_PLL_INT, nint);
-    if (ret != LMS7002M_OK) return ret;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_SXR_PLL_FRAC_H,
-                              (uint16_t)((nfrac >> 16) & 0xFF));
-    if (ret != LMS7002M_OK) return ret;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_SXR_PLL_FRAC_L,
-                              (uint16_t)(nfrac & 0xFFFF));
-    if (ret != LMS7002M_OK) return ret;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_SXR_DIV, div_out);
-    if (ret != LMS7002M_OK) return ret;
-
-    /* Trigger VCO calibration */
-    ret = lms7002m_spi_write(drv, LMS7002M_SXR_VCO_CTRL, 0x0001);
-    if (ret != LMS7002M_OK) return ret;
-
-    /* Wait for PLL lock */
-    ret = wait_for_bitmask(drv, LMS7002M_SXR_VCO_CTRL, 0x0002, 0x0002,
-                            LMS7002M_PLL_LOCK_TIMEOUT_MS);
-    if (ret != LMS7002M_OK)
-        return LMS7002M_ERR_PLL_LOCK;
-
-    /* Configure sample rate */
-    uint8_t decimation;
-    if (sample_rate >= 5000000)       decimation = 1;
-    else if (sample_rate >= 2500000)  decimation = 2;
-    else if (sample_rate >= 1250000)  decimation = 4;
-    else if (sample_rate >= 625000)   decimation = 8;
-    else if (sample_rate >= 312500)   decimation = 16;
-    else                               decimation = 32;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_ADC_DECIMATION, decimation);
-    if (ret != LMS7002M_OK) return ret;
-
-    /* Store configuration */
-    drv->rx_frequency_hz = freq_hz;
-    drv->rx_pll.nint = nint;
-    drv->rx_pll.nfrac = nfrac;
-    drv->rx_pll.div_out = div_out;
-    drv->rx_pll.vco_high = (freq_hz * div_out >= VCO_H_THRESHOLD_HZ);
-    drv->rate.sample_rate = sample_rate;
-    drv->rate.decimation = decimation;
-
-    return LMS7002M_OK;
-}
-
-int lms7002m_configure_tx(struct lms7002m_driver *drv,
-                           uint64_t freq_hz, uint32_t sample_rate,
-                           enum lms7002m_channel ch)
-{
-    int ret;
-    uint16_t nint;
-    uint32_t nfrac;
-    uint8_t div_out;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    if (freq_hz < LMS7002M_FREQ_MIN || freq_hz > LMS7002M_FREQ_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    if (sample_rate < LMS7002M_SAMPLE_RATE_MIN ||
-        sample_rate > LMS7002M_SAMPLE_RATE_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    if (ch >= LMS7002M_CH_COUNT)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Calculate PLL parameters */
-    ret = lms7002m_calculate_pll_params(freq_hz, LMS7002M_REF_CLK_HZ,
-                                         &nint, &nfrac, &div_out);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    /* Select channel */
-    lms7002m_set_channel(drv, ch);
-
-    /* Program SXT PLL (TX synthesizer) */
-    ret = lms7002m_spi_write(drv, LMS7002M_SXT_PLL_INT, nint);
-    if (ret != LMS7002M_OK) return ret;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_SXT_PLL_FRAC_H,
-                              (uint16_t)((nfrac >> 16) & 0xFF));
-    if (ret != LMS7002M_OK) return ret;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_SXT_PLL_FRAC_L,
-                              (uint16_t)(nfrac & 0xFFFF));
-    if (ret != LMS7002M_OK) return ret;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_SXT_DIV, div_out);
-    if (ret != LMS7002M_OK) return ret;
-
-    /* Trigger VCO calibration */
-    ret = lms7002m_spi_write(drv, LMS7002M_SXT_VCO_CTRL, 0x0001);
-    if (ret != LMS7002M_OK) return ret;
-
-    /* Wait for PLL lock */
-    ret = wait_for_bitmask(drv, LMS7002M_SXT_VCO_CTRL, 0x0002, 0x0002,
-                            LMS7002M_PLL_LOCK_TIMEOUT_MS);
-    if (ret != LMS7002M_OK)
-        return LMS7002M_ERR_PLL_LOCK;
-
-    /* Configure sample rate */
-    uint8_t interpolation;
-    if (sample_rate >= 5000000)        interpolation = 1;
-    else if (sample_rate >= 2500000)  interpolation = 2;
-    else if (sample_rate >= 1250000)  interpolation = 4;
-    else if (sample_rate >= 625000)   interpolation = 8;
-    else if (sample_rate >= 312500)   interpolation = 16;
-    else                               interpolation = 32;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_DAC_INTERPOLATION, interpolation);
-    if (ret != LMS7002M_OK) return ret;
-
-    /* Store configuration */
-    drv->tx_frequency_hz = freq_hz;
-    drv->tx_pll.nint = nint;
-    drv->tx_pll.nfrac = nfrac;
-    drv->tx_pll.div_out = div_out;
-    drv->tx_pll.vco_high = (freq_hz * div_out >= VCO_H_THRESHOLD_HZ);
-    drv->rate.interpolation = interpolation;
-
-    return LMS7002M_OK;
+    return 0;
 }
 
 /* ========================================================================
- * Public API — Gain Control
+ * Public API Implementation
  * ======================================================================== */
 
-int lms7002m_set_rx_gain(struct lms7002m_driver *drv, int16_t gain_db_x10)
-{
-    uint8_t lna_gain, pga_gain;
-    int16_t remaining;
+/**
+ * lms7002m_init — Initialize the LMS7002M SDR transceiver
+ *
+ * Performs a full initialization sequence:
+ *   1. Assert and release hardware reset
+ *   2. Power up the chip
+ *   3. Configure the reference clock (30.72 MHz TCXO)
+ *   4. Configure default RX parameters (868 MHz, 2 MHz BW, 30 dB gain)
+ *   5. Enable RX path (but not TX — requires explicit enable)
+ *
+ * Returns: 0 on success, negative on error
+ */
+int lms7002m_init(void) {
+    uint16_t reg_val;
 
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
+    /* Step 1: Hardware reset sequence.
+     * The LMS7002M reset is active-low (PIN_SDR_RESET).
+     * rp2350b_init() already released the reset, but we cycle it here
+     * to ensure a clean state. */
+    rp2350b_gpio_set(PIN_SDR_RESET, false);  /* Assert reset */
+    for (volatile int i = 0; i < 15000; i++)   /* ~1 ms */
+        __asm__("nop");
+    rp2350b_gpio_set(PIN_SDR_RESET, true);   /* Release reset */
+    for (volatile int i = 0; i < 150000; i++)  /* ~10 ms for PLL startup */
+        __asm__("nop");
 
-    if (gain_db_x10 < 0 || gain_db_x10 > LMS7002M_RX_GAIN_TOTAL_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
+    /* Step 2: Verify SPI communication by reading the ID register.
+     * LMS7002M should return a known value at the status register. */
+    reg_val = lms7002m_read_reg(0x002F);
+    /* If we read 0xFFFF, the chip is not responding */
+    if (reg_val == 0xFFFF) {
+        return -1;  /* SPI communication failure */
+    }
 
-    /* Subtract TIA fixed gain (12 dB = 120 units) if enabled */
-    remaining = gain_db_x10;
-    if (drv->rx_gain.tia_enable)
-        remaining -= LMS7002M_TIA_GAIN_FIXED;
+    /* Step 3: Power-down all blocks first, then selectively enable.
+     * This ensures a known clean state regardless of previous configuration. */
+    lms7002m_write_reg(REG_POWER_DOWN, 0x03FF);  /* Power down all */
+    for (volatile int i = 0; i < 1500; i++)
+        __asm__("nop");  /* ~100 μs */
 
-    if (remaining < 0)
-        remaining = 0;
+    /* Step 4: Enable the reference clock path and PLL. */
+    lms7002m_write_reg(REG_REFCLK_DIV, 0x0000);  /* No reference clock division */
+    lms7002m_write_reg(REG_SYNTH_EN, 0x0001);   /* Enable synthesizer */
 
-    /* Distribute gain: LNA first (0–73 dB), then PGA (0–31 dB) */
-    if (remaining <= LMS7002M_LNA_GAIN_MAX) {
-        lna_gain = (uint8_t)(remaining / 10);
-        pga_gain = 0;
+    /* Step 5: Configure RX path for default settings.
+     * Using channel A (LNAW path) at 868 MHz as default. */
+    lms7002m_tune_rx(868000000UL, 2000, 300);
+
+    /* Step 6: Enable RX path only (TX requires explicit enable) */
+    lms7002m_write_reg(REG_RX_ENABLE, 0x0001);   /* Enable RX */
+    lms7002m_write_reg(REG_TX_ENABLE, 0x0000);   /* TX disabled */
+
+    /* Step 7: Configure baseband filter and decimation.
+     * Default: 2 MHz bandwidth, 256 ksps sample rate (decimation=122) */
+    lms7002m_set_rx_bandwidth(2000);   /* 2 MHz bandwidth */
+    lms7002m_set_rx_decimation(16);     /* Decimation by 16 for ~256 ksps */
+
+    return 0;
+}
+
+/**
+ * lms7002m_tune_rx — Tune the LMS7002M RX frequency
+ *
+ * @freq_hz:    Center frequency in Hz (100 kHz to 3.8 GHz)
+ * @bw_khz:     Bandwidth in kHz (ignored if <= 0)
+ * @gain_db_x10: LNA gain in dB × 10 (e.g., 300 = 30.0 dB)
+ *
+ * Configures the RX PLL, VCO divider, baseband filter, and LNA gain.
+ */
+void lms7002m_tune_rx(uint32_t freq_hz, uint16_t bw_khz, uint16_t gain_db_x10) {
+    uint16_t n_int;
+    uint32_t n_frac;
+    uint8_t div_ratio;
+
+    if (lms7002m_calc_pll_params(freq_hz, &n_int, &n_frac, &div_ratio) != 0)
+        return;  /* Invalid frequency */
+
+    /* Program RX PLL integer and fractional dividers */
+    lms7002m_write_reg(REG_RX_PLL_INT, n_int);
+    lms7002m_write_reg(REG_RX_PLL_FRAC, (uint16_t)(n_frac & 0xFFFF));
+    lms7002m_write_reg(REG_RX_PLL_FRAC + 1, (uint16_t)((n_frac >> 16) & 0x007F));
+
+    /* Program VCO divider */
+    /* DIV_RATIO is encoded in the CGP register:
+     * 0=div1, 1=div2, 2=div4, 3=div8, 4=div16, 5=div32, 6=div64 */
+    uint16_t div_enc = 0;
+    switch (div_ratio) {
+    case 1:  div_enc = 0; break;
+    case 2:  div_enc = 1; break;
+    case 4:  div_enc = 2; break;
+    case 8:  div_enc = 3; break;
+    case 16: div_enc = 4; break;
+    case 32: div_enc = 5; break;
+    case 64: div_enc = 6; break;
+    default: div_enc = 0; break;
+    }
+    uint16_t cgp_reg = lms7002m_read_reg(REG_CGP_INT);
+    cgp_reg = (cgp_reg & 0xFF8F) | (div_enc << 4);
+    lms7002m_write_reg(REG_CGP_INT, cgp_reg);
+
+    /* Set bandwidth if specified */
+    if (bw_khz > 0) {
+        lms7002m_set_rx_bandwidth(bw_khz);
+    }
+
+    /* Set LNA gain */
+    lms7002m_set_rx_gain(gain_db_x10);
+
+    /* Allow PLL to lock (~200 μs) */
+    for (volatile int i = 0; i < 30000; i++)
+        __asm__("nop");
+}
+
+/**
+ * lms7002m_set_rx_bandwidth — Set the LMS7002M RX baseband filter bandwidth
+ *
+ * @bw_khz: Bandwidth in kHz (e.g., 2000 for 2 MHz)
+ *
+ * Configures the RX baseband filter bandwidth and adjusts the
+ * decimation ratio to maintain the desired sample rate.
+ */
+void lms7002m_set_rx_bandwidth(uint16_t bw_khz) {
+    /* Baseband filter bandwidth is controlled by the RX_BBFILT register.
+     * The LMS7002M supports bandwidths from ~1.5 MHz to ~61.44 MHz.
+     *
+     * Simplified mapping for common bandwidths:
+     *   BW_kHz → RX_BBFILT value (approximate)
+     *
+     * For now, use a simplified direct mapping. The actual LMS7002M
+     * bandwidth configuration requires calibration table lookup
+     * and is typically done via LimeSuite calibration. */
+    uint16_t bb_val;
+
+    if (bw_khz <= 1500)
+        bb_val = 0x0C00;  /* ~1.5 MHz */
+    else if (bw_khz <= 2500)
+        bb_val = 0x0A00;  /* ~2.5 MHz */
+    else if (bw_khz <= 5000)
+        bb_val = 0x0800;  /* ~5 MHz */
+    else if (bw_khz <= 10000)
+        bb_val = 0x0400;  /* ~10 MHz */
+    else if (bw_khz <= 20000)
+        bb_val = 0x0200;  /* ~20 MHz */
+    else
+        bb_val = 0x0100;  /* >20 MHz (up to 61.44 MHz) */
+
+    lms7002m_write_reg(REG_RX_BBFILT, bb_val);
+}
+
+/**
+ * lms7002m_set_rx_gain — Set the LNA gain for the RX path
+ *
+ * @gain_db_x10: Gain in dB × 10 (e.g., 300 = 30.0 dB)
+ *
+ * Maps the gain value to LMS7002M LNA and TIA gain settings.
+ * The LMS7002M has ~73 dB of total RX gain range, configurable
+ * via LNA gain steps and TIA gain control.
+ */
+void lms7002m_set_rx_gain(uint16_t gain_db_x10) {
+    /* LMS7002M LNA gain control:
+     * The RFE_LNA_GAIN register controls the LNA gain in ~3 dB steps.
+     * The TIA gain provides additional ~12 dB of gain control.
+     *
+     * Simplified mapping (gain_db_x10 / 10 = gain in dB):
+     *   0-15 dB: LNA lowest gain + TIA lowest
+     *   15-30 dB: LNA medium gain
+     *   30-45 dB: LNA high gain
+     *   45-73 dB: LNA maximum gain + TIA maximum */
+    uint16_t lna_gain;
+    uint16_t tia_gain;
+
+    if (gain_db_x10 < 150) {
+        lna_gain = 0x00;  /* LNA minimum gain */
+        tia_gain = 0x00;  /* TIA minimum gain */
+    } else if (gain_db_x10 < 300) {
+        lna_gain = 0x01;  /* LNA medium gain */
+        tia_gain = 0x00;
+    } else if (gain_db_x10 < 450) {
+        lna_gain = 0x02;  /* LNA high gain */
+        tia_gain = 0x01;
     } else {
-        lna_gain = LMS7002M_LNA_GAIN_MAX / 10; /* 73 */
-        remaining -= LMS7002M_LNA_GAIN_MAX;
-        if (remaining > LMS7002M_PGA_GAIN_MAX)
-            remaining = LMS7002M_PGA_GAIN_MAX;
-        pga_gain = (uint8_t)(remaining / 10);
+        lna_gain = 0x03;  /* LNA maximum gain */
+        tia_gain = 0x03;  /* TIA maximum gain */
     }
 
-    /* Write gain registers */
-    int ret = lms7002m_spi_write(drv, LMS7002M_RX_GAIN_LNA, lna_gain);
-    if (ret != LMS7002M_OK) return ret;
-
-    ret = lms7002m_spi_write(drv, LMS7002M_RX_GAIN_PGA, pga_gain);
-    if (ret != LMS7002M_OK) return ret;
-
-    /* Update state */
-    drv->rx_gain.lna_gain = lna_gain;
-    drv->rx_gain.pga_gain = pga_gain;
-
-    return LMS7002M_OK;
+    lms7002m_write_reg(REG_RFE_LNA_GAIN, lna_gain);
+    lms7002m_write_reg(REG_RFE_LNA_MODE, 0x0001);  /* LNAW path selected */
+    lms7002m_write_reg(REG_RFE_TIA_GAIN, tia_gain);
 }
 
-int lms7002m_set_tx_gain(struct lms7002m_driver *drv, int16_t gain_db_x10)
-{
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
+/**
+ * lms7002m_set_rx_decimation — Set the RX decimation ratio
+ *
+ * @decimation: Decimation factor (1, 2, 4, 8, 16, 32, or 64)
+ *
+ * The LMS7002M ADC runs at a fixed rate. Decimation reduces the
+ * output sample rate:
+ *   f_sample = f_ADC / decimation
+ *   At 30.72 MHz ADC rate:
+ *     div 1  = 30.72 MSPS
+ *     div 2  = 15.36 MSPS
+ *     div 4  = 7.68 MSPS
+ *     div 8  = 3.84 MSPS
+ *     div 16 = 1.92 MSPS
+ *     div 32 = 960 kSPS
+ *     div 64 = 480 kSPS
+ */
+void lms7002m_set_rx_decimation(uint16_t decimation) {
+    /* Map decimation factor to register value.
+     * REG_RX_DECIMATION format: bits[2:0] encode the factor.
+     * 0=div1, 1=div2, 2=div4, 3=div8, 4=div16, 5=div32, 6=div64 */
+    uint16_t dec_val;
 
-    if (gain_db_x10 < 0 || gain_db_x10 > LMS7002M_TX_GAIN_MAX)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    uint8_t tx_gain_idx = (uint8_t)(gain_db_x10 / 10);
-
-    int ret = lms7002m_spi_write(drv, LMS7002M_TX_GAIN, tx_gain_idx);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    drv->tx_gain.tx_gain = tx_gain_idx;
-    return LMS7002M_OK;
-}
-
-/* ========================================================================
- * Public API — Streaming Control
- * ======================================================================== */
-
-int lms7002m_start_rx(struct lms7002m_driver *drv)
-{
-    int ret;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    /* Enable FIFO with watermark */
-    uint16_t fifo_ctrl = 0x0001 | ((uint16_t)drv->fifo.format << 1);
-    ret = lms7002m_spi_write(drv, LMS7002M_FIFO_CTRL, fifo_ctrl);
-    if (ret != LMS7002M_OK) return ret;
-
-    drv->fifo.enabled = true;
-
-    /* Enable RX streaming */
-    ret = lms7002m_spi_write(drv, LMS7002M_STREAM_CTRL, 0x0001);
-    if (ret != LMS7002M_OK) return ret;
-
-    return LMS7002M_OK;
-}
-
-void lms7002m_stop_rx(struct lms7002m_driver *drv)
-{
-    if (!drv || !drv->initialized)
-        return;
-
-    lms7002m_spi_write(drv, LMS7002M_STREAM_CTRL, 0x0000);
-    lms7002m_spi_write(drv, LMS7002M_FIFO_CTRL, 0x0000);
-    drv->fifo.enabled = false;
-}
-
-int lms7002m_start_tx(struct lms7002m_driver *drv)
-{
-    int ret;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    /* Enable TX streaming */
-    ret = lms7002m_spi_write(drv, LMS7002M_STREAM_CTRL, 0x0002);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    return LMS7002M_OK;
-}
-
-void lms7002m_stop_tx(struct lms7002m_driver *drv)
-{
-    if (!drv || !drv->initialized)
-        return;
-
-    lms7002m_spi_write(drv, LMS7002M_STREAM_CTRL, 0x0000);
-}
-
-/* ========================================================================
- * Public API — Calibration
- * ======================================================================== */
-
-int lms7002m_calibrate_dc(struct lms7002m_driver *drv,
-                           enum lms7002m_channel ch, uint32_t timeout_ms)
-{
-    int ret;
-    uint16_t cal_ctrl;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    if (ch >= LMS7002M_CH_COUNT)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    lms7002m_set_channel(drv, ch);
-
-    /* Start DC offset calibration */
-    cal_ctrl = 0x0001;  /* Bit 0: DC cal enable */
-    ret = lms7002m_spi_write(drv, LMS7002M_CAL_CTRL, cal_ctrl);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    /* Wait for completion */
-    ret = wait_for_bitmask(drv, LMS7002M_CAL_STATUS, 0x0001, 0x0001,
-                            timeout_ms ? timeout_ms : LMS7002M_DC_CAL_TIMEOUT_MS);
-    if (ret != LMS7002M_OK)
-        return LMS7002M_ERR_CALIBRATION;
-
-    /* Read calibration results */
-    int result_h = lms7002m_spi_read(drv, LMS7002M_CAL_RESULT_H);
-    int result_l = lms7002m_spi_read(drv, LMS7002M_CAL_RESULT_L);
-
-    if (result_h < 0 || result_l < 0)
-        return LMS7002M_ERR_SPI;
-
-    drv->cal.dc_offset_i = (int16_t)((result_h << 8) | ((result_l >> 8) & 0xFF));
-    drv->cal.dc_offset_q = (int16_t)((result_l & 0xFF) - ((result_l & 0x80) ? 0x100 : 0));
-    drv->cal.dc_complete = true;
-
-    /* Clear calibration enable bit */
-    lms7002m_spi_write(drv, LMS7002M_CAL_CTRL, 0x0000);
-
-    return LMS7002M_OK;
-}
-
-int lms7002m_calibrate_iq(struct lms7002m_driver *drv,
-                           enum lms7002m_direction direction,
-                           enum lms7002m_channel ch, uint32_t timeout_ms)
-{
-    int ret;
-    uint16_t cal_ctrl;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    if (ch >= LMS7002M_CH_COUNT)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    lms7002m_set_channel(drv, ch);
-
-    /* Start IQ calibration:
-     * Bit 0: DC cal enable (already done)
-     * Bit 1: IQ gain cal enable
-     * Bit 2: IQ phase cal enable */
-    cal_ctrl = 0x0006;  /* IQ gain + phase calibration */
-
-    ret = lms7002m_spi_write(drv, LMS7002M_CAL_CTRL, cal_ctrl);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    /* Wait for IQ gain calibration completion */
-    ret = wait_for_bitmask(drv, LMS7002M_CAL_STATUS, 0x0002, 0x0002,
-                            timeout_ms ? timeout_ms : LMS7002M_IQ_CAL_TIMEOUT_MS);
-    if (ret != LMS7002M_OK)
-        return LMS7002M_ERR_CALIBRATION;
-
-    /* Wait for IQ phase calibration completion */
-    ret = wait_for_bitmask(drv, LMS7002M_CAL_STATUS, 0x0004, 0x0004,
-                            timeout_ms ? timeout_ms : LMS7002M_IQ_CAL_TIMEOUT_MS);
-    if (ret != LMS7002M_OK)
-        return LMS7002M_ERR_CALIBRATION;
-
-    /* Read results */
-    int result_h = lms7002m_spi_read(drv, LMS7002M_CAL_RESULT_H);
-    int result_l = lms7002m_spi_read(drv, LMS7002M_CAL_RESULT_L);
-
-    if (result_h < 0 || result_l < 0)
-        return LMS7002M_ERR_SPI;
-
-    drv->cal.iq_gain_corr = (int16_t)(result_h & 0x3FF);
-    drv->cal.iq_phase_corr = (int16_t)(result_l & 0x1FF);
-    drv->cal.iq_gain_complete = true;
-    drv->cal.iq_phase_complete = true;
-
-    /* Clear calibration enable bits */
-    lms7002m_spi_write(drv, LMS7002M_CAL_CTRL, 0x0000);
-
-    return LMS7002M_OK;
-}
-
-/* ========================================================================
- * Public API — FIFO / Data Streaming
- * ======================================================================== */
-
-int lms7002m_read_fifo(struct lms7002m_driver *drv,
-                        int16_t *buf, uint16_t num_samples)
-{
-    uint16_t fifo_fill;
-    bool pll_locked;
-    int ret;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    if (!buf || num_samples == 0)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Check FIFO status */
-    ret = lms7002m_get_status(drv, &fifo_fill, &pll_locked);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    /* Cap read to available samples */
-    if (fifo_fill < num_samples)
-        num_samples = fifo_fill;
-
-    /* Read samples in burst mode (2 × 16-bit per sample: I then Q) */
-    for (uint16_t i = 0; i < num_samples; i++) {
-        int i_val = lms7002m_spi_read(drv, LMS7002M_FIFO_STATUS);
-        if (i_val < 0)
-            return i_val;
-        buf[i * 2] = (int16_t)i_val;
-
-        int q_val = lms7002m_spi_read(drv, LMS7002M_FIFO_STATUS);
-        if (q_val < 0)
-            return q_val;
-        buf[i * 2 + 1] = (int16_t)q_val;
+    switch (decimation) {
+    case 1:   dec_val = 0; break;
+    case 2:   dec_val = 1; break;
+    case 4:   dec_val = 2; break;
+    case 8:   dec_val = 3; break;
+    case 16:  dec_val = 4; break;
+    case 32:  dec_val = 5; break;
+    case 64:  dec_val = 6; break;
+    default:  dec_val = 4; break;  /* Default: div16 (~1.92 MSPS) */
     }
 
-    return num_samples;
+    lms7002m_write_reg(REG_RX_DECIMATION, dec_val);
 }
 
-int lms7002m_write_fifo(struct lms7002m_driver *drv,
-                         const int16_t *buf, uint16_t num_samples)
-{
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    if (!buf || num_samples == 0)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Write samples in burst mode (2 × 16-bit per sample: I then Q) */
-    for (uint16_t i = 0; i < num_samples; i++) {
-        int ret = lms7002m_spi_write(drv, LMS7002M_FIFO_STATUS,
-                                       (uint16_t)buf[i * 2]);
-        if (ret != LMS7002M_OK)
-            return ret;
-
-        ret = lms7002m_spi_write(drv, LMS7002M_FIFO_STATUS,
-                                  (uint16_t)buf[i * 2 + 1]);
-        if (ret != LMS7002M_OK)
-            return ret;
-    }
-
-    return num_samples;
+/**
+ * lms7002m_enable_rx — Enable the LMS7002M RX path
+ *
+ * Enables the LNA, mixer, TIA, and ADC in the RX chain.
+ * The LMS7002M starts producing IQ data on the MIPI CSI-2 interface.
+ */
+void lms7002m_enable_rx(void) {
+    rp2350b_gpio_set(PIN_SDR_GPIO1, true);   /* RX enable */
+    rp2350b_gpio_set(PIN_SDR_LNA_EN, true);  /* LNA enable */
+    lms7002m_write_reg(REG_RX_ENABLE, 0x0001);
 }
 
-/* ========================================================================
- * Public API — SPI Register Access
- * ======================================================================== */
-
-int lms7002m_spi_read(const struct lms7002m_driver *drv, uint16_t addr)
-{
-    uint32_t cmd, resp;
-
-    if (!drv)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    if (!drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    cmd = lms7002m_cmd_read(addr);
-    resp = lms7002m_platform_spi_xfer(cmd);
-
-    /* Response format: [0][addr13:0][data15:0] */
-    return (int16_t)(resp & 0xFFFF);
+/**
+ * lms7002m_disable_rx — Disable the LMS7002M RX path
+ */
+void lms7002m_disable_rx(void) {
+    lms7002m_write_reg(REG_RX_ENABLE, 0x0000);
+    rp2350b_gpio_set(PIN_SDR_GPIO1, false);  /* RX disable */
+    rp2350b_gpio_set(PIN_SDR_LNA_EN, false); /* LNA disable */
 }
 
-int lms7002m_spi_write(struct lms7002m_driver *drv, uint16_t addr, uint16_t data)
-{
-    uint32_t cmd;
-
-    if (!drv)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    cmd = lms7002m_cmd_write(addr, data);
-    lms7002m_platform_spi_xfer(cmd);
-
-    return LMS7002M_OK;
+/**
+ * lms7002m_enable_tx — Enable the LMS7002M TX path
+ *
+ * Enables the DAC, mixer, PA driver, and power amplifier.
+ * WARNING: Transmitting on many frequencies requires a license.
+ */
+void lms7002m_enable_tx(void) {
+    rp2350b_gpio_set(PIN_SDR_GPIO0, true);  /* TX enable */
+    lms7002m_write_reg(REG_TX_ENABLE, 0x0001);
 }
 
-int lms7002m_spi_read_burst(const struct lms7002m_driver *drv, uint16_t start_addr,
-                              uint16_t *buf, uint16_t num_regs)
-{
-    uint16_t i;
-
-    if (!drv || !buf)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Prevent register address from wrapping around 16-bit space */
-    if (num_regs == 0 || (uint32_t)start_addr + num_regs > 0x4000)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    for (i = 0; i < num_regs; i++) {
-        int val = lms7002m_spi_read(drv, start_addr + i);
-        if (val < 0)
-            return val;
-        buf[i] = (uint16_t)val;
-    }
-
-    return num_regs;
+/**
+ * lms7002m_disable_tx — Disable the LMS7002M TX path
+ */
+void lms7002m_disable_tx(void) {
+    lms7002m_write_reg(REG_TX_ENABLE, 0x0000);
+    rp2350b_gpio_set(PIN_SDR_GPIO0, false);  /* TX disable */
 }
 
-int lms7002m_spi_write_burst(struct lms7002m_driver *drv, uint16_t start_addr,
-                               const uint16_t *data, uint16_t num_regs)
-{
-    uint16_t i;
-    int ret;
-
-    if (!drv || !data)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Prevent register address from wrapping around 16-bit space */
-    if (num_regs == 0 || (uint32_t)start_addr + num_regs > 0x4000)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    for (i = 0; i < num_regs; i++) {
-        ret = lms7002m_spi_write(drv, start_addr + i, data[i]);
-        if (ret != LMS7002M_OK)
-            return ret;
-    }
-
-    return num_regs;
+/**
+ * lms7002m_power_down — Put the LMS7002M into low-power mode
+ *
+ * Disables all blocks and sets the power-down register.
+ */
+void lms7002m_power_down(void) {
+    lms7002m_write_reg(REG_TX_ENABLE, 0x0000);
+    lms7002m_write_reg(REG_RX_ENABLE, 0x0000);
+    lms7002m_write_reg(REG_POWER_DOWN, 0x03FF);  /* Power down all blocks */
+    rp2350b_gpio_set(PIN_SDR_GPIO0, false);
+    rp2350b_gpio_set(PIN_SDR_GPIO1, false);
+    rp2350b_gpio_set(PIN_SDR_LNA_EN, false);
 }
 
-/* ========================================================================
- * Public API — Reset and Channel Selection
- * ======================================================================== */
-
-int lms7002m_reset(struct lms7002m_driver *drv)
-{
-    int ret;
-
-    if (!drv)
-        return LMS7002M_ERR_INVALID_PARAM;
-
-    /* Assert reset */
-    ret = lms7002m_spi_write(drv, LMS7002M_RESET, 0x0001);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    lms7002m_platform_delay_ms(10);
-
-    /* Release reset */
-    ret = lms7002m_spi_write(drv, LMS7002M_RESET, 0x0000);
-    if (ret != LMS7002M_OK)
-        return ret;
-
-    /* Wait for chip ready */
-    lms7002m_platform_delay_ms(LMS7002M_RESET_TIMEOUT_MS);
-
-    return LMS7002M_OK;
+/**
+ * lms7002m_read_rssi — Read the LMS7002M RSSI value
+ *
+ * Returns: RSSI in dBm × 10 (signed, e.g., -740 = -74.0 dBm)
+ *
+ * This is a simplified implementation that reads the LMS7002M
+ * internal RSSI register. For accurate RSSI, the LMS7002M needs
+ * to be in RX mode with AGC enabled.
+ */
+int16_t lms7002m_read_rssi(void) {
+    /* The LMS7002M RSSI register provides an 8-bit signed value
+     * that is approximately proportional to the received signal level.
+     * The exact mapping requires calibration with a known signal source.
+     *
+     * Simplified formula: RSSI_dBm = register_value - 127 (approximate)
+     * In dBm × 10: RSSI_x10 = (register_value - 127) * 10 */
+    uint16_t raw = lms7002m_read_reg(0x0400);  /* RSSI register address */
+    int16_t rssi_x10 = ((int16_t)(raw & 0xFF) - 127) * 10;
+    return rssi_x10;
 }
 
-void lms7002m_set_channel(struct lms7002m_driver *drv, enum lms7002m_channel ch)
-{
-    if (!drv || ch >= LMS7002M_CH_COUNT)
-        return;
+/**
+ * lms7002m_get_field_strength_mv — Get estimated field strength in mV
+ *
+ * This provides a rough estimate of the RF field strength at the
+ * antenna, useful for antenna testing and debug.
+ *
+ * Returns: Estimated field strength in mV (0-5000)
+ */
+uint16_t lms7002m_get_field_strength_mv(void) {
+    int16_t rssi_x10 = lms7002m_read_rssi();
+    /* Convert from dBm×10 to approximate mV across 50Ω:
+     * V_rms = 10^((dBm + 13) / 20) * 1000 / sqrt(2) */
+    /* Simplified: approximate mV from RSSI */
+    int32_t rssi_dbm = rssi_x10 / 10;
+    if (rssi_dbm < -100) rssi_dbm = -100;
+    if (rssi_dbm > 0) rssi_dbm = 0;
 
-    drv->active_channel = ch;
-
-    /* Channel select: bit 0 = channel A, bit 1 = channel B */
-    lms7002m_spi_write(drv, LMS7002M_TOP, (ch == LMS7002M_CH_B) ? 0x0002 : 0x0001);
-}
-
-enum lms7002m_channel lms7002m_get_channel(const struct lms7002m_driver *drv)
-{
-    if (!drv)
-        return LMS7002M_CH_A;
-
-    return drv->active_channel;
-}
-
-/* ========================================================================
- * Public API — Status
- * ======================================================================== */
-
-int lms7002m_get_status(const struct lms7002m_driver *drv,
-                         uint16_t *fifo_fill, bool *pll_locked)
-{
-    int status;
-
-    if (!drv || !drv->initialized)
-        return LMS7002M_ERR_NOT_INITIALIZED;
-
-    status = lms7002m_spi_read(drv, LMS7002M_FIFO_STATUS);
-    if (status < 0)
-        return status;
-
-    if (fifo_fill)
-        *fifo_fill = (uint16_t)(status & 0x0FFF);
-
-    if (pll_locked)
-        *pll_locked = (status & 0x8000) != 0;
-
-    return LMS7002M_OK;
+    /* Very rough mapping: -100 dBm → 2 mV, 0 dBm → 224 mV */
+    uint16_t mv = (uint16_t)((rssi_dbm + 100) * 224 / 100);
+    return mv;
 }

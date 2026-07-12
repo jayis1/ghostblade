@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # SPI Bridge Protocol — Timing Diagrams
 
 This document provides timing diagrams for the SPI0 communication bus

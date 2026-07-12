@@ -190,17 +190,22 @@ ghostblade/
 │       ├── include/
 │       │   ├── board_pins.h                    # MCU pin definitions
 │       │   ├── spi0_isr.h                      # SPI0 slave ISR API
+│       │   ├── lms7002m_driver.h               # LMS7002M SDR driver API
 │       │   └── ...                              # Other firmware headers
-│       └── src/
-│           ├── main.c                          # Entry point & init dispatch
-│           ├── rp2350b_init.c                  # Clocks, GPIO, SPI, PIO, ADC init
-│           ├── spi_protocol.c                  # SPI bridge protocol handler
-│           ├── spi0_isr.c                      # SPI0 slave interrupt handler
-│           ├── cc1101_init.c                   # CC1101 sub-GHz radio init
-│           ├── st25r3916_init.c                # ST25R3916 NFC controller init
-│           ├── sdr_dma.c                       # SDR DMA ring buffer manager
-│           ├── battery_monitor.c               # ADC battery/temperature monitor
-│           └── watchdog.c                      # Hardware watchdog handler
+│   └── src/
+│       ├── main.c                          # Entry point & init dispatch
+│       ├── rp2350b_init.c                  # Clocks, GPIO, SPI, PIO, ADC init
+│       ├── spi_protocol.c                  # SPI bridge protocol handler
+│       ├── spi0_isr.c                      # SPI0 slave interrupt handler
+│       ├── cc1101_init.c                   # CC1101 sub-GHz radio init
+│       ├── st25r3916_init.c                # ST25R3916 NFC controller init
+│       ├── lms7002m_driver.c               # LMS7002M SDR transceiver driver
+│       ├── sdr_dma.c                       # SDR DMA ring buffer manager
+│       ├── battery_monitor.c               # ADC battery/temperature monitor
+│       ├── sleep_wake.c                    # Sleep/wake power state machine
+│       ├── peripheral_power.c              # Peripheral power rail management
+│       ├── adc_calibration.c               # ADC voltage calibration
+│       └── watchdog.c                      # Hardware watchdog handler
 ├── hardware/
 │   ├── bom/
 │   │   ├── ghostblade-bom.csv                  # Full BOM (80+ parts, MPN, price)
@@ -240,6 +245,7 @@ ghostblade/
 │       ├── ghostblade-rk3576.dts              # Device tree source
 │       ├── ghostblade-options.dts              # Optional hardware overlay
 │       ├── ghostblade-sdr-overlay.dts          # SDR MIPI-CSI-2 + DMA overlay
+│       ├── ghostblade-cc1101-overlay.dts       # CC1101 sub-GHz configuration overlay
 │       ├── ghostblade-nfc-overlay.dts          # NFC (ST25R3916) configuration overlay
 │       ├── ghostblade-wifi-overlay.dts          # Wi-Fi 6E (MT7922) configuration overlay
 │       ├── ghostblade-sleep-overlay.dts          # Sleep/wake power state overlay
@@ -322,6 +328,7 @@ ghostblade/
 | [System Architecture](docs/architecture.md) | Block diagrams, processor architecture, bus map, data flows, security model |
 | [Getting Started](docs/getting-started.md) | Dev environment setup, toolchain, first build |
 | [Getting Started Guide (detailed)](docs/getting-started-guide.md) | Comprehensive build, flash, and test guide with examples |
+| [Development Environment](docs/development-environment.md) | Quick-setup guide for Ubuntu — one-line install and build |
 | [Build Instructions](docs/build-instructions.md) | Detailed build steps for firmware, driver, libapex |
 | [Flashing Guide](docs/flashing-guide.md) | Firmware flashing, driver loading, recovery |
 | [FAQ & Troubleshooting](docs/faq-troubleshooting.md) | Common issues and solutions |

@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # GhostBlade — Hardware Test Procedures
 
 **Project:** GhostBlade (Project NullSpectre)  

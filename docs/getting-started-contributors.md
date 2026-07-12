@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # GhostBlade Contributor's Guide
 
 Welcome to the GhostBlade (Project NullSpectre) open-source hardware project! This guide will help you get started contributing to the dual-processor pentesting device with RK3576 + RP2350B, LMS7002M SDR, CC1101 sub-GHz, ST25R3916 NFC, and MT7922 Wi-Fi 6E.

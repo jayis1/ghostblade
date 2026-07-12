@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Contributing to GhostBlade
 
 Thank you for your interest in contributing to the GhostBlade (Project NullSpectre) project! This document provides guidelines for contributing.
@@ -91,6 +93,10 @@ Before submitting a PR, ensure:
 4. Ensure all existing documentation is updated if your change affects specs
 5. Push to your fork and open a Pull Request against `main`
 6. Address review feedback promptly
+
+> **Note:** This project does not use GitHub Actions or any CI/CD automation.
+> All testing is done locally by contributors and maintainers. Do not add
+> `.github/workflows/` files. See `.github/NO_CI.md` for details.
 
 ## Commit Message Format
 

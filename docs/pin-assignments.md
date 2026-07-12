@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # Pin Assignment Cross-Reference — GhostBlade
 
 This document cross-references signal assignments across the three primary sources:

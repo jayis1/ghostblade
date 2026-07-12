@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # GhostBlade SPI Bridge Driver — sysfs Attributes
 
 The `apex_bridge` kernel driver exposes telemetry, device status, and DMA

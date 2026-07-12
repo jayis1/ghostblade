@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # GhostBlade GPIO Pin Assignment Cross-Reference
 
 **Project:** GhostBlade (Project NullSpectre)

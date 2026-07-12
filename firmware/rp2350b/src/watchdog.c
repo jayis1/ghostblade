@@ -105,8 +105,11 @@ bool watchdog_init(void) {
     if (*wd_reason & WD_REASON_TIMER) {
         wd_reset = true;
 
-        /* Clear the reason register */
-        *wd_reason = 0;
+        /* Clear the timer reason bit (write-1-to-clear on RP2350B).
+         * Writing 0 to a W1C register is a no-op — we must write the
+         * bits we want to clear. Writing WD_REASON_TIMER clears only
+         * the timer flag, preserving any other status bits. */
+        *wd_reason = WD_REASON_TIMER;
 
         /* Scratch register 0 contains our magic if we set it before reset */
         if (*wd_scratch0 == WD_MAGIC_VALUE) {
@@ -116,9 +119,9 @@ bool watchdog_init(void) {
         }
     }
 
-    /* Clear forced reset reason if present */
+    /* Clear forced reset reason if present (write-1-to-clear) */
     if (*wd_reason & WD_REASON_FORCE) {
-        *wd_reason = 0;
+        *wd_reason = WD_REASON_FORCE;
     }
 
     /* Load initial timeout value */

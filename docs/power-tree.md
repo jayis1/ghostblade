@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # Power Tree & Sequencing — GhostBlade (Project NullSpectre)
 
 This document describes the power architecture, voltage rail tree, and

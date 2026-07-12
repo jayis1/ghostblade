@@ -1,384 +1,266 @@
 /*
- * peripheral_power.c — Peripheral Power Sequencing Module
+ * peripheral_power.c — Peripheral Power Sequencing for GhostBlade
  *
  * Copyright (C) 2026 GhostBlade Project
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Implements GPIO-controlled power rail sequencing for the GhostBlade
- * peripherals. Each peripheral (LMS7002M SDR, ST25R3916 NFC, CC1101
- * sub-GHz, MT7922 Wi-Fi) has its own switched power rail controlled
- * by a GPIO from the RP2350B.
- *
- * The sequencing order matches the power-tree.md requirements to ensure
- * correct voltage ordering and prevent latch-up or inrush current issues.
+ * Implements GPIO-controlled power rail sequencing for the GhostBlade board.
+ * Manages the power-on/off sequence for SDR, NFC, sub-GHz, and Wi-Fi rails.
  */
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-
-#include "pico/stdlib.h"
-#include "hardware/gpio.h"
-
 #include "peripheral_power.h"
+#include "board_pins.h"
 
-/* ── GPIO pin assignments ──────────────────────────────────────────────────── */
+/* GPIO pins for power rail enable signals.
+ * These are active-high unless noted. The RP2350B GPIOs connect
+ * to load-switch enable inputs on the board. */
 
-/*
- * RP2350B GPIO pin assignments for power rail control.
- * These match the GhostBlade schematic and board_pins.h definitions.
- *
- * All enable pins are active-high (GPIO high = rail on).
- * Each rail has a 10kΩ pull-down to ensure rails stay off during
- * MCU boot before GPIOs are configured.
- */
-#define GPIO_SDR_1V8_EN    18   /* GPIO18: LMS7002M VCC_1V8_SDR enable */
-#define GPIO_SDR_1V1_EN    19   /* GPIO19: LMS7002M VCC_1V1_SDR enable */
-#define GPIO_SDR_3V3_EN    20   /* GPIO20: LMS7002M VCC_3V3_RF enable */
-#define GPIO_NFC_EN        22   /* GPIO22: ST25R3916 VCC_NFC enable */
-#define GPIO_SUBGHZ_EN     23   /* GPIO23: CC1101 VCC_SUBGHZ enable */
-#define GPIO_SDIO_EN       24   /* GPIO24: MT7922 VCC_SDIO enable */
+/* Power rail GPIO assignments (board-specific) */
+#define PWR_GPIO_SDR_1V8       6    /* LMS7002M 1.8V core enable */
+#define PWR_GPIO_SDR_1V1       7    /* LMS7002M 1.1V PLL enable */
+#define PWR_GPIO_SDR_3V3       9    /* LMS7002M 3.3V I/O enable */
+#define PWR_GPIO_NFC           11   /* ST25R3916 5V enable (via level shifter) */
+#define PWR_GPIO_SUBGHZ        22   /* CC1101 3.3V enable */
+#define PWR_GPIO_SDIO           25   /* MT7922 SDIO 3.3V enable */
 
-/* ── Rail configuration table ─────────────────────────────────────────────── */
+/* RP2350B GPIO base address for direct register access */
+#define RP2350B_GPIO_BASE       0x400D0000UL
+#define REG32(addr)             (*(volatile uint32_t *)(addr))
 
-/*
- * Static configuration for each power rail. The order in this array
- * matches the power-on sequence (index 0 is powered on first).
- */
-static const struct power_rail_config rail_configs[POWER_RAIL_COUNT] = {
-    [POWER_RAIL_SDR_1V8] = {
-        .gpio_pin    = GPIO_SDR_1V8_EN,
-        .active_high = true,
-        .ramp_ms     = POWER_DELAY_SDR_1V8_MS,
-        .current_ma  = POWER_LIMIT_SDR_1V8_MA,
-        .name        = "SDR_1V8",
-    },
-    [POWER_RAIL_SDR_1V1] = {
-        .gpio_pin    = GPIO_SDR_1V1_EN,
-        .active_high = true,
-        .ramp_ms     = POWER_DELAY_SDR_1V1_MS,
-        .current_ma  = POWER_LIMIT_SDR_1V1_MA,
-        .name        = "SDR_1V1",
-    },
-    [POWER_RAIL_SDR_3V3] = {
-        .gpio_pin    = GPIO_SDR_3V3_EN,
-        .active_high = true,
-        .ramp_ms     = POWER_DELAY_SDR_3V3_MS,
-        .current_ma  = POWER_LIMIT_SDR_3V3_MA,
-        .name        = "SDR_3V3",
-    },
-    [POWER_RAIL_NFC] = {
-        .gpio_pin    = GPIO_NFC_EN,
-        .active_high = true,
-        .ramp_ms     = POWER_DELAY_NFC_MS,
-        .current_ma  = POWER_LIMIT_NFC_MA,
-        .name        = "NFC",
-    },
-    [POWER_RAIL_SUBGHZ] = {
-        .gpio_pin    = GPIO_SUBGHZ_EN,
-        .active_high = true,
-        .ramp_ms     = POWER_DELAY_SUBGHZ_MS,
-        .current_ma  = POWER_LIMIT_SUBGHZ_MA,
-        .name        = "SUBGHZ",
-    },
-    [POWER_RAIL_SDIO] = {
-        .gpio_pin    = GPIO_SDIO_EN,
-        .active_high = true,
-        .ramp_ms     = POWER_DELAY_SDIO_MS,
-        .current_ma  = POWER_LIMIT_SDIO_MA,
-        .name        = "SDIO",
-    },
-};
-
-/* ── Module state ─────────────────────────────────────────────────────────── */
+/* ========================================================================
+ * Module State
+ * ======================================================================== */
 
 static struct {
     enum power_rail_state states[POWER_RAIL_COUNT];
-    power_event_cb        event_callback;
-    void                 *event_context;
-    bool                  initialized;
-} pp_state;
+    power_event_cb event_callback;
+    void *event_context;
+} power_mod;
 
-/* ── Internal helpers ─────────────────────────────────────────────────────── */
+/* Power rail configuration table (matches header enum order) */
+static const struct power_rail_config rail_configs[POWER_RAIL_COUNT] = {
+    /* POWER_RAIL_SDR_1V8 */
+    { PWR_GPIO_SDR_1V8, true, POWER_DELAY_SDR_1V8_MS,
+      POWER_LIMIT_SDR_1V8_MA, "SDR 1V8" },
+    /* POWER_RAIL_SDR_1V1 */
+    { PWR_GPIO_SDR_1V1, true, POWER_DELAY_SDR_1V1_MS,
+      POWER_LIMIT_SDR_1V1_MA, "SDR 1V1" },
+    /* POWER_RAIL_SDR_3V3 */
+    { PWR_GPIO_SDR_3V3, true, POWER_DELAY_SDR_3V3_MS,
+      POWER_LIMIT_SDR_3V3_MA, "SDR 3V3" },
+    /* POWER_RAIL_NFC */
+    { PWR_GPIO_NFC, true, POWER_DELAY_NFC_MS,
+      POWER_LIMIT_NFC_MA, "NFC 5V" },
+    /* POWER_RAIL_SUBGHZ */
+    { PWR_GPIO_SUBGHZ, true, POWER_DELAY_SUBGHZ_MS,
+      POWER_LIMIT_SUBGHZ_MA, "Sub-GHz 3V3" },
+    /* POWER_RAIL_SDIO */
+    { PWR_GPIO_SDIO, true, POWER_DELAY_SDIO_MS,
+      POWER_LIMIT_SDIO_MA, "Wi-Fi SDIO 3V3" },
+};
+
+/* ========================================================================
+ * Simple Delay (busy-loop)
+ * ======================================================================== */
+
+static void delay_ms(uint32_t ms) {
+    /* Approximate delay: at 150 MHz, ~150000 NOPs per ms.
+     * This is a rough busy-wait; for production code, use a
+     * hardware timer or sleep_ms() from the Pico SDK. */
+    for (uint32_t i = 0; i < ms; i++) {
+        for (volatile uint32_t j = 0; j < 15000; j++) {
+            __asm__ volatile("nop");
+        }
+    }
+}
+
+/* ========================================================================
+ * Internal Helpers
+ * ======================================================================== */
 
 /**
- * set_rail_gpio — Set the GPIO state for a power rail
+ * set_rail_gpio — Set the GPIO for a power rail to the specified state
  *
- * @rail: Rail ID
- * @on:   True to enable, false to disable
+ * @rail:   Power rail ID
+ * @on:     true = enable the rail, false = disable
  */
-static void set_rail_gpio(enum power_rail_id rail, bool on)
-{
+static void set_rail_gpio(enum power_rail_id rail, bool on) {
     const struct power_rail_config *cfg = &rail_configs[rail];
     bool level;
 
-    if (cfg->active_high) {
+    if (cfg->active_high)
         level = on;
-    } else {
+    else
         level = !on;
-    }
 
-    gpio_put(cfg->gpio_pin, level);
+    /* Use rp2350b_gpio_set equivalent for direct register access */
+    volatile uint32_t *out_set = (volatile uint32_t *)(RP2350B_GPIO_BASE + 0x0104);
+    volatile uint32_t *out_clr = (volatile uint32_t *)(RP2350B_GPIO_BASE + 0x0108);
+
+    if (level)
+        *out_set = (1UL << cfg->gpio_pin);
+    else
+        *out_clr = (1UL << cfg->gpio_pin);
+
+    __asm__ volatile("dmb" ::: "memory");
 }
 
 /**
- * notify_event — Invoke the event callback if registered
- *
- * @rail:  Rail that changed state
- * @state: New state
+ * notify_event — Call the event callback if registered
  */
-static void notify_event(enum power_rail_id rail, enum power_rail_state state)
-{
-    if (pp_state.event_callback) {
-        pp_state.event_callback(rail, state, pp_state.event_context);
+static void notify_event(enum power_rail_id rail, enum power_rail_state state) {
+    if (power_mod.event_callback) {
+        power_mod.event_callback(rail, state, power_mod.event_context);
     }
 }
 
-/* ── Public API implementation ─────────────────────────────────────────────── */
+/* ========================================================================
+ * Public API Implementation
+ * ======================================================================== */
 
-int peripheral_power_init(void)
-{
-    int i;
+int peripheral_power_init(void) {
+    /* Initialize all rails to OFF state and configure GPIOs as outputs */
+    memset(&power_mod, 0, sizeof(power_mod));
 
-    /* Configure all power rail GPIOs as outputs, initially OFF */
-    for (i = 0; i < POWER_RAIL_COUNT; i++) {
-        const struct power_rail_config *cfg = &rail_configs[i];
-
-        /* Set GPIO to OFF state before enabling output to avoid glitches */
-        gpio_init(cfg->gpio_pin);
+    for (int i = 0; i < POWER_RAIL_COUNT; i++) {
+        power_mod.states[i] = POWER_RAIL_OFF;
         set_rail_gpio((enum power_rail_id)i, false);
-        gpio_set_dir(cfg->gpio_pin, GPIO_OUT);
-        gpio_set_pull_mode(cfg->gpio_pin, GPIO_PULL_DOWN);
 
-        /* Initialize state to OFF */
-        pp_state.states[i] = POWER_RAIL_OFF;
+        /* Configure GPIO as output using pad control */
+        volatile uint32_t *pad_ctrl = (volatile uint32_t *)(0x400C0000UL + 0x04 + rail_configs[i].gpio_pin * 4);
+        *pad_ctrl &= ~(1UL << 0);   /* Enable output driver */
+        *pad_ctrl &= ~(1UL << 3);   /* Disable pull-down */
+        *pad_ctrl |= (1UL << 2);    /* Enable pull-up (for load switches) */
+
+        /* Set GPIO function to SIO (software-controlled) */
+        volatile uint32_t *ctrl = (volatile uint32_t *)(0x400D0000UL + 0x04 + rail_configs[i].gpio_pin * 8);
+        *ctrl = 5;  /* GPIO_FUNC_SIO */
     }
-
-    pp_state.event_callback = NULL;
-    pp_state.event_context = NULL;
-    pp_state.initialized = true;
 
     return 0;
 }
 
-int peripheral_power_on(enum power_rail_id rail)
-{
-    if (rail < 0 || rail >= POWER_RAIL_COUNT) {
+int peripheral_power_on(enum power_rail_id rail) {
+    if (rail >= POWER_RAIL_COUNT)
         return -1;
-    }
 
-    if (!pp_state.initialized) {
-        return -1;
-    }
+    if (power_mod.states[rail] == POWER_RAIL_STABLE)
+        return -1;  /* Already on */
 
-    /* Already on? Idempotent: return success if already stable */
-    if (pp_state.states[rail] == POWER_RAIL_STABLE) {
-        return 0;
-    }
-
-    /* Rail is currently ramping — treat as busy/error */
-    if (pp_state.states[rail] == POWER_RAIL_RAMPING) {
-        return -1;
-    }
-
-    /* Drive the GPIO to enable the rail */
+    /* Enable the rail */
     set_rail_gpio(rail, true);
-    pp_state.states[rail] = POWER_RAIL_RAMPING;
+    power_mod.states[rail] = POWER_RAIL_RAMPING;
     notify_event(rail, POWER_RAIL_RAMPING);
 
-    /* Wait for the rail to stabilize */
-    sleep_ms(rail_configs[rail].ramp_ms);
+    /* Wait for voltage to stabilize */
+    delay_ms(rail_configs[rail].ramp_ms);
 
-    pp_state.states[rail] = POWER_RAIL_STABLE;
+    power_mod.states[rail] = POWER_RAIL_STABLE;
     notify_event(rail, POWER_RAIL_STABLE);
 
     return 0;
 }
 
-int peripheral_power_off(enum power_rail_id rail)
-{
-    if (rail < 0 || rail >= POWER_RAIL_COUNT) {
+int peripheral_power_off(enum power_rail_id rail) {
+    if (rail >= POWER_RAIL_COUNT)
         return -1;
-    }
 
-    if (!pp_state.initialized) {
-        return -1;
-    }
+    if (power_mod.states[rail] == POWER_RAIL_OFF)
+        return -1;  /* Already off */
 
-    /* Already off? Idempotent: return success */
-    if (pp_state.states[rail] == POWER_RAIL_OFF) {
-        return 0;
-    }
-
-    /* Drive the GPIO to disable the rail */
     set_rail_gpio(rail, false);
-    pp_state.states[rail] = POWER_RAIL_OFF;
+    power_mod.states[rail] = POWER_RAIL_OFF;
     notify_event(rail, POWER_RAIL_OFF);
 
     return 0;
 }
 
-int peripheral_power_on_sequence(void)
-{
-    int result;
+int peripheral_power_on_sequence(void) {
+    int ret;
 
-    if (!pp_state.initialized) {
-        return -1;
-    }
+    /* Power-on sequence matching power-tree.md:
+     *   1. SDR 1V8  → wait 5ms
+     *   2. SDR 1V1  → wait 5ms
+     *   3. SDR 3V3  → wait 5ms
+     *   4. NFC      → wait 50ms
+     *   5. Sub-GHz  → wait 50ms
+     *   6. SDIO     → wait 20ms */
 
-    /* Power-on sequence matches the power-tree.md requirements.
-     *
-     * Each call to peripheral_power_on() enables the GPIO and waits
-     * for the rail ramp time. The total sequence takes approximately:
-     *   5 + 5 + 5 + 50 + 50 + 20 = 135ms
-     *
-     * Assumption: VCC_3V3 (from PMIC) is already stable before this
-     * function is called. The RK3576 drives VCC_3V3 enable, and
-     * the RP2350B should only be called after VCC_3V3_RP is stable.
-     */
+    ret = peripheral_power_on(POWER_RAIL_SDR_1V8);
+    if (ret < 0) return ret;
 
-    /* Step 1: SDR 1V8 (LMS7002M core) — depends on VCC_3V3 */
-    result = peripheral_power_on(POWER_RAIL_SDR_1V8);
-    if (result != 0) {
-        goto fail;
-    }
+    ret = peripheral_power_on(POWER_RAIL_SDR_1V1);
+    if (ret < 0) return ret;
 
-    /* Step 2: SDR 1V1 (LMS7002M PLL) — depends on SDR 1V8 */
-    result = peripheral_power_on(POWER_RAIL_SDR_1V1);
-    if (result != 0) {
-        peripheral_power_off(POWER_RAIL_SDR_1V8);
-        goto fail;
-    }
+    ret = peripheral_power_on(POWER_RAIL_SDR_3V3);
+    if (ret < 0) return ret;
 
-    /* Step 3: SDR 3V3 (LMS7002M PA/LNA) — depends on SDR 1V1 */
-    result = peripheral_power_on(POWER_RAIL_SDR_3V3);
-    if (result != 0) {
-        peripheral_power_off(POWER_RAIL_SDR_1V1);
-        peripheral_power_off(POWER_RAIL_SDR_1V8);
-        goto fail;
-    }
+    ret = peripheral_power_on(POWER_RAIL_NFC);
+    if (ret < 0) return ret;
 
-    /* Step 4: NFC (ST25R3916) — depends on VCC_3V3 */
-    result = peripheral_power_on(POWER_RAIL_NFC);
-    if (result != 0) {
-        peripheral_power_off(POWER_RAIL_SDR_3V3);
-        peripheral_power_off(POWER_RAIL_SDR_1V1);
-        peripheral_power_off(POWER_RAIL_SDR_1V8);
-        goto fail;
-    }
+    ret = peripheral_power_on(POWER_RAIL_SUBGHZ);
+    if (ret < 0) return ret;
 
-    /* Step 5: Sub-GHz (CC1101) — depends on VCC_3V3 */
-    result = peripheral_power_on(POWER_RAIL_SUBGHZ);
-    if (result != 0) {
-        peripheral_power_off(POWER_RAIL_NFC);
-        peripheral_power_off(POWER_RAIL_SDR_3V3);
-        peripheral_power_off(POWER_RAIL_SDR_1V1);
-        peripheral_power_off(POWER_RAIL_SDR_1V8);
-        goto fail;
-    }
-
-    /* Step 6: SDIO (MT7922 Wi-Fi) — depends on VCC_3V3 */
-    result = peripheral_power_on(POWER_RAIL_SDIO);
-    if (result != 0) {
-        peripheral_power_off(POWER_RAIL_SUBGHZ);
-        peripheral_power_off(POWER_RAIL_NFC);
-        peripheral_power_off(POWER_RAIL_SDR_3V3);
-        peripheral_power_off(POWER_RAIL_SDR_1V1);
-        peripheral_power_off(POWER_RAIL_SDR_1V8);
-        goto fail;
-    }
+    ret = peripheral_power_on(POWER_RAIL_SDIO);
+    if (ret < 0) return ret;
 
     return 0;
-
-fail:
-    /* A rail failed to power on. All previously enabled rails have been
-     * shut down. Report the error. */
-    return result;
 }
 
-int peripheral_power_off_sequence(void)
-{
-    if (!pp_state.initialized) {
-        return -1;
-    }
-
-    /* Power-off sequence is the reverse of the power-on sequence.
-     * We add a small delay between each rail to allow the load
-     * to discharge, preventing voltage feeding back through
-     * parasitic paths. */
-
-    /* Step 1: SDIO off (Wi-Fi module) */
+int peripheral_power_off_sequence(void) {
+    /* Power-off in reverse order with minimum delays */
     peripheral_power_off(POWER_RAIL_SDIO);
-    sleep_ms(5);
+    delay_ms(5);
 
-    /* Step 2: Sub-GHz off (CC1101) */
     peripheral_power_off(POWER_RAIL_SUBGHZ);
-    sleep_ms(5);
+    delay_ms(5);
 
-    /* Step 3: NFC off (ST25R3916) */
     peripheral_power_off(POWER_RAIL_NFC);
-    sleep_ms(5);
+    delay_ms(5);
 
-    /* Step 4: SDR 3V3 off (LMS7002M PA/LNA) */
     peripheral_power_off(POWER_RAIL_SDR_3V3);
-    sleep_ms(5);
+    delay_ms(5);
 
-    /* Step 5: SDR 1V1 off (LMS7002M PLL) */
     peripheral_power_off(POWER_RAIL_SDR_1V1);
-    sleep_ms(5);
+    delay_ms(5);
 
-    /* Step 6: SDR 1V8 off (LMS7002M core) */
     peripheral_power_off(POWER_RAIL_SDR_1V8);
 
     return 0;
 }
 
-enum power_rail_state peripheral_power_get_state(enum power_rail_id rail)
-{
-    if (rail < 0 || rail >= POWER_RAIL_COUNT) {
+enum power_rail_state peripheral_power_get_state(enum power_rail_id rail) {
+    if (rail >= POWER_RAIL_COUNT)
         return POWER_RAIL_FAULT;
-    }
-
-    return pp_state.states[rail];
+    return power_mod.states[rail];
 }
 
-void peripheral_power_set_event_callback(power_event_cb cb, void *context)
-{
-    pp_state.event_callback = cb;
-    pp_state.event_context = context;
+void peripheral_power_set_event_callback(power_event_cb cb, void *context) {
+    power_mod.event_callback = cb;
+    power_mod.event_context = context;
 }
 
-bool peripheral_power_all_on(void)
-{
-    int i;
-
-    for (i = 0; i < POWER_RAIL_COUNT; i++) {
-        if (pp_state.states[i] != POWER_RAIL_STABLE) {
+bool peripheral_power_all_on(void) {
+    for (int i = 0; i < POWER_RAIL_COUNT; i++) {
+        if (power_mod.states[i] != POWER_RAIL_STABLE)
             return false;
-        }
     }
-
     return true;
 }
 
-bool peripheral_power_all_off(void)
-{
-    int i;
-
-    for (i = 0; i < POWER_RAIL_COUNT; i++) {
-        if (pp_state.states[i] != POWER_RAIL_OFF) {
+bool peripheral_power_all_off(void) {
+    for (int i = 0; i < POWER_RAIL_COUNT; i++) {
+        if (power_mod.states[i] != POWER_RAIL_OFF)
             return false;
-        }
     }
-
     return true;
 }
 
-const struct power_rail_config *peripheral_power_get_config(enum power_rail_id rail)
-{
-    if (rail < 0 || rail >= POWER_RAIL_COUNT) {
+const struct power_rail_config *peripheral_power_get_config(enum power_rail_id rail) {
+    if (rail >= POWER_RAIL_COUNT)
         return NULL;
-    }
-
     return &rail_configs[rail];
 }

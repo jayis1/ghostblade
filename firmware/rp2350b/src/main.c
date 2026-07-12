@@ -377,8 +377,16 @@ int main(void)
                 watchdog_mark_brownout();
                 /* Also set the brownout flag in protocol handler */
                 spi_protocol_set_brownout(true);
+                /* Deassert INT_REQ (active-high) to signal host
+                 * that MCU is entering brownout state. The host
+                 * kernel driver will see the LOW_BATTERY flag in
+                 * telemetry and the brownout_count sysfs attribute
+                 * increment. */
+                rp2350b_gpio_set(PIN_INT_REQ, false);
             } else if (!brownout_active) {
                 spi_protocol_set_brownout(false);
+                /* Reassert INT_REQ once brownout condition clears */
+                rp2350b_gpio_set(PIN_INT_REQ, true);
             }
         skip_brownout:;
         }

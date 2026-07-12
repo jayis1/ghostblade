@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # FAQ & Troubleshooting — GhostBlade (Project NullSpectre)
 
 Frequently asked questions and common troubleshooting solutions for the

@@ -228,7 +228,12 @@ enum sleep_state sleep_wake_process(void) {
         break;
 
     case SLEEP_DEEP:
-        /* Stay in deep sleep until activity detected */
+        /* Stay in deep sleep until activity detected.
+         * Kick the watchdog periodically to prevent a reset
+         * during deep sleep — the main loop may not be
+         * calling watchdog_kick() fast enough at 48 MHz. */
+        if (sw_state.idle_count % 50 == 0)
+            watchdog_kick();
         break;
 
     default:

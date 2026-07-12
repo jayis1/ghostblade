@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # Hardware Protection, Reset Circuits, and Test Points
 
 This document describes the ESD protection strategy, reset circuits, and test

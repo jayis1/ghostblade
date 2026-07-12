@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # PHASE 4: Foundational Software Stack & Implementation
 
 **Device:** GhostBlade  

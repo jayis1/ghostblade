@@ -69,6 +69,7 @@
 #include "apex_bridge_regs.h"
 
 #define DRIVER_NAME     "apex_bridge"
+#define APEX_FIRMWARE_VERSION "1.0.0"
 #define DEVICE_NAME     "apex_bridge"
 #define CLASS_NAME      "apex"
 
@@ -1433,7 +1434,12 @@ static ssize_t low_battery_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(low_battery);
 
-/* ── Scatter-Gather DMA sysfs attributes ──────────────────────────────────── */
+static ssize_t firmware_version_show(struct device *dev,
+                                       struct device_attribute *attr, char *buf)
+{
+    return sprintf(buf, "%s\n", APEX_FIRMWARE_VERSION);
+}
+static DEVICE_ATTR_RO(firmware_version);
 
 static ssize_t sg_state_show(struct device *dev,
                                struct device_attribute *attr, char *buf)
@@ -1601,6 +1607,7 @@ static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_tx_fifo_count.attr,
     &dev_attr_brownout_count.attr,
     &dev_attr_low_battery.attr,
+    &dev_attr_firmware_version.attr,
     /* Scatter-gather DMA attributes */
     &dev_attr_sg_state.attr,
     &dev_attr_sg_total_bytes.attr,
@@ -2286,6 +2293,9 @@ static void apex_bridge_remove(struct spi_device *spi)
     /* Stop scatter-gather engine if running */
     apex_sg_engine_stop(dev);
 
+    /* Securely wipe telemetry data before freeing device struct */
+    memzero_explicit(&dev->last_telem, sizeof(dev->last_telem));
+
     /* Destroy device node */
     device_destroy(dev->class, dev->devt);
     class_destroy(dev->class);
@@ -2301,7 +2311,9 @@ static void apex_bridge_remove(struct spi_device *spi)
 
     dev_info(&spi->dev, "GhostBlade SPI Bridge driver removed\n");
 
-    kfree(dev);
+    /* Use kfree_sensitive to prevent leakage of telemetry data,
+     * SPI keys, or protocol state from freed kernel memory. */
+    kfree_sensitive(dev);
     apex_dev = NULL;
 }
 
@@ -2378,9 +2390,13 @@ static int apex_bridge_runtime_idle(struct device *dev)
     struct spi_device *spi = to_spi_device(dev);
     struct apex_bridge_dev *adev = spi_get_drvdata(spi);
 
-    /* Allow runtime suspend only when no open handles */
+    /* Allow runtime suspend only when no open handles.
+     * Returning 0 signals to the PM core that the device is idle
+     * and may be suspended. Returning -EBUSY prevents suspend.
+     * Do NOT call pm_runtime_suspend() from here — the PM core
+     * handles the transition when we return 0. */
     if (atomic_read(&adev->open_count) == 0)
-        return pm_runtime_suspend(dev);
+        return 0;
 
     return -EBUSY;
 }

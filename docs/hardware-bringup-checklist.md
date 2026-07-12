@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # Hardware Bring-Up Checklist — GhostBlade (Project NullSpectre)
 
 This document provides a step-by-step checklist for bringing up a newly

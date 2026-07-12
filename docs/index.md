@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # GhostBlade Documentation Index
 
 This page provides a central index of all GhostBlade (Project NullSpectre) documentation.
@@ -8,6 +11,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 |----------|-------------|
 | [Board Quick-Start](board-quickstart.md) | TL;DR — from unpowered to operational in 10 minutes |
 | [Getting Started](getting-started.md) | Dev environment setup, toolchain installation, first build |
+| [Development Environment](development-environment.md) | Quick-setup guide — one-line install and build |
 | [Getting Started Guide (detailed)](getting-started-guide.md) | Comprehensive build, flash, and test guide with pyapex examples |
 | [Build Instructions](build-instructions.md) | Detailed build steps for firmware, driver, libapex, Python bindings |
 | [Flashing Guide](flashing-guide.md) | Firmware flashing via OpenOCD/picotool/USB, driver loading, recovery |

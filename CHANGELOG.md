@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+
 # Changelog
 
 All notable changes to the GhostBlade (Project NullSpectre) project are documented in this file.
@@ -12,6 +14,14 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 ## [Unreleased]
 
 ### Added
+
+- Development environment quick-setup guide (`docs/development-environment.md`)
+- CC1101, NFC, Wi-Fi, and sleep DTS overlay references added to system manifest (`GhostBlade.mf`)
+- LMS7002M driver, sleep/wake, peripheral power, and ADC calibration source files added to README repository structure
+- SPDX license headers verified on all source files
+- Stats updated with current line counts
+
+### Changed
 
 - Cross-compilation toolchain configuration (`software/toolchain.conf`) with `ghostblade_check_toolchain` helper
 - `make check` target in top-level Makefile for toolchain availability verification

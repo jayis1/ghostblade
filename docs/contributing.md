@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # GhostBlade Contributor's Guide
 
 Welcome to the GhostBlade (Project NullSpectre) open-source hardware project! This guide will help you get started contributing to the dual-processor pentesting device with RK3576 + RP2350B, LMS7002M SDR, CC1101 sub-GHz, ST25R3916 NFC, and MT7922 Wi-Fi 6E.
@@ -30,6 +33,10 @@ GhostBlade is a portable dual-processor pentesting device:
 The RK3576 communicates with the RP2350B over a high-speed SPI bus, which carries command/response frames and SDR IQ data.
 
 For detailed architecture diagrams, data flow paths, and the full bus map, see [System Architecture](architecture.md).
+
+## Quick Setup
+
+For a fast one-command setup on Ubuntu, see [Development Environment](development-environment.md).
 
 ## Repository Structure
 

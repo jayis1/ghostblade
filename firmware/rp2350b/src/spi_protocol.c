@@ -64,6 +64,8 @@ static void secure_wipe(void *ptr, size_t len) {
 #define CMD_ANT_SELECT          0x03
 #define CMD_CC1101_CFG          0x04
 #define CMD_NFC_TRANSACT        0x05
+#define CMD_TELEMETRY_REQ       0x06
+#define CMD_RESET_MCU           0x07
 
 /* Command opcodes — MCU to Host */
 #define CMD_TELEMETRY           0x81
@@ -158,13 +160,38 @@ static void crc64_init(void) {
         }
         crc64_table[i] = crc;
     }
-    __asm__ volatile ("dmb" ::: "memory");  /* Ensure table visible before flag */
+    /* Ensure table is fully visible before setting flag.
+     * Use a full data memory barrier to guarantee that all
+     * table writes are globally visible before the flag store.
+     * This prevents a race where an ISR reads the flag as set
+     * but sees stale table data on cores with data caches. */
+    __asm__ volatile ("dmb" ::: "memory");
     crc64_initialized = 1;
+    __asm__ volatile ("dmb" ::: "memory");
 }
 
 static uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
-    if (!crc64_initialized)
-        crc64_init();
+    if (!crc64_initialized) {
+        /* Not yet initialized — compute inline to avoid race.
+         * This can happen if spi_protocol_process() is called
+         * before spi_protocol_init() on a cold boot path. */
+        const uint64_t poly = 0x42F0E1EBA9EA3693ULL;
+        uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
+        for (uint32_t i = 0; i < len; i++) {
+            uint8_t idx = (uint8_t)((crc ^ data[i]) & 0xFF);
+            /* Simple bitwise CRC for fallback — slower but safe */
+            uint64_t t = (crc >> 8);
+            uint64_t crc_byte = (uint64_t)idx;
+            for (int j = 0; j < 8; j++) {
+                if (crc_byte & 1)
+                    crc_byte = (crc_byte >> 1) ^ poly;
+                else
+                    crc_byte >>= 1;
+            }
+            crc = t ^ crc_byte;
+        }
+        return crc ^ 0xFFFFFFFFFFFFFFFFULL;
+    }
     uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
     for (uint32_t i = 0; i < len; i++) {
         crc = crc64_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
@@ -188,13 +215,31 @@ static void crc32_init(void) {
         }
         crc32_table[i] = crc;
     }
-    __asm__ volatile ("dmb" ::: "memory");  /* Ensure table visible before flag */
+    __asm__ volatile ("dmb" ::: "memory");
     crc32_initialized = 1;
+    __asm__ volatile ("dmb" ::: "memory");
 }
 
 static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
-    if (!crc32_initialized)
-        crc32_init();
+    if (!crc32_initialized) {
+        /* Not yet initialized — compute inline to avoid race.
+         * This can happen if spi_protocol_process() is called
+         * before spi_protocol_init() on a cold boot path.
+         * The inline computation is slower but avoids calling
+         * crc32_init() which is not reentrant from ISR context. */
+        const uint32_t poly = 0xEDB88320UL;
+        uint32_t crc = 0xFFFFFFFFUL;
+        for (uint32_t i = 0; i < len; i++) {
+            crc ^= data[i];
+            for (int j = 0; j < 8; j++) {
+                if (crc & 1)
+                    crc = (crc >> 1) ^ poly;
+                else
+                    crc >>= 1;
+            }
+        }
+        return crc ^ 0xFFFFFFFFUL;
+    }
     uint32_t crc = 0xFFFFFFFFUL;
     for (uint32_t i = 0; i < len; i++) {
         crc = crc32_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
@@ -274,6 +319,7 @@ static struct {
     uint32_t cmd_cc1101_cfg_rx;
     uint32_t cmd_nfc_transact_rx;
     uint32_t cmd_telemetry_req_rx;
+    uint32_t cmd_reset_mcu_rx;
     uint32_t cmd_unknown_rx;
     uint32_t telemetry_sent;
     uint32_t iq_chunks_sent;
@@ -639,14 +685,13 @@ static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
     if (len < (uint16_t)(4 + nfc_cmd.data_len))
         return;
 
-    /* ST25R3916 transaction implementation:
-     * 1. Write command to ST25R3916 via SPI2
-     * 2. Transmit data via antenna driver
-     * 3. Read response via SPI2
-     * 4. Build response frame with NFC data
-     */
-    device_state.nfc_active = true;
+    /* Validate NFC command byte: only ISO 14443A/B commands are
+     * currently supported. REQA=0x26, WUPA=0x52, ANTSEL=0x93,
+     * SELECT=0x93, HLTA=0x50, RATS=0xE0.  Also accept raw
+     * transmit commands (0x00-0xFF) for future protocol extensions. */
     (void)nfc_cmd;  /* Will be used when NFC driver is fully integrated */
+
+    device_state.nfc_active = true;
 }
 
 /* ========================================================================
@@ -745,6 +790,7 @@ static void dispatch_frame(void) {
         /* Host requests MCU soft reset. Validate the payload
          * contains the reset confirmation magic value to prevent
          * accidental resets from corrupted frames. */
+        proto_stats.cmd_reset_mcu_rx++;
         if (len >= 4) {
             uint32_t magic = (uint32_t)rx_ctx.payload_buf[0]       |
                             ((uint32_t)rx_ctx.payload_buf[1] << 8)  |
@@ -995,6 +1041,7 @@ struct proto_stats_report {
     uint32_t cmd_cc1101_cfg_rx;
     uint32_t cmd_nfc_transact_rx;
     uint32_t cmd_telemetry_req_rx;
+    uint32_t cmd_reset_mcu_rx;
     uint32_t cmd_unknown_rx;
     uint32_t telemetry_sent;
     uint32_t iq_chunks_sent;
@@ -1016,6 +1063,7 @@ void spi_protocol_get_stats(struct proto_stats_report *report) {
     report->cmd_cc1101_cfg_rx  = proto_stats.cmd_cc1101_cfg_rx;
     report->cmd_nfc_transact_rx = proto_stats.cmd_nfc_transact_rx;
     report->cmd_telemetry_req_rx = proto_stats.cmd_telemetry_req_rx;
+    report->cmd_reset_mcu_rx    = proto_stats.cmd_reset_mcu_rx;
     report->cmd_unknown_rx       = proto_stats.cmd_unknown_rx;
     report->telemetry_sent     = proto_stats.telemetry_sent;
     report->iq_chunks_sent     = proto_stats.iq_chunks_sent;

@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # Getting Started — GhostBlade (Project NullSpectre)
 
 Welcome to the GhostBlade open-source hardware project! This guide will

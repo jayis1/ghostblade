@@ -733,6 +733,60 @@ static void test_battery_discharge_curve(void) {
 }
 
 /* ========================================================================
+ * Test: Reset magic constant
+ * ======================================================================== */
+
+static void test_reset_magic(void) {
+    printf("  Testing reset magic constant values...\n");
+
+    /* APEX_RESET_MAGIC must be 0x52534554 ("RSET") */
+    ASSERT_TRUE(APEX_RESET_MAGIC == 0x52534554UL, "APEX_RESET_MAGIC = 0x52534554");
+
+    /* Verify the magic bytes are ASCII "RSET" */
+    ASSERT_TRUE(((APEX_RESET_MAGIC >> 24) & 0xFF) == 0x52, "Magic byte 3 = 'R'");
+    ASSERT_TRUE(((APEX_RESET_MAGIC >> 16) & 0xFF) == 0x53, "Magic byte 2 = 'S'");
+    ASSERT_TRUE(((APEX_RESET_MAGIC >> 8) & 0xFF) == 0x45, "Magic byte 1 = 'E'");
+    ASSERT_TRUE((APEX_RESET_MAGIC & 0xFF) == 0x54, "Magic byte 0 = 'T'");
+
+    /* Magic must not be zero (accidental reset protection) */
+    ASSERT_TRUE(APEX_RESET_MAGIC != 0, "Reset magic is non-zero");
+
+    /* Magic must not be 0xFFFFFFFF (common SPI bus idle pattern) */
+    ASSERT_TRUE(APEX_RESET_MAGIC != 0xFFFFFFFFUL, "Reset magic is not all-ones");
+
+    /* Magic must not be a simple incrementing pattern (0x01020304) */
+    ASSERT_TRUE(APEX_RESET_MAGIC != 0x01020304UL, "Reset magic is not trivial pattern");
+}
+
+/* ========================================================================
+ * Test: Telemetry flag completeness
+ * ======================================================================== */
+
+static void test_telemetry_flag_completeness(void) {
+    printf("  Testing telemetry flag completeness...\n");
+
+    /* All telemetry flags should be distinct and non-overlapping */
+    uint16_t flags[] = {
+        APEX_TELEM_SDR_RX_ACTIVE,
+        APEX_TELEM_SDR_TX_ACTIVE,
+        APEX_TELEM_CC1101_RX,
+        APEX_TELEM_CC1101_TX,
+        APEX_TELEM_NFC_ACTIVE,
+        APEX_TELEM_NFC_TAG_PRESENT,
+        APEX_TELEM_OVERTEMP,
+        APEX_TELEM_LOW_BATTERY,
+    };
+    int n = sizeof(flags) / sizeof(flags[0]);
+
+    for (int i = 0; i < n; i++) {
+        ASSERT_TRUE(flags[i] != 0, "flag is non-zero");
+        for (int j = i + 1; j < n; j++) {
+            ASSERT_TRUE((flags[i] & flags[j]) == 0, "flags are mutually exclusive");
+        }
+    }
+}
+
+/* ========================================================================
  * Main test runner
  * ======================================================================== */
 
@@ -791,6 +845,12 @@ int main(void) {
     /* Telemetry flag tests */
     printf("[Telemetry Flags]\n");
     test_telemetry_flags();
+    test_telemetry_flag_completeness();
+    printf("\n");
+
+    /* Reset magic tests */
+    printf("[Reset Magic]\n");
+    test_reset_magic();
     printf("\n");
 
     /* Version tests */

@@ -181,14 +181,15 @@ void sdr_dma_irq_handler(void) {
         /* Clear interrupt */
         REG32(DMA_INTS0) = (1 << 0);
 
-        /* Advance write block pointer */
-        uint8_t next_write = (dma_write_block + 1) % SDR_RING_NUM_BLOCKS;
+        /* Advance write block pointer — use mask arithmetic for
+         * correctness since SDR_RING_NUM_BLOCKS is a power of 2. */
+        uint8_t next_write = (dma_write_block + 1) & (SDR_RING_NUM_BLOCKS - 1);
 
         /* Check for overrun: next write block equals read block */
         if (next_write == proto_read_block) {
             dma_stats.overruns++;
             /* Overrun: discard oldest block (advance read pointer) */
-            proto_read_block = (proto_read_block + 1) % SDR_RING_NUM_BLOCKS;
+            proto_read_block = (proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1);
         }
 
         dma_write_block = next_write;
@@ -379,7 +380,7 @@ const uint8_t *sdr_dma_get_block(uint8_t *block_idx, uint16_t *size) {
  */
 void sdr_dma_release_block(void) {
     if (__atomic_load_n(&blocks_filled, __ATOMIC_RELAXED) > 0) {
-        proto_read_block = (proto_read_block + 1) % SDR_RING_NUM_BLOCKS;
+        proto_read_block = (proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1);
         __atomic_sub_fetch(&blocks_filled, 1, __ATOMIC_RELAXED);
         dma_stats.total_blocks_sent++;
     }
