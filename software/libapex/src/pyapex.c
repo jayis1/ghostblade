@@ -1,674 +1,688 @@
 /*
- * pyapex — Python Bindings for libapex
+ * pyapex.c — Python Bindings for GhostBlade libapex
  *
  * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Python C extension module providing access to the GhostBlade hardware
- * through the libapex C library. This module wraps all libapex functions
- * into Python classes and methods.
+ * Python extension module providing access to the GhostBlade hardware
+ * through the libapex C library. This module wraps the ioctl interface
+ * and provides a Pythonic API for SDR control, sub-GHz radio, NFC,
+ * and telemetry.
  *
  * Usage:
  *   import pyapex
- *   dev = pyapex.ApexDevice()
+ *   dev = pyapex.ApexBridge('/dev/apex_bridge0')
  *   dev.sdr_tune(868e6, 20000, 30.0)
  *   telem = dev.get_telemetry()
- *   print(f"Battery: {telem.vbat_mv} mV")
+ *   print(f"VBAT: {telem['vbat_mv']}mV, Temp: {telem['temp_c_x10']/10.0}°C")
  *   dev.close()
  *
  * Build:
- *   python3 setup.py build_ext --inplace
+ *   pip install .  (or python3 setup.py build_ext --inplace)
  */
 
+#define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
 #include "libapex.h"
 
 /* ========================================================================
- * ApexDevice Python Type
+ * Kernel ioctl definitions (must match apex_bridge_regs.h)
  * ======================================================================== */
 
-typedef struct {
-    PyObject_HEAD
-    apex_handle_t handle;
-} PyApexDeviceObject;
+#include <linux/ioctl.h>
 
-/* ========================================================================
- * ApexTelemetry Python Type
- * ======================================================================== */
+#define APEX_IOC_MAGIC         'A'
 
-typedef struct {
-    PyObject_HEAD
-    int16_t  rssi_dbm_x10;
-    int16_t  temp_c_x10;
+/* ioctl command structures (must match kernel) */
+struct apex_sdr_tune_cmd {
+    uint32_t freq_hz;
+    uint16_t bw_khz;
+    uint16_t gain_db_x10;
+} __attribute__((packed));
+
+struct apex_cc1101_cfg {
+    uint8_t  reg_addr;
+    uint8_t  reg_len;
+    uint8_t  data[64];
+} __attribute__((packed));
+
+struct apex_nfc_transact {
+    uint8_t  cmd;
+    uint8_t  flags;
+    uint16_t data_len;
+    uint8_t  data[256];
+} __attribute__((packed));
+
+struct apex_telemetry {
+    uint16_t rssi_dbm_x10;
+    uint16_t temp_c_x10;
     uint16_t vbat_mv;
-    int16_t  cc1101_rssi_x10;
+    uint16_t cc1101_rssi_x10;
     uint16_t nfc_field_mv;
     uint16_t flags;
     uint32_t uptime_ms;
-} PyApexTelemetryObject;
+} __attribute__((packed));
+
+struct apex_sg_config {
+    uint32_t buf_count;
+    uint32_t buf_size;
+    uint32_t timeout_ms;
+    uint32_t spi_speed_hz;
+    uint8_t  continuous;
+    uint8_t  reserved[3];
+} __attribute__((packed));
+
+struct apex_sg_status {
+    uint32_t state;
+    uint32_t buf_count;
+    uint32_t buf_size;
+    uint64_t total_transferred;
+    uint32_t overruns;
+    uint32_t errors;
+    uint32_t frames_rx;
+    uint32_t frames_crc_err;
+} __attribute__((packed));
+
+#define APEX_IOC_SDR_TUNE      _IOW(APEX_IOC_MAGIC, 1, struct apex_sdr_tune_cmd)
+#define APEX_IOC_SDR_STREAM    _IOW(APEX_IOC_MAGIC, 2, uint8_t)
+#define APEX_IOC_ANT_SELECT    _IOW(APEX_IOC_MAGIC, 3, uint8_t)
+#define APEX_IOC_CC1101_CFG    _IOW(APEX_IOC_MAGIC, 4, struct apex_cc1101_cfg)
+#define APEX_IOC_NFC_TRANSACT  _IOW(APEX_IOC_MAGIC, 5, struct apex_nfc_transact)
+#define APEX_IOC_GET_TELEMETRY _IOR(APEX_IOC_MAGIC, 6, struct apex_telemetry)
+#define APEX_IOC_MCU_RESET     _IOW(APEX_IOC_MAGIC, 7, uint8_t)
+#define APEX_IOC_GET_STATUS    _IOR(APEX_IOC_MAGIC, 8, uint32_t)
+#define APEX_IOC_SG_START      _IOW(APEX_IOC_MAGIC, 9, struct apex_sg_config)
+#define APEX_IOC_SG_STOP       _IO(APEX_IOC_MAGIC, 10)
+#define APEX_IOC_SG_GET_STATUS _IOR(APEX_IOC_MAGIC, 11, struct apex_sg_status)
+#define APEX_IOC_SOFT_RESET    _IOW(APEX_IOC_MAGIC, 12, uint32_t)
+
+#define APEX_RESET_MAGIC       0x52534554UL
 
 /* ========================================================================
- * ApexDevice Methods
+ * ApexBridge Python Object
  * ======================================================================== */
 
-static PyObject *
-pyapex_device_close(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    if (self->handle) {
-        apex_close(self->handle);
-        self->handle = NULL;
+typedef struct {
+    PyObject_HEAD
+    int fd;             /* File descriptor for /dev/apex_bridge0 */
+    char *device_path;  /* Device path string */
+} ApexBridgeObject;
+
+/* Forward declarations */
+static PyTypeObject ApexBridgeType;
+
+/* ========================================================================
+ * ApexBridge.__init__
+ * ======================================================================== */
+
+static int ApexBridge_init(ApexBridgeObject *self, PyObject *args, PyObject *kwds) {
+    const char *device_path = "/dev/apex_bridge0";
+    static char *kwlist[] = {"device", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|s", kwlist, &device_path))
+        return -1;
+
+    self->device_path = strdup(device_path);
+    if (!self->device_path) {
+        PyErr_NoMemory();
+        return -1;
     }
-    Py_RETURN_NONE;
+
+    self->fd = open(device_path, O_RDWR);
+    if (self->fd < 0) {
+        PyErr_Format(PyExc_OSError,
+                     "Failed to open %s: %s", device_path, strerror(errno));
+        free(self->device_path);
+        self->device_path = NULL;
+        return -1;
+    }
+
+    return 0;
 }
 
-static PyObject *
-pyapex_device_sdr_tune(PyApexDeviceObject *self, PyObject *args)
-{
-    uint32_t freq_hz;
-    uint16_t bw_khz;
-    double gain_db;
-    int ret;
+/* ========================================================================
+ * ApexBridge.__del__
+ * ======================================================================== */
 
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
+static void ApexBridge_dealloc(ApexBridgeObject *self) {
+    if (self->fd >= 0) {
+        close(self->fd);
+        self->fd = -1;
     }
-
-    if (!PyArg_ParseTuple(args, "IHd", &freq_hz, &bw_khz, &gain_db))
-        return NULL;
-
-    ret = apex_sdr_tune(self->handle, freq_hz, bw_khz, (float)gain_db);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    Py_RETURN_NONE;
+    free(self->device_path);
+    self->device_path = NULL;
+    Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
-static PyObject *
-pyapex_device_sdr_stream_start(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    int ret;
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
+/* ========================================================================
+ * ApexBridge.sdr_tune(freq_hz, bw_khz, gain_db)
+ * ======================================================================== */
+
+static PyObject *ApexBridge_sdr_tune(ApexBridgeObject *self, PyObject *args) {
+    double freq_hz, gain_db;
+    int bw_khz;
+
+    if (!PyArg_ParseTuple(args, "did", &freq_hz, &bw_khz, &gain_db))
+        return NULL;
+
+    if (freq_hz < 100e3 || freq_hz > 3.8e9) {
+        PyErr_SetString(PyExc_ValueError,
+                        "freq_hz must be between 100 kHz and 3.8 GHz");
         return NULL;
     }
 
-    ret = apex_sdr_stream_start(self->handle);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
+    struct apex_sdr_tune_cmd cmd = {
+        .freq_hz = (uint32_t)freq_hz,
+        .bw_khz = (uint16_t)bw_khz,
+        .gain_db_x10 = (uint16_t)(gain_db * 10),
+    };
 
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_sdr_stream_stop(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    int ret;
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    ret = apex_sdr_stream_stop(self->handle);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_ant_select(PyApexDeviceObject *self, PyObject *args)
-{
-    int ant;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "i", &ant))
-        return NULL;
-
-    ret = apex_ant_select(self->handle, (apex_antenna_t)ant);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
+    if (ioctl(self->fd, APEX_IOC_SDR_TUNE, &cmd) < 0) {
+        PyErr_Format(PyExc_OSError, "SDR tune failed: %s", strerror(errno));
         return NULL;
     }
 
     Py_RETURN_NONE;
 }
 
-static PyObject *
-pyapex_device_cc1101_write(PyApexDeviceObject *self, PyObject *args)
-{
+/* ========================================================================
+ * ApexBridge.sdr_stream_start()
+ * ======================================================================== */
+
+static PyObject *ApexBridge_sdr_stream_start(ApexBridgeObject *self,
+                                                PyObject *Py_UNUSED(ignored)) {
+    uint8_t enable = 1;
+    if (ioctl(self->fd, APEX_IOC_SDR_STREAM, &enable) < 0) {
+        PyErr_Format(PyExc_OSError, "SDR stream start failed: %s", strerror(errno));
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.sdr_stream_stop()
+ * ======================================================================== */
+
+static PyObject *ApexBridge_sdr_stream_stop(ApexBridgeObject *self,
+                                               PyObject *Py_UNUSED(ignored)) {
+    uint8_t enable = 0;
+    if (ioctl(self->fd, APEX_IOC_SDR_STREAM, &enable) < 0) {
+        PyErr_Format(PyExc_OSError, "SDR stream stop failed: %s", strerror(errno));
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.ant_select(antenna)
+ * ======================================================================== */
+
+static PyObject *ApexBridge_ant_select(ApexBridgeObject *self, PyObject *args) {
+    uint8_t ant;
+    if (!PyArg_ParseTuple(args, "B", &ant))
+        return NULL;
+
+    if (ant > 3) {
+        PyErr_SetString(PyExc_ValueError,
+                        "antenna must be 0=MIMO_TX, 1=MIMO_RX, 2=SUBGHZ, 3=TERMINATED");
+        return NULL;
+    }
+
+    if (ioctl(self->fd, APEX_IOC_ANT_SELECT, &ant) < 0) {
+        PyErr_Format(PyExc_OSError, "Antenna select failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.get_telemetry()
+ * ======================================================================== */
+
+static PyObject *ApexBridge_get_telemetry(ApexBridgeObject *self,
+                                            PyObject *Py_UNUSED(ignored)) {
+    struct apex_telemetry telem;
+
+    if (ioctl(self->fd, APEX_IOC_GET_TELEMETRY, &telem) < 0) {
+        PyErr_Format(PyExc_OSError, "Get telemetry failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    return Py_BuildValue("{s:i,s:i,s:I,s:i,s:I,s:I,s:I}",
+        "rssi_dbm_x10",    (int)(int16_t)telem.rssi_dbm_x10,
+        "temp_c_x10",      (int)(int16_t)telem.temp_c_x10,
+        "vbat_mv",         (unsigned int)telem.vbat_mv,
+        "cc1101_rssi_x10", (int)(int16_t)telem.cc1101_rssi_x10,
+        "nfc_field_mv",    (unsigned int)telem.nfc_field_mv,
+        "flags",           (unsigned int)telem.flags,
+        "uptime_ms",       (unsigned int)telem.uptime_ms
+    );
+}
+
+/* ========================================================================
+ * ApexBridge.cc1101_write(reg_addr, data_bytes)
+ * ======================================================================== */
+
+static PyObject *ApexBridge_cc1101_write(ApexBridgeObject *self, PyObject *args) {
     uint8_t reg_addr;
     Py_buffer data_buf;
-    apex_cc1101_config_t cfg;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
 
     if (!PyArg_ParseTuple(args, "By*", &reg_addr, &data_buf))
         return NULL;
 
-    if (data_buf.len == 0 || data_buf.len > 64) {
+    if (data_buf.len > 64) {
         PyBuffer_Release(&data_buf);
-        PyErr_SetString(PyExc_ValueError, "Data length must be 1-64");
+        PyErr_SetString(PyExc_ValueError, "Data length must be <= 64 bytes");
         return NULL;
     }
 
-    cfg.reg_addr = reg_addr;
-    cfg.reg_len = (uint8_t)data_buf.len;
+    struct apex_cc1101_cfg cfg = {
+        .reg_addr = reg_addr,
+        .reg_len = (uint8_t)data_buf.len,
+    };
     memcpy(cfg.data, data_buf.buf, data_buf.len);
     PyBuffer_Release(&data_buf);
 
-    ret = apex_cc1101_write_regs(self->handle, &cfg);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
+    if (ioctl(self->fd, APEX_IOC_CC1101_CFG, &cfg) < 0) {
+        PyErr_Format(PyExc_OSError, "CC1101 config failed: %s", strerror(errno));
         return NULL;
     }
 
     Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_cc1101_set_channel(PyApexDeviceObject *self, PyObject *args)
-{
-    uint8_t channel;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "B", &channel))
-        return NULL;
-
-    ret = apex_cc1101_set_channel(self->handle, channel);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_cc1101_set_power(PyApexDeviceObject *self, PyObject *args)
-{
-    int power_dbm;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "i", &power_dbm))
-        return NULL;
-
-    ret = apex_cc1101_set_power(self->handle, (int8_t)power_dbm);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_nfc_transact(PyApexDeviceObject *self, PyObject *args)
-{
-    uint8_t cmd;
-    uint8_t flags;
-    Py_buffer data_buf;
-    apex_nfc_transact_t txn;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "BBy*", &cmd, &flags, &data_buf))
-        return NULL;
-
-    if (data_buf.len > 256) {
-        PyBuffer_Release(&data_buf);
-        PyErr_SetString(PyExc_ValueError, "Data length must be <= 256");
-        return NULL;
-    }
-
-    memset(&txn, 0, sizeof(txn));
-    txn.cmd = cmd;
-    txn.flags = flags;
-    txn.data_len = (uint16_t)data_buf.len;
-    if (data_buf.len > 0)
-        memcpy(txn.data, data_buf.buf, data_buf.len);
-    PyBuffer_Release(&data_buf);
-
-    ret = apex_nfc_transact(self->handle, &txn);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    /* Return response data as bytes */
-    if (txn.data_len > 0)
-        return PyBytes_FromStringAndSize((const char *)txn.data, txn.data_len);
-    else
-        Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_get_telemetry(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    apex_telemetry_t telem;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    ret = apex_get_telemetry(self->handle, &telem);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    return Py_BuildValue("{s:i,s:i,s:i,s:i,s:i,s:i,s:I}",
-        "rssi_dbm_x10",    telem.rssi_dbm_x10,
-        "temp_c_x10",      telem.temp_c_x10,
-        "vbat_mv",         telem.vbat_mv,
-        "cc1101_rssi_x10", telem.cc1101_rssi_x10,
-        "nfc_field_mv",    telem.nfc_field_mv,
-        "flags",           telem.flags,
-        "uptime_ms",       telem.uptime_ms);
-}
-
-static PyObject *
-pyapex_device_get_status(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    apex_status_t status;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    ret = apex_get_status(self->handle, &status);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    return Py_BuildValue("{s:I,s:N,s:N,s:N}",
-        "driver_flags", status.driver_flags,
-        "mcu_ready",    PyBool_FromLong(status.mcu_ready),
-        "mcu_in_reset", PyBool_FromLong(status.mcu_in_reset),
-        "spi_error",    PyBool_FromLong(status.spi_error));
-}
-
-static PyObject *
-pyapex_device_mcu_reset(PyApexDeviceObject *self, PyObject *args)
-{
-    int assert_val;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "p", &assert_val))
-        return NULL;
-
-    ret = apex_mcu_reset(self->handle, assert_val ? true : false);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_soft_reset(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    ret = apex_soft_reset(self->handle);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_battery_percent(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    apex_telemetry_t telem;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (apex_get_telemetry(self->handle, &telem) != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, "Failed to read telemetry");
-        return NULL;
-    }
-
-    return PyLong_FromUnsignedLong(apex_battery_percent(telem.vbat_mv));
-}
-
-static PyObject *
-pyapex_device_cc1101_read(PyApexDeviceObject *self, PyObject *args)
-{
-    uint8_t reg_addr;
-    uint8_t reg_len;
-    apex_cc1101_config_t cfg;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "BB", &reg_addr, &reg_len))
-        return NULL;
-
-    if (reg_len == 0 || reg_len > 64) {
-        PyErr_SetString(PyExc_ValueError, "Register length must be 1-64");
-        return NULL;
-    }
-
-    cfg.reg_addr = reg_addr;
-    cfg.reg_len = reg_len;
-    ret = apex_cc1101_read_regs(self->handle, &cfg);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    return PyBytes_FromStringAndSize((const char *)cfg.data, cfg.reg_len);
-}
-
-static PyObject *
-pyapex_device_cc1101_set_band(PyApexDeviceObject *self, PyObject *args)
-{
-    int band;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "i", &band))
-        return NULL;
-
-    ret = apex_cc1101_set_band(self->handle, band);
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    Py_RETURN_NONE;
-}
-
-static PyObject *
-pyapex_device_sdr_read_iq(PyApexDeviceObject *self, PyObject *args)
-{
-    Py_ssize_t buf_len;
-    size_t samples_read = 0;
-    uint8_t *buf;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "n", &buf_len))
-        return NULL;
-
-    if (buf_len <= 0 || buf_len > 65536) {
-        PyErr_SetString(PyExc_ValueError, "Buffer size must be 1-65536");
-        return NULL;
-    }
-
-    buf = (uint8_t *)malloc(buf_len);
-    if (!buf) {
-        PyErr_NoMemory();
-        return NULL;
-    }
-
-    ret = apex_sdr_read_iq(self->handle, buf, (size_t)buf_len, &samples_read);
-    if (ret != APEX_OK) {
-        free(buf);
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    PyObject *result = PyBytes_FromStringAndSize((const char *)buf, samples_read);
-    free(buf);
-    return result;
-}
-
-static PyObject *
-pyapex_device_nfc_poll(PyApexDeviceObject *self, PyObject *args)
-{
-    uint32_t timeout_ms = 0;
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    if (!PyArg_ParseTuple(args, "|I", &timeout_ms))
-        return NULL;
-
-    ret = apex_nfc_poll(self->handle, timeout_ms);
-    if (ret == APEX_OK) {
-        Py_RETURN_TRUE;
-    } else if (ret == APEX_ERR_TIMEOUT) {
-        Py_RETURN_FALSE;
-    } else {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-}
-
-static PyObject *
-pyapex_device_get_firmware_version(PyApexDeviceObject *self, PyObject *Py_UNUSED(ignored))
-{
-    char version[64];
-    int ret;
-
-    if (!self->handle) {
-        PyErr_SetString(PyExc_RuntimeError, "Device not open");
-        return NULL;
-    }
-
-    ret = apex_get_firmware_version(self->handle, version, sizeof(version));
-    if (ret != APEX_OK) {
-        PyErr_SetString(PyExc_IOError, apex_strerror(ret));
-        return NULL;
-    }
-
-    return PyUnicode_FromString(version);
 }
 
 /* ========================================================================
- * ApexDevice Type Definition
+ * ApexBridge.nfc_transact(cmd, flags, data)
  * ======================================================================== */
 
-static PyMethodDef pyapex_device_methods[] = {
-    {"close",              (PyCFunction)pyapex_device_close,              METH_NOARGS,  "Close the device connection"},
-    {"sdr_tune",           (PyCFunction)pyapex_device_sdr_tune,          METH_VARARGS, "Tune SDR: sdr_tune(freq_hz, bw_khz, gain_db)"},
-    {"sdr_stream_start",   (PyCFunction)pyapex_device_sdr_stream_start,  METH_NOARGS,  "Start SDR IQ streaming"},
-    {"sdr_stream_stop",    (PyCFunction)pyapex_device_sdr_stream_stop,   METH_NOARGS,  "Stop SDR IQ streaming"},
-    {"sdr_read_iq",       (PyCFunction)pyapex_device_sdr_read_iq,      METH_VARARGS, "Read IQ samples: sdr_read_iq(buf_len)"},
-    {"ant_select",         (PyCFunction)pyapex_device_ant_select,        METH_VARARGS, "Select antenna: ant_select(ant_id)"},
-    {"cc1101_write",       (PyCFunction)pyapex_device_cc1101_write,      METH_VARARGS, "Write CC1101 regs: cc1101_write(addr, data)"},
-    {"cc1101_read",       (PyCFunction)pyapex_device_cc1101_read,       METH_VARARGS, "Read CC1101 regs: cc1101_read(addr, len)"},
-    {"cc1101_set_channel", (PyCFunction)pyapex_device_cc1101_set_channel, METH_VARARGS, "Set CC1101 channel: cc1101_set_channel(ch)"},
-    {"cc1101_set_power",   (PyCFunction)pyapex_device_cc1101_set_power,  METH_VARARGS, "Set CC1101 TX power: cc1101_set_power(dbm)"},
-    {"cc1101_set_band",    (PyCFunction)pyapex_device_cc1101_set_band,   METH_VARARGS, "Set CC1101 band (0=433,1=868,2=915): cc1101_set_band(band)"},
-    {"nfc_transact",       (PyCFunction)pyapex_device_nfc_transact,      METH_VARARGS, "NFC transaction: nfc_transact(cmd, flags, data)"},
-    {"nfc_poll",           (PyCFunction)pyapex_device_nfc_poll,          METH_VARARGS, "Poll for NFC tag: nfc_poll([timeout_ms])"},
-    {"get_telemetry",      (PyCFunction)pyapex_device_get_telemetry,     METH_NOARGS,  "Read telemetry dict"},
-    {"get_status",         (PyCFunction)pyapex_device_get_status,        METH_NOARGS,  "Read device status dict"},
-    {"get_firmware_version", (PyCFunction)pyapex_device_get_firmware_version, METH_NOARGS, "Read firmware version string"},
-    {"mcu_reset",          (PyCFunction)pyapex_device_mcu_reset,       METH_VARARGS, "MCU reset: mcu_reset(assert)"},
-    {"soft_reset",         (PyCFunction)pyapex_device_soft_reset,      METH_NOARGS,  "Soft reset MCU via SPI command (requires magic)"},
-    {"battery_percent",    (PyCFunction)pyapex_device_battery_percent,  METH_NOARGS,  "Get battery charge estimate (0-100)"},
-    {NULL, NULL, 0, NULL}
+static PyObject *ApexBridge_nfc_transact(ApexBridgeObject *self, PyObject *args) {
+    uint8_t cmd, flags;
+    Py_buffer tx_buf;
+    uint16_t rx_len = 256;
+
+    if (!PyArg_ParseTuple(args, "BBy*", &cmd, &flags, &tx_buf))
+        return NULL;
+
+    if (tx_buf.len > 256) {
+        PyBuffer_Release(&tx_buf);
+        PyErr_SetString(PyExc_ValueError, "Data length must be <= 256 bytes");
+        return NULL;
+    }
+
+    struct apex_nfc_transact txn = {
+        .cmd = cmd,
+        .flags = flags,
+        .data_len = (uint16_t)tx_buf.len,
+    };
+    memcpy(txn.data, tx_buf.buf, tx_buf.len);
+    PyBuffer_Release(&tx_buf);
+
+    if (ioctl(self->fd, APEX_IOC_NFC_TRANSACT, &txn) < 0) {
+        PyErr_Format(PyExc_OSError, "NFC transaction failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    /* Return response data */
+    uint16_t response_len = txn.data_len;
+    if (response_len > 256)
+        response_len = 256;
+
+    return Py_BuildValue("y#", txn.data, (Py_ssize_t)response_len);
+}
+
+/* ========================================================================
+ * ApexBridge.mcu_reset(assert)
+ * ======================================================================== */
+
+static PyObject *ApexBridge_mcu_reset(ApexBridgeObject *self, PyObject *args) {
+    int assert_reset;
+    if (!PyArg_ParseTuple(args, "p", &assert_reset))
+        return NULL;
+
+    uint8_t val = assert_reset ? 1 : 0;
+    if (ioctl(self->fd, APEX_IOC_MCU_RESET, &val) < 0) {
+        PyErr_Format(PyExc_OSError, "MCU reset failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.soft_reset()
+ * ======================================================================== */
+
+static PyObject *ApexBridge_soft_reset(ApexBridgeObject *self,
+                                         PyObject *Py_UNUSED(ignored)) {
+    uint32_t magic = APEX_RESET_MAGIC;
+    if (ioctl(self->fd, APEX_IOC_SOFT_RESET, &magic) < 0) {
+        PyErr_Format(PyExc_OSError, "Soft reset failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.get_status()
+ * ======================================================================== */
+
+static PyObject *ApexBridge_get_status(ApexBridgeObject *self,
+                                          PyObject *Py_UNUSED(ignored)) {
+    uint32_t status = 0;
+
+    if (ioctl(self->fd, APEX_IOC_GET_STATUS, &status) < 0) {
+        PyErr_Format(PyExc_OSError, "Get status failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    return Py_BuildValue("{s:I,s:b,s:b,s:b}",
+        "raw_flags",    status,
+        "mcu_ready",    (status & 0x01) ? 1 : 0,
+        "mcu_reset",    (status & 0x02) ? 1 : 0,
+        "spi_error",    (status & 0x04) ? 1 : 0
+    );
+}
+
+/* ========================================================================
+ * ApexBridge.sg_start(buf_count, buf_size, timeout_ms, continuous)
+ * ======================================================================== */
+
+static PyObject *ApexBridge_sg_start(ApexBridgeObject *self, PyObject *args) {
+    uint32_t buf_count, buf_size, timeout_ms;
+    int continuous;
+
+    if (!PyArg_ParseTuple(args, "IIIp", &buf_count, &buf_size, &timeout_ms, &continuous))
+        return NULL;
+
+    if (buf_count < 2 || buf_count > 64) {
+        PyErr_SetString(PyExc_ValueError, "buf_count must be 2-64");
+        return NULL;
+    }
+    if (buf_size < 4096 || buf_size > 262144 || (buf_size % 4) != 0) {
+        PyErr_SetString(PyExc_ValueError, "buf_size must be 4096-262144 and 4-byte aligned");
+        return NULL;
+    }
+
+    struct apex_sg_config config = {
+        .buf_count = buf_count,
+        .buf_size = buf_size,
+        .timeout_ms = timeout_ms,
+        .spi_speed_hz = 0,  /* Use default */
+        .continuous = continuous ? 1 : 0,
+        .reserved = {0},
+    };
+
+    if (ioctl(self->fd, APEX_IOC_SG_START, &config) < 0) {
+        PyErr_Format(PyExc_OSError, "SG start failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.sg_stop()
+ * ======================================================================== */
+
+static PyObject *ApexBridge_sg_stop(ApexBridgeObject *self,
+                                      PyObject *Py_UNUSED(ignored)) {
+    if (ioctl(self->fd, APEX_IOC_SG_STOP) < 0) {
+        PyErr_Format(PyExc_OSError, "SG stop failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.sg_get_status()
+ * ======================================================================== */
+
+static PyObject *ApexBridge_sg_get_status(ApexBridgeObject *self,
+                                             PyObject *Py_UNUSED(ignored)) {
+    struct apex_sg_status status;
+
+    if (ioctl(self->fd, APEX_IOC_SG_GET_STATUS, &status) < 0) {
+        PyErr_Format(PyExc_OSError, "SG get status failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    return Py_BuildValue("{s:I,s:I,s:I,s:K,s:I,s:I,s:I,s:I}",
+        "state",             status.state,
+        "buf_count",         status.buf_count,
+        "buf_size",          status.buf_size,
+        "total_transferred", (unsigned long long)status.total_transferred,
+        "overruns",          status.overruns,
+        "errors",            status.errors,
+        "frames_rx",         status.frames_rx,
+        "frames_crc_err",    status.frames_crc_err
+    );
+}
+
+/* ========================================================================
+ * ApexBridge.fileno() — for poll/select compatibility
+ * ======================================================================== */
+
+static PyObject *ApexBridge_fileno(ApexBridgeObject *self,
+                                     PyObject *Py_UNUSED(ignored)) {
+    return PyLong_FromLong(self->fd);
+}
+
+/* ========================================================================
+ * ApexBridge.read_iq(size) — Read raw IQ data
+ * ======================================================================== */
+
+static PyObject *ApexBridge_read_iq(ApexBridgeObject *self, PyObject *args) {
+    Py_ssize_t size = 4096;
+
+    if (!PyArg_ParseTuple(args, "|n", &size))
+        return NULL;
+
+    if (size <= 0 || size > 1048576) {
+        PyErr_SetString(PyExc_ValueError, "size must be 1-1048576 bytes");
+        return NULL;
+    }
+
+    PyObject *buf = PyBytes_FromStringAndSize(NULL, size);
+    if (!buf)
+        return NULL;
+
+    char *data = PyBytes_AS_STRING(buf);
+    Py_ssize_t n_read = read(self->fd, data, size);
+
+    if (n_read < 0) {
+        Py_DECREF(buf);
+        PyErr_Format(PyExc_OSError, "Read failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    /* Resize the bytes object to the actual amount read */
+    if (n_read < size) {
+        _PyBytes_Resize(&buf, n_read);
+    }
+
+    return buf;
+}
+
+/* ========================================================================
+ * Method Table
+ * ======================================================================== */
+
+static PyMethodDef ApexBridge_methods[] = {
+    {"sdr_tune",        (PyCFunction)ApexBridge_sdr_tune,        METH_VARARGS,
+     "Tune SDR to a frequency.\n\n"
+     "Args:\n"
+     "    freq_hz (float): Center frequency in Hz (100 kHz - 3.8 GHz)\n"
+     "    bw_khz (int): Bandwidth in kHz\n"
+     "    gain_db (float): LNA gain in dB\n"},
+
+    {"sdr_stream_start",(PyCFunction)ApexBridge_sdr_stream_start, METH_NOARGS,
+     "Start SDR IQ data streaming.\n"},
+
+    {"sdr_stream_stop", (PyCFunction)ApexBridge_sdr_stream_stop,  METH_NOARGS,
+     "Stop SDR IQ data streaming.\n"},
+
+    {"ant_select",      (PyCFunction)ApexBridge_ant_select,      METH_VARARGS,
+     "Select antenna path.\n\n"
+     "Args:\n"
+     "    antenna (int): 0=MIMO_TX, 1=MIMO_RX, 2=SUBGHZ, 3=TERMINATED\n"},
+
+    {"get_telemetry",   (PyCFunction)ApexBridge_get_telemetry,    METH_NOARGS,
+     "Read telemetry data from MCU.\n\n"
+     "Returns: dict with keys: rssi_dbm_x10, temp_c_x10, vbat_mv,\n"
+     "         cc1101_rssi_x10, nfc_field_mv, flags, uptime_ms\n"},
+
+    {"cc1101_write",    (PyCFunction)ApexBridge_cc1101_write,     METH_VARARGS,
+     "Write consecutive CC1101 registers.\n\n"
+     "Args:\n"
+     "    reg_addr (int): Starting register address\n"
+     "    data (bytes): Register values to write\n"},
+
+    {"nfc_transact",    (PyCFunction)ApexBridge_nfc_transact,     METH_VARARGS,
+     "Perform an NFC transaction.\n\n"
+     "Args:\n"
+     "    cmd (int): NFC command opcode\n"
+     "    flags (int): Transaction flags\n"
+     "    data (bytes): TX data\n\n"
+     "Returns: bytes - RX data from NFC tag\n"},
+
+    {"mcu_reset",       (PyCFunction)ApexBridge_mcu_reset,        METH_VARARGS,
+     "Assert or deassert MCU reset line.\n\n"
+     "Args:\n"
+     "    assert_reset (bool): True to hold MCU in reset, False to release\n"},
+
+    {"soft_reset",      (PyCFunction)ApexBridge_soft_reset,       METH_NOARGS,
+     "Trigger a soft reset of the MCU coprocessor.\n"},
+
+    {"get_status",      (PyCFunction)ApexBridge_get_status,       METH_NOARGS,
+     "Get driver and device status.\n\n"
+     "Returns: dict with keys: raw_flags, mcu_ready, mcu_reset, spi_error\n"},
+
+    {"sg_start",        (PyCFunction)ApexBridge_sg_start,          METH_VARARGS,
+     "Start DMA scatter-gather streaming.\n\n"
+     "Args:\n"
+     "    buf_count (int): Number of buffers (2-64)\n"
+     "    buf_size (int): Size of each buffer (4096-262144, 4-byte aligned)\n"
+     "    timeout_ms (int): DMA timeout in ms\n"
+     "    continuous (bool): True for ring-buffer mode\n"},
+
+    {"sg_stop",         (PyCFunction)ApexBridge_sg_stop,           METH_NOARGS,
+     "Stop DMA scatter-gather streaming.\n"},
+
+    {"sg_get_status",   (PyCFunction)ApexBridge_sg_get_status,    METH_NOARGS,
+     "Get SG engine status.\n\n"
+     "Returns: dict with keys: state, buf_count, buf_size, total_transferred,\n"
+     "         overruns, errors, frames_rx, frames_crc_err\n"},
+
+    {"fileno",          (PyCFunction)ApexBridge_fileno,           METH_NOARGS,
+     "Return the file descriptor for poll/select.\n"},
+
+    {"read_iq",         (PyCFunction)ApexBridge_read_iq,          METH_VARARGS,
+     "Read raw IQ data from the SDR stream.\n\n"
+     "Args:\n"
+     "    size (int): Maximum bytes to read (default 4096)\n\n"
+     "Returns: bytes - raw IQ data (I16Q16 format)\n"},
+
+    {NULL}  /* Sentinel */
 };
 
-static PyTypeObject PyApexDeviceType = {
+/* ========================================================================
+ * Type Definition
+ * ======================================================================== */
+
+static PyTypeObject ApexBridgeType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name      = "pyapex.ApexDevice",
-    .tp_doc       = "GhostBlade hardware device handle",
-    .tp_basicsize = sizeof(PyApexDeviceObject),
-    .tp_itemsize  = 0,
-    .tp_flags     = Py_TPFLAGS_DEFAULT,
-    .tp_methods   = pyapex_device_methods,
+    .tp_name = "pyapex.ApexBridge",
+    .tp_doc = "GhostBlade SPI bridge device interface.\n\n"
+              "Provides SDR control, sub-GHz radio, NFC, and telemetry access.\n\n"
+              "Usage:\n"
+              "    dev = ApexBridge('/dev/apex_bridge0')\n"
+              "    dev.sdr_tune(868e6, 20000, 30.0)\n"
+              "    telem = dev.get_telemetry()\n"
+              "    dev.close()\n",
+    .tp_basicsize = sizeof(ApexBridgeObject),
+    .tp_itemsize = 0,
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .tp_new = PyType_GenericNew,
+    .tp_init = (initproc)ApexBridge_init,
+    .tp_dealloc = (destructor)ApexBridge_dealloc,
+    .tp_methods = ApexBridge_methods,
 };
-
-/* ========================================================================
- * Module-level Functions
- * ======================================================================== */
-
-static PyObject *
-pyapex_module_open(PyObject *self, PyObject *args)
-{
-    const char *path = NULL;
-    PyApexDeviceObject *dev_obj;
-
-    if (!PyArg_ParseTuple(args, "|s", &path))
-        return NULL;
-
-    dev_obj = PyObject_New(PyApexDeviceObject, &PyApexDeviceType);
-    if (!dev_obj)
-        return NULL;
-
-    dev_obj->handle = apex_open(path);
-    if (!dev_obj->handle) {
-        Py_DECREF(dev_obj);
-        PyErr_SetString(PyExc_IOError, "Failed to open Apex device");
-        return NULL;
-    }
-
-    return (PyObject *)dev_obj;
-}
-
-static PyObject *
-pyapex_module_strerror(PyObject *self, PyObject *args)
-{
-    int error;
-    if (!PyArg_ParseTuple(args, "i", &error))
-        return NULL;
-    return PyUnicode_FromString(apex_strerror(error));
-}
-
-static PyObject *
-pyapex_module_battery_percent(PyObject *self, PyObject *args)
-{
-    uint16_t vbat_mv;
-    if (!PyArg_ParseTuple(args, "H", &vbat_mv))
-        return NULL;
-    return PyLong_FromUnsignedLong(apex_battery_percent(vbat_mv));
-}
 
 /* ========================================================================
  * Module Definition
  * ======================================================================== */
 
-/* Antenna constants */
-#define PYAPEX_ANT_MIMO_TX     0
-#define PYAPEX_ANT_MIMO_RX     1
-#define PYAPEX_ANT_SUBGHZ     2
-#define PYAPEX_ANT_TERMINATED  3
-
-static PyMethodDef pyapex_module_methods[] = {
-    {"open",             pyapex_module_open,             METH_VARARGS, "Open Apex device: open([path])"},
-    {"strerror",         pyapex_module_strerror,         METH_VARARGS, "Error code to string: strerror(code)"},
-    {"battery_percent",  pyapex_module_battery_percent,  METH_VARARGS, "Estimate battery %: battery_percent(vbat_mv)"},
-    {NULL, NULL, 0, NULL}
-};
-
-static struct PyModuleDef pyapex_module = {
+static PyModuleDef pyapex_module = {
     PyModuleDef_HEAD_INIT,
-    .m_name    = "pyapex",
-    .m_doc     = "Python bindings for GhostBlade hardware (libapex)",
-    .m_size    = -1,
-    .m_methods = pyapex_module_methods,
+    .m_name = "pyapex",
+    .m_doc = "Python bindings for GhostBlade hardware (libapex).\n\n"
+             "Provides the ApexBridge class for controlling the GhostBlade\n"
+             "dual-processor pentesting device via the SPI bridge driver.\n",
+    .m_size = -1,
 };
 
-PyMODINIT_FUNC PyInit_pyapex(void)
-{
+/* ========================================================================
+ * Module Init
+ * ======================================================================== */
+
+PyMODINIT_FUNC PyInit_pyapex(void) {
     PyObject *m;
 
-    if (PyType_Ready(&PyApexDeviceType) < 0)
+    if (PyType_Ready(&ApexBridgeType) < 0)
         return NULL;
 
     m = PyModule_Create(&pyapex_module);
-    if (!m)
+    if (m == NULL)
         return NULL;
 
-    /* Add constants */
-    PyModule_AddIntConstant(m, "ANT_MIMO_TX",    PYAPEX_ANT_MIMO_TX);
-    PyModule_AddIntConstant(m, "ANT_MIMO_RX",    PYAPEX_ANT_MIMO_RX);
-    PyModule_AddIntConstant(m, "ANT_SUBGHZ",     PYAPEX_ANT_SUBGHZ);
-    PyModule_AddIntConstant(m, "ANT_TERMINATED", PYAPEX_ANT_TERMINATED);
-
-    PyModule_AddIntConstant(m, "OK",             APEX_OK);
-    PyModule_AddIntConstant(m, "ERR_INVALID_ARG", APEX_ERR_INVALID_ARG);
-    PyModule_AddIntConstant(m, "ERR_NO_DEVICE",  APEX_ERR_NO_DEVICE);
-    PyModule_AddIntConstant(m, "ERR_OPEN_FAILED", APEX_ERR_OPEN_FAILED);
-    PyModule_AddIntConstant(m, "ERR_IOCTL_FAILED", APEX_ERR_IOCTL_FAILED);
-    PyModule_AddIntConstant(m, "ERR_TIMEOUT",    APEX_ERR_TIMEOUT);
-    PyModule_AddIntConstant(m, "ERR_COMM",       APEX_ERR_COMM);
-    PyModule_AddIntConstant(m, "ERR_NOT_READY",  APEX_ERR_NOT_READY);
-    PyModule_AddIntConstant(m, "ERR_NOMEM",      APEX_ERR_NOMEM);
-
-    /* CC1101 band constants */
-    PyModule_AddIntConstant(m, "CC1101_BAND_433", 0);
-    PyModule_AddIntConstant(m, "CC1101_BAND_868", 1);
-    PyModule_AddIntConstant(m, "CC1101_BAND_915", 2);
-
-    PyModule_AddStringConstant(m, "VERSION", LIBAPEX_VERSION_STRING);
-
-    /* Add ApexDevice type */
-    Py_INCREF(&PyApexDeviceType);
-    if (PyModule_AddObject(m, "ApexDevice", (PyObject *)&PyApexDeviceType) < 0) {
-        Py_DECREF(&PyApexDeviceType);
+    Py_INCREF(&ApexBridgeType);
+    if (PyModule_AddObject(m, "ApexBridge", (PyObject *)&ApexBridgeType) < 0) {
+        Py_DECREF(&ApexBridgeType);
         Py_DECREF(m);
         return NULL;
     }
+
+    /* Add module-level constants */
+    PyModule_AddIntMacro(m, APEX_ANT_MIMO_TX);
+    PyModule_AddIntMacro(m, APEX_ANT_MIMO_RX);
+    PyModule_AddIntMacro(m, APEX_ANT_SUBGHZ);
+    PyModule_AddIntMacro(m, APEX_ANT_TERMINATED);
+    PyModule_AddIntMacro(m, APEX_RESET_MAGIC);
+
+    /* Telemetry flag bits */
+    PyModule_AddIntConstant(m, "TELEM_SDR_RX_ACTIVE",  (1 << 0));
+    PyModule_AddIntConstant(m, "TELEM_SDR_TX_ACTIVE",   (1 << 1));
+    PyModule_AddIntConstant(m, "TELEM_CC1101_RX",       (1 << 2));
+    PyModule_AddIntConstant(m, "TELEM_CC1101_TX",       (1 << 3));
+    PyModule_AddIntConstant(m, "TELEM_NFC_ACTIVE",      (1 << 4));
+    PyModule_AddIntConstant(m, "TELEM_NFC_TAG_PRESENT", (1 << 5));
+    PyModule_AddIntConstant(m, "TELEM_OVERTEMP",         (1 << 6));
+    PyModule_AddIntConstant(m, "TELEM_LOW_BATTERY",      (1 << 7));
+
+    /* NFC command opcodes */
+    PyModule_AddIntConstant(m, "NFC_CMD_REQA",    0x26);
+    PyModule_AddIntConstant(m, "NFC_CMD_WUPA",    0x52);
+    PyModule_AddIntConstant(m, "NFC_CMD_ANTICOL", 0x93);
+    PyModule_AddIntConstant(m, "NFC_CMD_SELECT",  0x93);
+    PyModule_AddIntConstant(m, "NFC_CMD_HALT",    0x50);
+    PyModule_AddIntConstant(m, "NFC_CMD_RATS",    0xE0);
+    PyModule_AddIntConstant(m, "NFC_CMD_REQB",    0x05);
+    PyModule_AddIntConstant(m, "NFC_CMD_ATTRIB",  0x1D);
+
+    /* SG engine states */
+    PyModule_AddIntConstant(m, "SG_STATE_IDLE",    0);
+    PyModule_AddIntConstant(m, "SG_STATE_RUNNING", 1);
+    PyModule_AddIntConstant(m, "SG_STATE_ERROR",   2);
 
     return m;
 }

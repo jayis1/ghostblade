@@ -32,19 +32,26 @@
  * CRC-64/ECMA-182 Implementation
  * ======================================================================== */
 
+/* CRC-64/ECMA-182: Non-reflected (MSB-first) algorithm
+ * Polynomial: 0x42F0E1EBA9EA3693
+ * Init/XOR: 0x0000000000000000
+ * Check value for "123456789": 0x6C40DF5F0B497347
+ * Note: ECMA-182 uses no initial/final XOR (unlike CRC-64/WEI). */
+
 #define CRC64_POLY   0x42F0E1EBA9EA3693ULL
 
 static uint64_t crc64_table[256];
 static bool crc64_table_initialized = false;
 
 static void crc64_init_table(void) {
+    /* MSB-first (non-reflected) table generation */
     for (uint32_t i = 0; i < 256; i++) {
-        uint64_t crc = (uint64_t)i;
+        uint64_t crc = (uint64_t)i << 56;
         for (int j = 0; j < 8; j++) {
-            if (crc & 1)
-                crc = (crc >> 1) ^ CRC64_POLY;
+            if (crc & (1ULL << 63))
+                crc = (crc << 1) ^ CRC64_POLY;
             else
-                crc >>= 1;
+                crc <<= 1;
         }
         crc64_table[i] = crc;
     }
@@ -55,16 +62,24 @@ static uint64_t crc64_compute(const uint8_t *data, size_t len) {
     if (!crc64_table_initialized)
         crc64_init_table();
 
-    uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
+    uint64_t crc = 0x0000000000000000ULL;
     for (size_t i = 0; i < len; i++) {
-        crc = crc64_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+        uint8_t idx = (uint8_t)((crc >> 56) ^ data[i]);
+        crc = (crc << 8) ^ crc64_table[idx];
     }
-    return crc ^ 0xFFFFFFFFFFFFFFFFULL;
+    return crc;
 }
 
 /* ========================================================================
  * CRC-32 Implementation (matches SPI protocol CRC-32)
  * ======================================================================== */
+
+/* CRC-32: Standard (non-reflected) algorithm
+ * Polynomial: 0x04C11DB7
+ * Init: 0xFFFFFFFF, Final XOR: 0xFFFFFFFF
+ * This matches the CRC-32 as used in the SPI protocol header and
+ * the Linux kernel's crc32_le when configured with this polynomial.
+ * Check value for "123456789": 0xCBF43926 */
 
 #define CRC32_POLY   0x04C11DB7UL
 
@@ -72,6 +87,7 @@ static uint32_t crc32_table[256];
 static bool crc32_table_initialized = false;
 
 static void crc32_init_table(void) {
+    /* MSB-first (non-reflected) table generation */
     for (uint32_t i = 0; i < 256; i++) {
         uint32_t crc = i << 24;
         for (int j = 0; j < 8; j++) {
@@ -91,7 +107,8 @@ static uint32_t crc32_compute(const uint8_t *data, size_t len) {
 
     uint32_t crc = 0xFFFFFFFFUL;
     for (size_t i = 0; i < len; i++) {
-        crc = crc32_table[((crc >> 24) ^ data[i]) & 0xFF] ^ (crc << 8);
+        uint8_t idx = (uint8_t)((crc >> 24) ^ data[i]);
+        crc = (crc << 8) ^ crc32_table[idx];
     }
     return crc ^ 0xFFFFFFFFUL;
 }
@@ -266,14 +283,13 @@ static int tests_failed = 0;
 static void test_crc64_known_vectors(void) {
     printf("Test: CRC-64 known vectors\n");
 
-    /* Test vector 1: Empty string */
+    /* Test vector 1: Empty string (CRC-64/ECMA-182 with init=0 returns 0) */
     uint64_t crc = crc64_compute((const uint8_t *)"", 0);
-    TEST_ASSERT_EQ(crc, 0xFFFFFFFFFFFFFFFFULL, "CRC-64 empty string");
+    TEST_ASSERT_EQ(crc, 0x0000000000000000ULL, "CRC-64 empty string = 0");
 
-    /* Test vector 2: "123456789" (standard check value for ECMA-182) */
+    /* Test vector 2: "123456789" (ECMA-182 check value) */
     uint8_t test_data[] = "123456789";
     crc = crc64_compute(test_data, 9);
-    /* ECMA-182 check value: 0x6C40DF5F0B497347 */
     TEST_ASSERT(crc == 0x6C40DF5F0B497347ULL, "CRC-64 '123456789' check value");
 
     /* Test vector 3: All zeros (8 bytes) */
@@ -290,14 +306,14 @@ static void test_crc64_known_vectors(void) {
 static void test_crc32_known_vectors(void) {
     printf("Test: CRC-32 known vectors\n");
 
-    /* Test vector 1: Empty data */
+    /* Test vector 1: Empty data — CRC-32 of empty input with init=0xFFFFFFFF
+     * and final XOR of 0xFFFFFFFF is 0x00000000 */
     uint32_t crc = crc32_compute((const uint8_t *)"", 0);
-    TEST_ASSERT_EQ(crc, 0x00000000UL, "CRC-32 empty data");
+    TEST_ASSERT_EQ(crc, 0x00000000UL, "CRC-32 empty data = 0");
 
-    /* Test vector 2: "123456789" */
+    /* Test vector 2: "123456789" — standard check value */
     uint8_t test_data[] = "123456789";
     crc = crc32_compute(test_data, 9);
-    /* Standard CRC-32 check value: 0xCBF43926 */
     TEST_ASSERT(crc == 0xCBF43926UL, "CRC-32 '123456789' check value");
 
     /* Test vector 3: All zeros (4 bytes) */

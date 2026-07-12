@@ -32,6 +32,10 @@
 /** Magic value stored in scratch register on brownout detection */
 #define WATCHDOG_BROWNOUT_MAGIC 0xB047B00FUL
 
+/** Watchdog reason flags (from WD_REASON register) */
+#define WD_REASON_FORCE         (1 << 0)    /* Forced reset */
+#define WD_REASON_TIMER        (1 << 1)    /* Timer expired (watchdog bite) */
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 /**
@@ -83,5 +87,53 @@ void watchdog_mark_brownout(void);
  * Returns: true if brownout was detected, false otherwise
  */
 bool watchdog_check_brownout(void);
+
+/**
+ * watchdog_reboot — Force a system reboot via the watchdog
+ *
+ * @intentional: If true, write magic to scratch0 for post-reboot detection
+ *
+ * Triggers an immediate watchdog reset by loading a minimal timeout
+ * and waiting for the watchdog to fire. This function never returns.
+ */
+void watchdog_reboot(bool intentional);
+
+/**
+ * watchdog_disable — Disable the watchdog timer
+ *
+ * WARNING: This should only be called during debug or firmware update.
+ * The production firmware should NEVER disable the watchdog.
+ *
+ * Returns: 0 on success, -1 if watchdog cannot be disabled
+ */
+int watchdog_disable(void);
+
+/**
+ * watchdog_get_reason — Check if the last reset was from the watchdog
+ *
+ * Returns: Reason flags (0 = no watchdog reset, WD_REASON_TIMER = timeout,
+ *          WD_REASON_FORCE = forced)
+ */
+uint32_t watchdog_get_reason(void);
+
+/**
+ * watchdog_set_scratch — Write a watchdog scratch register
+ *
+ * @index: Scratch register index (0-7)
+ * @val:   Value to write
+ *
+ * Scratch registers survive watchdog resets and can be used to
+ * pass information across reboots (e.g., firmware update status,
+ * error codes, or boot count).
+ */
+void watchdog_set_scratch(uint8_t index, uint32_t val);
+
+/**
+ * watchdog_get_scratch — Read a watchdog scratch register
+ *
+ * @index: Scratch register index (0-7)
+ * Returns: Scratch register value
+ */
+uint32_t watchdog_get_scratch(uint8_t index);
 
 #endif /* WATCHDOG_H */

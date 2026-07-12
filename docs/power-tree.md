@@ -1,310 +1,127 @@
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
-<!-- Copyright (C) 2026 GhostBlade Project -->
+# GhostBlade Power Tree Diagram
 
-# Power Tree & Sequencing — GhostBlade (Project NullSpectre)
+This document describes the power distribution architecture for the GhostBlade (Project NullSpectre) board.
 
-This document describes the power architecture, voltage rail tree, and
-power-on sequencing requirements for the GhostBlade dual-processor
-pentesting device.
-
-## Power-On Sequencing Diagram
-
-```mermaid
-sequenceDiagram
-    participant BAT as Battery (3.0–4.2V)
-    participant PMIC as RK817 PMIC
-    participant SOC as RK3576
-    participant DDR as LPDDR5
-    participant MCU as RP2350B
-    participant SDR as LMS7002M
-    participant SUB as CC1101
-    participant NFC as ST25R3916
-    participant WiFi as MT7922
-
-    BAT->>PMIC: VBAT > 3.0V or USB-C valid
-    Note over PMIC: Power-on reset (PWRON key)
-    PMIC->>PMIC: VCC_SYS 3.4V (t=0ms)
-    PMIC->>SOC: VDD_LOGIC 1.8V (t=2ms)
-    PMIC->>SOC: VDD_CORE 0.9V (t=5ms)
-    PMIC->>SOC: PLL lock (~3ms)
-    PMIC->>DDR: VDD_DDR 1.1V (t=8ms)
-    PMIC->>DDR: VDDQ_DDR 0.6V (t=10ms)
-    Note over SOC: Boot ROM → SPL → U-Boot
-    PMIC->>SOC: VCC_3V3 (t=15ms)
-    PMIC->>WiFi: VCC_SDIO (t=20ms)
-    PMIC->>SDR: VCC_SDR 1.8V (t=20ms)
-    PMIC->>SDR: VCC_SDR 1.1V (t=25ms)
-    PMIC->>SDR: VCC_SDR 3.3V (t=30ms)
-    PMIC->>MCU: VCC_3V3_RP (t=50ms)
-    SOC->>MCU: MCU_RESET deassert (t=60ms)
-    Note over MCU: RP2350B firmware init (~60ms)
-    MCU->>SUB: VCC_SUBGHZ (t=100ms)
-    MCU->>NFC: VCC_NFC (t=100ms)
-    MCU->>SOC: HOST_RDY assert (t=120ms)
-    Note over SOC: apex_bridge driver probes SPI0
-    SOC->>SOC: PCIe power (t=150ms)
-    Note over SOC,NFC: System operational
-```
-
-## Power Source
-
-| Source | Voltage | Current | Connector | Notes |
-|--------|---------|---------|-----------|-------|
-| Li-Po battery | 3.7 V nominal (3.0–4.2 V) | 2C max | JST-PH 2-pin | 2000 mAh recommended |
-| USB-C PD | 5–20 V (negotiated) | 3 A max | USB-C 24-pin | BC1.2 + PD 3.0 |
-| External DC | 5 V via header | 2 A max | 2.54 mm header | Direct 5 V input |
-
-## Voltage Rails
+## Power Tree Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                        POWER INPUT TREE                          │
-│                                                                  │
-│  VBAT (3.0–4.2V) ──┐                                            │
-│                     ├──► RK817 PMIC ──► VCC_SYS (3.4V)           │
-│  USB-C 5V ──────────┘           │                                │
-│                                 ├──► VDD_LOGIC_1V8 (1.8V @ 1A)  │
-│                                 │    RK3576 core, I/O banks       │
-│                                 │                                │
-│                                 ├──► VDD_CORE_0V9 (0.9V @ 2A)   │
-│                                 │    RK3576 CPU + GPU cores        │
-│                                 │                                │
-│                                 ├──► VDD_DDR_1V1 (1.1V @ 1A)    │
-│                                 │    LPDDR5 VDD2                 │
-│                                 │                                │
-│                                 ├──► VDDQ_DDR_0V6 (0.6V @ 0.5A) │
-│                                 │    LPDDR5 VDDQ                 │
-│                                 │                                │
-│                                 └──► VCC_3V3 (3.3V @ 2A)        │
-│                                      Peripherals, GPIO, sensors  │
-│                                                                  │
-│  VCC_3V3 ──┬──► VCC_SDIO (3.3V switched) ──► MT7922 Wi-Fi 6E   │
-│            ├──► VCC_SPI0 (3.3V switched)  ──► RP2350B            │
-│            ├──► VCC_SDR (3.3V switched)   ──► LMS7002M VDDIO   │
-│            ├──► VCC_NFC (3.3V switched)    ──► ST25R3916        │
-│            └──► VCC_SUBGHZ (3.3V switched) ──► CC1101          │
-│                                                                  │
-│  LMS7002M analog:                                               │
-│    VCC_1V8_SDR ──► LMS7002M core (1.8V @ 500mA)                │
-│    VCC_1V1_SDR ──► LMS7002M PLL  (1.1V @ 300mA)                │
-│    VCC_3V3_RF  ──► LMS7002M PA/LNA (3.3V @ 200mA)               │
-│                                                                  │
-│  RP2350B:                                                       │
-│    VCC_RP2350B ──► 1.1V core (internal LDO from 3.3V)           │
-│    VCC_3V3_RP ──► RP2350B I/O (3.3V from VCC_3V3)              │
-│                                                                  │
-│  USB-C:                                                         │
-│    VBUS_5V ──► MT7922 (USB mode) / BC1.2 charging               │
-│                                                                  │
-│  NVMe (via PCIe):                                               │
-│    VCC_3V3_PCIE ──► M.2 2230 slot (3.3V @ 1A switched)          │
-│    VCC_12V_PCIE ──► M.2 2230 slot (12V optional, not fitted)    │
-└──────────────────────────────────────────────────────────────────┘
+                                    ┌──────────────────┐
+                                    │   DC Input        │
+                                    │   USB-C PD 5-20V  │
+                                    │   or Li-Po 3.7V   │
+                                    └────────┬──────────┘
+                                             │
+                                    ┌────────┴──────────┐
+                                    │   RK817 PMIC      │
+                                    │   (Power Mgmt IC) │
+                                    └──┬─────┬─────┬────┘
+                                       │     │     │
+                          ┌────────────┘     │     └────────────┐
+                          │                  │                  │
+                   ┌──────┴──────┐    ┌──────┴──────┐   ┌──────┴──────┐
+                   │ VCC_3V3     │    │ VCC_1V8     │   │ VCC_5V      │
+                   │ (Main 3.3V) │    │ (Core 1.8V) │   │ (USB/NFC)    │
+                   │ 3.3V @ 3A   │    │ 1.8V @ 2A   │   │ 5V @ 2A      │
+                   └──┬───┬───┬──┘    └──────┬──────┘   └──────┬──────┘
+                      │   │   │              │                  │
+          ┌──────────┘   │   └──────┐       │         ┌────────┘
+          │              │          │       │         │
+   ┌──────┴──────┐  ┌────┴────┐  ┌──┴──────┐│  ┌──────┴──────┐
+   │VCC_3V3_RP   │  │VCC_SDIO │  │VCC_SDR  ││  │VCC_5V_NFC   │
+   │(RP2350B I/O)│  │(MT7922  │  │1V8      ││  │(ST25R3916)  │
+   │GPIO 3.3V    │  │Wi-Fi)   │  │(LMS7002M││  │via level     │
+   │@ 500mA      │  │@ 500mA  │  │ core)   ││  │shifter)      │
+   └──────┬──────┘  └────┬────┘  │@ 500mA  ││  │@ 150mA       │
+          │              │       └────┬─────┘│  └──────┬──────┘
+          │              │            │      │         │
+   ┌──────┴──────┐      │     ┌──────┴──┐   │  ┌──────┴──────┐
+   │ RP2350B     │      │     │VCC_SDR  │   │  │ST25R3916    │
+   │ (MCU Core)  │      │     │1V1      │   │  │(NFC Reader) │
+   │ 3.3V I/O    │      │     │(LMS7002M│   │  │5V antenna   │
+   │ 1.8V core   │      │     │ PLL)    │   │  │driver        │
+   └──────┬──────┘      │     │@ 300mA  │   │  └──────────────┘
+          │             │     └────┬─────┘   │
+   ┌──────┴──────┐      │          │        │
+   │VCC_SDR 3V3  │      │     ┌────┴─────┐  │
+   │(LMS7002M    │      │     │VCC_SDR   │  │
+   │ I/O, PA)    │      │     │1V1       │  │
+   │@ 200mA      │      │     │(LMS7002M │  │
+   └──────┬──────┘      │     │ PLL)     │  │
+          │             │     │@ 300mA   │  │
+   ┌──────┴──────┐      │     └──────────┘  │
+   │LMS7002M     │      │                    │
+   │(SDR)        │      │                    │
+   │3.3V I/O     │      │                    │
+   └─────────────┘      │                    │
+                         │                    │
+   ┌─────────────────────┴────────────────────┘
+   │
+   │    ┌──────────────────┐
+   │    │VCC_SUBGHZ        │
+   │    │(CC1101 Sub-GHz)  │
+   │    │3.3V @ 50mA       │
+   │    └──────┬───────────┘
+   │           │
+   │    ┌──────┴───────────┐
+   │    │CC1101             │
+   │    │(Sub-GHz Radio)   │
+   │    └──────────────────┘
+   │
+   └──────────────────────────────────────────
 ```
+
+## Power Rail Summary
+
+| Rail | Voltage | Max Current | Controlled By | Enable GPIO | Purpose |
+|------|---------|-------------|---------------|-------------|---------|
+| VCC_3V3 | 3.3V | 3A | RK817 PMIC | Always-on | Main system power |
+| VCC_1V8 | 1.8V | 2A | RK817 PMIC | Always-on | RK3576 core, RP2350B core |
+| VCC_5V | 5.0V | 2A | RK817 PMIC | Always-on | USB, NFC antenna driver |
+| VCC_3V3_RP | 3.3V | 500mA | RP2350B GPIO 6 | PWR_GPIO_SDR_1V8* | RP2350B I/O domain |
+| VCC_SDR 1V8 | 1.8V | 500mA | RP2350B GPIO 6 | PWR_GPIO_SDR_1V8 | LMS7002M core |
+| VCC_SDR 1V1 | 1.1V | 300mA | RP2350B GPIO 7 | PWR_GPIO_SDR_1V1 | LMS7002M PLL |
+| VCC_SDR 3V3 | 3.3V | 200mA | RP2350B GPIO 9 | PWR_GPIO_SDR_3V3 | LMS7002M I/O, PA |
+| VCC_5V_NFC | 5.0V | 150mA | RP2350B GPIO 11 | PWR_GPIO_NFC | ST25R3916 antenna driver |
+| VCC_SUBGHZ | 3.3V | 50mA | RP2350B GPIO 22 | PWR_GPIO_SUBGHZ | CC1101 sub-GHz radio |
+| VCC_SDIO | 3.3V | 500mA | RP2350B GPIO 25 | PWR_GPIO_SDIO | MT7922 Wi-Fi 6E |
+
+\* Note: VCC_3V3_RP is powered from VCC_3V3 through a load switch controlled by RP2350B GPIO.
 
 ## Power Sequencing
-
-The RK817 PMIC manages the complete power-on sequence. All timing
-requirements are enforced by the PMIC's programmable sequencer.
 
 ### Power-On Sequence
 
 ```
-Time    Rail                Condition                    Notes
-────    ────                ─────────                    ─────
- 0ms    VCC_SYS (3.4V)      VBAT > 3.0V or USB-C valid  Always-on domain
- 2ms    VDD_LOGIC_1V8       After VCC_SYS > 3.3V        RK3576 I/O
- 5ms    VDD_CORE_0V9       After VDD_LOGIC_1V8 stable   RK3576 CPU
- 8ms    VDD_DDR_1V1        After VDD_CORE_0V9 stable     LPDDR5 VDD2
-10ms    VDDQ_DDR_0V6       After VDD_DDR_1V1 stable      LPDDR5 VDDQ
-15ms    VCC_3V3             After VDDQ_DDR_0V6 stable     Peripherals
-20ms    VCC_SDIO            After VCC_3V3 stable          Wi-Fi module
-20ms    VCC_SDR (1V8)       After VCC_3V3 stable          LMS7002M core
-25ms    VCC_SDR (1V1)       After VCC_SDR 1V8 stable     LMS7002M PLL
-30ms    VCC_SDR (3V3)       After VCC_SDR 1V1 stable     LMS7002M PA/LNA
-50ms    VCC_3V3_RP          After VCC_3V3 stable          RP2350B I/O
-60ms    MCU_RESET deassert  After VCC_3V3_RP stable       RP2350B boot begins
-100ms   VCC_NFC             After RP2350B boot            ST25R3916
-100ms   VCC_SUBGHZ          After RP2350B boot            CC1101
-120ms   HOST_RDY assert     After MCU signals ready       RK3576 ↔ RP2350B
-150ms   PCIe power           After RK3576 boot             NVMe
+Time (ms)  0     5     10    15    20    55    105   125   135
+           │     │     │     │     │     │     │     │     │
+VCC_3V3    ├─────┤████████████████████████████████████████████│
+           ramp  stable
+VCC_1V8          ├─────┤████████████████████████████████████████│
+                 ramp  stable
+VCC_SDR 1V8           ├─────┤████████████████████████████│
+                       ramp  stable
+VCC_SDR 1V1                 ├─────┤████████████████████│
+                             ramp  stable
+VCC_SDR 3V3                       ├─────┤██████████████│
+                                   ramp  stable
+VCC_5V_NFC                              ├──────────┤████│
+                                        ramp (50ms) stable
+VCC_SUBGHZ                              ├──────────┤████│
+                                        ramp (50ms) stable
+VCC_SDIO                                       ├──┤████│
+                                               ramp stable
 ```
 
 ### Power-Off Sequence (Reverse Order)
 
 ```
-Time    Rail                Notes
-────    ────                ─────
- 0ms    HOST_RDY deassert   Signal MCU to stop
- 5ms    MCU_RESET assert    Hold RP2350B in reset
-10ms    VCC_SUBGHZ off      CC1101 power down
-10ms    VCC_NFC off         ST25R3916 power down
-15ms    VCC_3V3_RP off      RP2350B I/O off
-20ms    VCC_SDR (3V3) off   LMS7002M PA/LNA off
-25ms    VCC_SDR (1V1) off   LMS7002M PLL off
-30ms    VCC_SDR (1V8) off   LMS7002M core off
-35ms    VCC_SDIO off        Wi-Fi off
-40ms    VCC_3V3 off         Peripherals off
-45ms    VDDQ_DDR off         LPDDR5 VDDQ off
-50ms    VDD_DDR off          LPDDR5 VDD2 off
-55ms    VDD_CORE off         RK3576 CPU off
-60ms    VDD_LOGIC off         RK3576 I/O off
-65ms    VCC_SYS off          PMIC shutdown complete
+1. VCC_SDIO off           → 5ms delay
+2. VCC_SUBGHZ off         → 5ms delay
+3. VCC_5V_NFC off         → 5ms delay
+4. VCC_SDR 3V3 off        → 5ms delay
+5. VCC_SDR 1V1 off        → 5ms delay
+6. VCC_SDR 1V8 off        → no delay (last rail)
 ```
-
-## Current Budget
-
-### Power-On Timing Diagram
-
-```
-           ┌──────────────────────────────────────────────────────────────────────┐
-  Time(ms) │ 0   2   5   8  10  15  20  25  30  50  60  100  120  150            │
-           │                                                                      │
-  VCC_SYS  │████████████████████████████████████████████████████████████████████ │
-  (3.4V)   │ ↑ Power-good at t=0                                                │
-           │                                                                      │
-  VDD_LOGIC│  ████████████████████████████████████████████████████████████████  │
-  (1.8V)   │  ↑ t=2ms                                                            │
-           │                                                                      │
-  VDD_CORE │     ██████████████████████████████████████████████████████████████ │
-  (0.9V)   │     ↑ t=5ms                                                          │
-           │                                                                      │
-  VDD_DDR  │        ████████████████████████████████████████████████████████████ │
-  (1.1V)   │        ↑ t=8ms                                                       │
-           │                                                                      │
-  VDDQ_DDR │          █████████████████████████████████████████████████████████ │
-  (0.6V)   │          ↑ t=10ms                                                    │
-           │                                                                      │
-  VCC_3V3  │               ████████████████████████████████████████████████████ │
-  (3.3V)   │               ↑ t=15ms                                               │
-           │                                                                      │
-  VCC_SDIO │                    ██████████████████████████████████████████████  │
-  (3.3V)   │                    ↑ t=20ms                                          │
-           │                                                                      │
-  VCC_SDR  │                    ██████████████████████████████████████████████  │
-  (1.8V)   │                    ↑ t=20ms                                          │
-           │                                                                      │
-  VCC_SDR  │                         █████████████████████████████████████████ │
-  (1.1V)   │                         ↑ t=25ms                                    │
-           │                                                                      │
-  VCC_SDR  │                              ████████████████████████████████████ │
-  (3.3V)   │                              ↑ t=30ms                               │
-           │                                                                      │
-  VCC_3V3  │                                        ████████████████████████    │
-  _RP      │                                        ↑ t=50ms                    │
-           │                                                                      │
-  MCU_RST │············································  ██████████████████████  │
-  deassert │                                        ↑ t=60ms                    │
-           │                                                                      │
-  VCC_NFC  │                                                  ████████████████  │
-           │                                                  ↑ t=100ms          │
-           │                                                                      │
-  VCC_SUBGHZ│                                                 ████████████████ │
-           │                                                  ↑ t=100ms          │
-           │                                                                      │
-  HOST_RDY │                                                        ████████████│
-  assert   │                                                        ↑ t=120ms    │
-           │                                                                      │
-  PCIe pwr │                                                            █████████│
-           │                                                            ↑ t=150ms │
-           └──────────────────────────────────────────────────────────────────────┘
-
-  Key:  ████ = rail active    ···· = reset asserted (low)
-        ↑ = rail power-good / signal transition
-```
-
-### Voltage Rail Dependency Chain
-
-```
-  VBAT (3.0–4.2V) ──► RK817 PMIC ──► VCC_SYS (3.4V) ──┬──► VDD_LOGIC (1.8V)
-  USB-C PD 5V  ──► RK817 PMIC                          │       │
-                                                       │       └──► VDD_CORE (0.9V)
-                                                       │              │
-                                                       │              └──► VDD_DDR (1.1V)
-                                                       │                     │
-                                                       │                     └──► VDDQ_DDR (0.6V)
-                                                       │                            │
-                                                       │                            └──► VCC_3V3 ──┬──► VCC_SDIO
-                                                       │                                           ├──► VCC_SDR 1V8 ──► VCC_SDR 1V1 ──► VCC_SDR 3V3
-                                                       │                                           ├──► VCC_3V3_RP ──► MCU_RESET ──► VCC_NFC
-                                                       │                                           │                            │          └──► VCC_SUBGHZ
-                                                       │                                           │                            │
-                                                       │                                           │                     HOST_RDY
-                                                       │                                           │
-                                                       │                                           └──► PCIe power
-```
-
-### PMIC Sequencer Constraints
-
-| Constraint | Min | Max | Unit | Notes |
-|------------|-----|-----|------|-------|
-| VCC_SYS → VDD_LOGIC delay | 1 | 5 | ms | Buck1 ramp time |
-| VDD_LOGIC → VDD_CORE delay | 1 | 5 | ms | Buck2 soft-start |
-| VDD_CORE → VDD_DDR delay | 1 | 3 | ms | Buck3 soft-start |
-| VDD_DDR → VDDQ_DDR delay | 0.5 | 2 | ms | LDO2 tracking |
-| VDDQ_DDR → VCC_3V3 delay | 2 | 10 | ms | LDO3 soft-start |
-| VCC_3V3 → peripheral rails | 5 | 50 | ms | Switched rails, inrush limit |
-| MCU_RESET deassert hold | 50 | — | ms | RP2350B boot time |
-| RP2350B → HOST_RDY | 60 | 200 | ms | Firmware init time |
-
-### Critical Timing Margins
-
-| Parameter | Target | Margin | Notes |
-|-----------|--------|--------|-------|
-| RK3576 PLL lock after VDD_CORE | 3 ms | 2 ms | Within 5 ms VDD_DDR start |
-| LPDDR5 init after VDDQ stable | 5 ms | 5 ms | Training must complete before VCC_3V3 |
-| LMS7002M PLL lock after 1V1 | 10 ms | 5 ms | 1.1V must be stable before 3.3V PA |
-| RP2350B boot after reset deassert | 50 ms | 10 ms | Flash XIP + stack init |
-| ST25R3916 oscillator start | 1 ms | 1 ms | 27.12 MHz crystal settling |
-| CC1101 crystal start | 0.5 ms | 0.5 ms | 26 MHz crystal settling |
-
-## Current Budget
-
-| Rail | Voltage | Max Current | Source | Notes |
-|------|---------|-------------|--------|-------|
-| VCC_SYS | 3.4V | 3A | RK817 buck | System power |
-| VDD_LOGIC | 1.8V | 1A | RK817 LDO1 | RK3576 I/O |
-| VDD_CORE | 0.9V | 2A | RK817 buck2 | RK3576 CPU |
-| VDD_DDR | 1.1V | 1A | RK817 buck3 | LPDDR5 |
-| VDDQ_DDR | 0.6V | 500mA | RK817 LDO2 | LPDDR5 VDDQ |
-| VCC_3V3 | 3.3V | 2A | RK817 LDO3 | Peripherals |
-| VCC_3V3_RP | 3.3V | 300mA | VCC_3V3 | RP2350B I/O |
-| VCC_SDR 1V8 | 1.8V | 500mA | VCC_3V3 → LDO | LMS7002M core |
-| VCC_SDR 1V1 | 1.1V | 300mA | VCC_3V3 → LDO | LMS7002M PLL |
-| VCC_SDR 3V3 | 3.3V | 200mA | VCC_3V3 switched | LMS7002M PA/LNA |
-| VCC_SUBGHZ | 3.3V | 50mA | VCC_3V3 switched | CC1101 |
-| VCC_NFC | 3.3V | 150mA | VCC_3V3 switched | ST25R3916 |
-| VCC_SDIO | 3.3V | 500mA | VCC_3V3 switched | MT7922 SDIO |
-| VCC_PCIE | 3.3V | 1A | VCC_3V3 switched | NVMe M.2 |
-
-**Total estimated peak current (all rails):** ~5.5A at 3.4V = ~18.7W  
-**Typical operating current (active pentesting):** ~2.8A at 3.4V = ~9.5W  
-**Low-power standby:** ~5mA at 3.4V = ~17mW
-
-## Power Modes
-
-| Mode | Rails Active | Current | Use Case |
-|------|-------------|---------|----------|
-| Active | All | 2.8A | Full pentesting, SDR streaming |
-| SDR-only | VCC_SYS, VDD_CORE, VDD_DDR, VCC_3V3, VCC_SDR | 1.5A | SDR capture only |
-| Sub-GHz only | VCC_SYS, VDD_CORE, VDD_DDR, VCC_3V3, VCC_SUBGHZ | 300mA | Sub-GHz monitoring |
-| NFC-only | VCC_SYS, VDD_CORE, VDD_DDR, VCC_3V3, VCC_NFC | 400mA | NFC read/write |
-| Wi-Fi only | VCC_SYS, VDD_CORE, VDD_DDR, VCC_3V3, VCC_SDIO | 600mA | Wi-Fi scanning |
-| Standby | VCC_SYS, VDD_LOGIC, VCC_3V3 (partial) | 5mA | Deep sleep, wake on GPIO |
-| Off | None | 0 | Battery disconnected |
-
-## ESD Protection
-
-| Interface | ESD Protection | Part | Voltage Rating |
-|-----------|---------------|------|---------------|
-| USB-C | TPD4E05U06 | 4-channel TVS | 5.5V, 15kV IEC |
-| SMA_ANT0 | TPD2E009 | 2-channel TVS | 6V, 15kV IEC |
-| SMA_ANT1 | TPD2E009 | 2-channel TVS | 6V, 15kV IEC |
-| NFC antenna | TPD2E009 | 2-channel TVS | 6V, 15kV IEC |
-| u.FL sub-GHz | TPD1E10B06 | Single TVS | 6V, 30kV IEC |
-| SDIO (Wi-Fi) | PRTR5V0U2X | 2-channel TVS | 5.5V |
-| SPI0 (bridge) | TPD2E009 | 2-channel TVS | 6V, 15kV IEC |
-| Debug UART | PRTR5V0U2X | 2-channel TVS | 5.5V |
 
 ## Reset Circuit
 
@@ -312,54 +129,85 @@ Time    Rail                Notes
                     VCC_3V3
                       │
                     ┌─┴─┐
-                    │   │ 10kΩ
-                    │   │
+                    │10kΩ│ R1 (pull-up)
                     └─┬─┘
                       │
-    RK817 nRST ◄─────┤──────► RK3576 RESET (active-low)
-                      │
-                    ┌─┴─┐
-                    │   │ 100Ω
-                    │   │
-                    └─┬─┘
-                      │
-                      ├──► RP2350B RUN (active-low, with 100nF cap to GND)
-                      │
-                    ┌─┴─┐
-                    │   │ 10kΩ
-                    │   │
-                    └─┬─┘
-                      │
-                     GND
-
-Reset timing:
-  - nRST assertion: < 100 µs
-  - nRST hold time: 10 ms minimum
-  - nRST release to MCU_RUN: 50 ms (PMIC-controlled)
-  - MCU_RUN deassert to HOST_RDY: 100 ms (RP2350B boot)
+          ┌───────────┤
+          │           │
+     ┌────┴────┐   ┌──┴──┐
+     │RK817    │   │100nF│ C1 (filter cap)
+     │nRSTO    │   └──┬──┘
+     │(open-dr)│      │
+     └────┬────┘      │
+          │        ┌──┴──┐
+          │        │GND  │
+          │        └─────┘
+          │
+     ┌────┴─────────────────────────────────┐
+     │                                      │
+     │  RK3576 nRESET ◄────────────────────┤
+     │                                      │
+     │  RP2350B RUN (PIN_MCU_RUN) ◄───────┤──── From RK3576 GPIO1_B2
+     │                                      │    (active-low reset)
+     │  LMS7002M RESET ◄──────────────────┤──── From RP2350B PIN_SDR_RESET
+     │                                      │    (active-low reset)
+     │  CC1101 RESET ◄─────────────────────┤──── Via SPI command (SRES strobe)
+     │                                      │
+     │  ST25R3916 RESET ◄──────────────────┤──── Via SPI command (SET_DEFAULT)
+     │                                      │
+     └──────────────────────────────────────┘
 ```
+
+### Reset Timing
+
+| Signal | Active | Min Pulse | Deassert to Ready |
+|--------|--------|-----------|-------------------|
+| RK3576 nRESET | Low | 10 ms | ~500 ms (boot) |
+| RP2350B RUN | Low | 1 µs | ~5 ms (boot) |
+| LMS7002M RESET | Low | 10 µs | ~1 ms (PLL lock) |
+| CC1101 SRES | N/A | N/A | ~1.5 ms (chip reset) |
+| ST25R3916 SET_DEFAULT | N/A | N/A | ~5 ms (oscillator) |
+
+## ESD Protection
+
+All external-facing signals have ESD protection:
+
+| Interface | ESD Device | Part Number | Voltage Rating |
+|-----------|------------|-------------|----------------|
+| USB-C PD | TVS diode array | TPD4E05U06 | ±8 kV HBM |
+| SMA antennas | ESD diode | PRTR5V0U2X | ±8 kV HBM |
+| u.FL antenna | ESD diode | PRTR5V0U2X | ±8 kV HBM |
+| NFC antenna | TVS array | TPD4E05U06 | ±8 kV HBM |
+| GPIO headers | TVS array | TPD4E05U06 | ±8 kV HBM |
 
 ## Test Points
 
-| TP# | Net | Purpose | Location |
-|-----|-----|---------|----------|
-| TP1 | VCC_SYS (3.4V) | System rail voltage | Near RK817 |
-| TP2 | VDD_LOGIC (1.8V) | Logic rail | Near RK3576 |
-| TP3 | VDD_CORE (0.9V) | CPU core rail | Near RK3576 |
-| TP4 | VDD_DDR (1.1V) | DDR rail | Near LPDDR5 |
-| TP5 | VDDQ_DDR (0.6V) | DDR VDDQ | Near LPDDR5 |
-| TP6 | VCC_3V3 | 3.3V peripheral rail | Center of board |
-| TP7 | VCC_3V3_RP | RP2350B I/O | Near RP2350B |
-| TP8 | VCC_SDR_1V8 | LMS7002M core | Near LMS7002M |
-| TP9 | VCC_SDR_1V1 | LMS7002M PLL | Near LMS7002M |
-| TP10 | VCC_SDR_3V3 | LMS7002M PA/LNA | Near LMS7002M |
-| TP11 | VCC_NFC | ST25R3916 | Near ST25R3916 |
-| TP12 | VCC_SUBGHZ | CC1101 | Near CC1101 |
-| TP13 | VBAT | Battery voltage | Near battery connector |
-| TP14 | GND | Ground reference | Edge of board |
-| TP15 | SPI0_SCK | SPI0 clock | Near RP2350B |
-| TP16 | SPI0_MOSI | SPI0 data out | Near RP2350B |
-| TP17 | INT_REQ | MCU interrupt | Near RP2350B |
-| TP18 | HOST_RDY | Host ready signal | Near RP2350B |
-| TP19 | MCU_RESET | MCU reset control | Near RP2350B |
-| TP20 | VCC_SDIO | Wi-Fi SDIO power | Near MT7922 |
+The GhostBlade PCB includes the following test points for debugging and manufacturing verification:
+
+| Test Point | Net | Location | Purpose |
+|-----------|-----|----------|---------|
+| TP1 | VCC_3V3 | Near PMIC | Verify 3.3V rail voltage |
+| TP2 | VCC_1V8 | Near PMIC | Verify 1.8V rail voltage |
+| TP3 | VCC_5V | Near PMIC | Verify 5V rail voltage |
+| TP4 | VCC_SDR_1V8 | Near LMS7002M | Verify SDR 1.8V rail |
+| TP5 | VCC_SDR_1V1 | Near LMS7002M | Verify SDR 1.1V PLL |
+| TP6 | VCC_SDR_3V3 | Near LMS7002M | Verify SDR 3.3V I/O |
+| TP7 | VCC_5V_NFC | Near ST25R3916 | Verify NFC 5V supply |
+| TP8 | VCC_SUBGHZ | Near CC1101 | Verify sub-GHz 3.3V |
+| TP9 | GND | Board corner | Ground reference |
+| TP10 | SPI0_SCK | Near RP2350B | SPI0 clock monitoring |
+| TP11 | SPI0_CSn | Near RP2350B | SPI0 chip select |
+| TP12 | SPI0_MOSI | Near RP2350B | SPI0 MOSI data |
+| TP13 | SPI0_MISO | Near RP2350B | SPI0 MISO data |
+| TP14 | INT_REQ | Near RP2350B | MCU interrupt line |
+| TP15 | MCU_RUN | Near RP2350B | MCU reset control |
+| TP16 | SDR_RESET | Near LMS7002M | SDR reset line |
+| TP17 | ANT_SEL0 | Near PE42422 | Antenna switch bit 0 |
+| TP18 | ANT_SEL1 | Near PE42422 | Antenna switch bit 1 |
+| TP19 | VBAT_SENSE | Near RP2350B | Battery voltage sense |
+| TP20 | CC1101_GDO0 | Near CC1101 | CC1101 GPIO0 status |
+| TP21 | NFC_IRQ | Near ST25R3916 | NFC interrupt line |
+
+---
+
+*See `firmware/rp2350b/src/peripheral_power.c` for the power sequencing implementation.*

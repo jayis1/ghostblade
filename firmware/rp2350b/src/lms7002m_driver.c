@@ -139,7 +139,7 @@
  */
 static uint32_t lms7002m_spi_xfer(uint32_t tx_data) {
     volatile uint32_t *dr = (volatile uint32_t *)SPI1_SSPDR;
-    volatile uint32_t *sr = (volatile uint32_t *)SPI1_SSPSR;
+    const volatile uint32_t *sr = (const volatile uint32_t *)SPI1_SSPSR;
 
     /* Wait until TX FIFO has space */
     while (!(*sr & (1 << 1)))  /* TNF: TX FIFO not full */

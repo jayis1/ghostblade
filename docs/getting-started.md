@@ -1,45 +1,86 @@
-<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
-<!-- Copyright (C) 2026 GhostBlade Project -->
+# GhostBlade (Project NullSpectre) — Getting Started Guide
 
-# Getting Started — GhostBlade (Project NullSpectre)
-
-Welcome to the GhostBlade open-source hardware project! This guide will
-help you set up your development environment, understand the project
-structure, and start contributing.
+Welcome to the GhostBlade open-source hardware project! This guide will help you set up your development environment, understand the codebase, and start contributing.
 
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Repository Structure](#repository-structure)
-3. [Hardware Architecture](#hardware-architecture)
+2. [Hardware Architecture](#hardware-architecture)
+3. [Repository Structure](#repository-structure)
 4. [Development Environment Setup](#development-environment-setup)
-5. [Quick Build from Project Root](#quick-build-from-project-root)
-6. [Building the Firmware](#building-the-firmware)
-7. [Building the Kernel Driver](#building-the-kernel-driver)
-8. [Building libapex and Python Bindings](#building-libapex-and-python-bindings)
-9. [Running Tests](#running-tests)
-10. [Code Style and Conventions](#code-style-and-conventions)
-11. [Contributing Workflow](#contributing-workflow)
-12. [Hardware-in-the-Loop Testing](#hardware-in-the-loop-testing)
-13. [Documentation Guidelines](#documentation-guidelines)
+5. [Building the Firmware](#building-the-firmware)
+6. [Building the Linux Driver](#building-the-linux-driver)
+7. [Running Tests](#running-tests)
+8. [SPI Protocol Overview](#spi-protocol-overview)
+9. [Coding Conventions](#coding-conventions)
+10. [Submitting Changes](#submitting-changes)
 
 ---
 
 ## Project Overview
 
-GhostBlade is a dual-processor pentesting device featuring:
+GhostBlade is a dual-processor pentesting device built around:
 
-- **RK3576** — ARM Cortex-A72 quad-core SoC running Linux
-- **RP2350B** — ARM Cortex-M33 dual-core MCU for real-time radio control
-- **LMS7002M** — SDR transceiver (100 kHz – 3.8 GHz, 2×2 MIMO)
-- **CC1101** — Sub-GHz transceiver (300–928 MHz)
-- **ST25R3916** — NFC reader/writer (13.56 MHz, ISO 14443/15693)
-- **MT7922** — Wi-Fi 6E / Bluetooth 5.4
-- **PE42422** — RF switch matrix (4 antenna paths)
+| Component | Part | Role |
+|-----------|------|------|
+| Host CPU | **RK3576** | Runs Linux, handles networking, UI, and high-level logic |
+| Coprocessor | **RP2350B** | Real-time peripheral control (SDR, sub-GHz, NFC) |
+| SDR | **LMS7002M** | Wideband RF transceiver (100 kHz – 3.8 GHz) |
+| Sub-GHz | **CC1101** | 433/868/915 MHz transceiver |
+| NFC | **ST25R3916** | ISO 14443A/B and ISO 15693 reader/writer |
+| Wi-Fi | **MT7922** | Wi-Fi 6E (802.11ax) |
 
-The RP2350B manages the radio control plane via SPI buses, while the
-RK3576 handles high-level operations through the `apex_bridge` kernel
-driver and `libapex` userspace library.
+The RK3576 and RP2350B communicate via SPI0 (SPI Mode 0, up to 50 MHz) using a framed CRC-64/CRC-32 protocol.
+
+---
+
+## Hardware Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        RK3576 (Host)                         │
+│                    ┌─────────────────────┐                   │
+│                    │   Linux (Debian)    │                   │
+│                    │   apex_bridge.ko     │                   │
+│                    │   libapex.so         │                   │
+│                    └─────────┬───────────┘                   │
+│                              │ SPI0                          │
+│                    ┌─────────┴───────────┐                   │
+│                    │  /dev/apex_bridge0   │                   │
+│                    └─────────┬───────────┘                   │
+└──────────────────────────────┼───────────────────────────────┘
+                               │ SPI0 (50 MHz)
+┌──────────────────────────────┼───────────────────────────────┐
+│                        RP2350B (MCU)                         │
+│                    ┌─────────┴───────────┐                   │
+│                    │   SPI Protocol       │                   │
+│                    │   Handler            │                   │
+│                    └───┬─────┬─────┬──────┘                   │
+│                        │     │     │                           │
+│              ┌─────────┤     │     ├──────────┐              │
+│              │ SPI1    │     │     │ SPI2     │              │
+│              ▼         │     │     ▼          │              │
+│        ┌──────────┐   │     │  ┌──────────┐  │              │
+│        │LMS7002M  │   │     │  │ST25R3916 │  │              │
+│        │(SDR)     │   │     │  │(NFC)     │  │              │
+│        └──────────┘   │     │  └──────────┘  │              │
+│                        │     │                 │              │
+│              ┌─────────┤     │                 │              │
+│              │ SPI1    │     │                 │              │
+│              │(shared) │     │                 │              │
+│              ▼         │     │                 │              │
+│        ┌──────────┐   │     │                 │              │
+│        │CC1101    │   │     │                 │              │
+│        │(Sub-GHz) │   │     │                 │              │
+│        └──────────┘   │     │                 │              │
+│                        │     │                 │              │
+│              ┌─────────┘     ├─────────────────┘              │
+│              │ I2C           │ ADC                            │
+│              ▼               ▼                                 │
+│         (ST25R3916     Battery Monitor                        │
+│          aux control)  & Watchdog                              │
+└───────────────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -47,68 +88,54 @@ driver and `libapex` userspace library.
 
 ```
 ghostblade/
+├── docs/                          # Documentation
+│   ├── spi-protocol-timing.md     # SPI protocol timing diagrams
+│   ├── architecture-and-requirements.md
+│   ├── component-selection-and-schematics.md
+│   └── power-tree.md
 ├── firmware/
-│   └── rp2350b/                 # RP2350B MCU firmware
-│       ├── src/                  # C source files
-│       ├── include/              # Header files
-│       └── CMakeLists.txt        # Pico SDK build config
+│   └── rp2350b/
+│       ├── include/               # Header files
+│       │   ├── board_pins.h        # GPIO pin assignments
+│       │   ├── spi_protocol.h      # SPI protocol definitions
+│       │   ├── sdr_dma.h           # SDR DMA ring buffer API
+│       │   ├── cc1101_init.h       # CC1101 radio driver API
+│       │   ├── st25r3916_init.h    # NFC controller API
+│       │   ├── battery_monitor.h   # Battery & temperature API
+│       │   ├── watchdog.h          # Watchdog timer API
+│       │   ├── rp2350b_init.h      # Low-level init API
+│       │   ├── peripheral_power.h  # Power sequencing API
+│       │   ├── adc_calibration.h   # ADC calibration API
+│       │   └── lms7002m_driver.h    # SDR transceiver API
+│       └── src/                    # Source files
+│           ├── main.c              # Firmware entry point
+│           ├── spi_protocol.c      # SPI protocol handler
+│           ├── sdr_dma.c           # SDR DMA ring buffer
+│           ├── cc1101_init.c      # CC1101 initialization
+│           ├── st25r3916_init.c    # NFC initialization
+│           ├── battery_monitor.c   # Battery monitoring
+│           ├── watchdog.c          # Watchdog timer
+│           ├── rp2350b_init.c      # Low-level hardware init
+│           ├── peripheral_power.c  # Power sequencing
+│           ├── adc_calibration.c   # ADC calibration
+│           └── lms7002m_driver.c   # LMS7002M SDR driver
 ├── software/
-│   ├── linux-drivers/            # Kernel module (apex_bridge)
-│   │   ├── src/                  # Driver source
-│   │   ├── include/              # Register definitions
-│   │   └── Makefile              # Kernel module build
-│   ├── libapex/                  # Userspace C library + Python bindings
-│   │   ├── src/                  # libapex.c + pyapex.c
-│   │   ├── include/              # libapex.h
-│   │   ├── Makefile              # C library build
-│   │   └── setup.py              # Python extension build
-│   └── dts/                      # Device tree sources
-│       ├── ghostblade-rk3576.dts
-│       ├── ghostblade-options.dts
-│       ├── ghostblade-sdr-overlay.dts
-│       ├── ghostblade-nfc-overlay.dts
-│       ├── ghostblade-wifi-overlay.dts
-│       └── Makefile              # DTS compile & validate targets
-├── hardware/
-│   ├── kicad/                    # KiCad schematic & PCB files
-│   ├── bom/                      # Bill of materials (CSV + interactive HTML)
-│   └── drc/                      # Custom DRC rules
-├── docs/                         # All documentation
-│   ├── getting-started.md
-│   ├── build-instructions.md
-│   ├── flashing-guide.md
-│   ├── faq-troubleshooting.md
-│   └── ...                       # See docs/index.md
-├── tests/                        # Unit and HIL tests
-├── tools/                        # Build utilities (Gerber generation)
-├── Makefile                      # Top-level build convenience targets
-├── CHANGELOG.md                  # Project changelog
-├── CONTRIBUTING.md               # Contribution guidelines
-├── LICENSE                       # Triple-license (CERN-OHL-S, GPL-2.0+, CC-BY-SA)
-└── README.md                     # Project overview
+│   ├── linux-drivers/
+│   │   ├── include/
+│   │   │   └── apex_bridge_regs.h  # Kernel driver register defs
+│   │   └── src/
+│   │       └── apex_bridge.c       # Kernel SPI bridge driver
+│   ├── dts/
+│   │   └── ghostblade-sdr-overlay.dts  # Device tree overlay
+│   └── libapex/
+│       └── src/
+│           └── libapex.c          # Userspace library
+└── tests/
+    ├── test_spi_protocol.c        # SPI protocol unit tests
+    ├── test_apex_bridge.c         # Kernel driver tests
+    ├── test_crc_validation.c      # CRC validation tests
+    └── hitl_test.sh               # Hardware-in-the-loop tests
 ```
-
----
-
-## Hardware Architecture
-
-### Processor Roles
-
-| Component   | Role                            | Interface to RK3576  |
-|-------------|---------------------------------|----------------------|
-| RK3576      | Main SoC, Linux userspace       | —                    |
-| RP2350B     | Radio control, real-time I/O    | SPI0 (bridge driver) |
-| LMS7002M    | Wideband SDR                    | MIPI CSI-2 (data), SPI1 via MCU (control) |
-| CC1101      | Sub-GHz radio                   | SPI1 via MCU         |
-| ST25R3916   | NFC controller                  | SPI2 via MCU         |
-| MT7922      | Wi-Fi 6E / BT                   | SDIO/USB on RK3576   |
-| PE42422     | RF antenna switch               | GPIO via MCU         |
-
-### SPI Bridge Protocol
-
-The RK3576 communicates with the RP2350B over SPI0 using a framed
-protocol with CRC-64 header integrity and CRC-32 payload integrity.
-See `docs/spi-protocol-timing.md` for detailed timing diagrams.
 
 ---
 
@@ -116,72 +143,37 @@ See `docs/spi-protocol-timing.md` for detailed timing diagrams.
 
 ### Prerequisites
 
-- Ubuntu 22.04+ or equivalent Linux
-- Git, GCC, Make, CMake, Ninja
-- ARM cross-toolchain (`arm-none-eabi-gcc`)
-- AArch64 cross-toolchain (`aarch64-linux-gnu-gcc`) for kernel driver
-- Raspberry Pi Pico SDK v2.0+
-- Linux kernel headers (for module build)
-- Python 3.8+ with development headers
-- Device tree compiler (`dtc`)
+- **Host OS**: Linux (Ubuntu 22.04+ or Debian 12+ recommended)
+- **Cross-compiler for RP2350B**: `arm-none-eabi-gcc` (for Cortex-M33)
+- **Kernel headers**: For your RK3576 kernel version
+- **Python 3.10+**: For test scripts and libapex bindings
+- **CMake 3.20+**: Build system
+- **Pico SDK**: For RP2350B firmware development
 
-> **Tip:** Run `make check` or `source software/toolchain.conf` to verify all
-> toolchain dependencies are installed before building.
+### Install Toolchain
 
-### 1. Clone the Repository
+```bash
+# ARM cross-compiler for RP2350B firmware
+sudo apt-get install gcc-arm-none-eabi libnewlib-arm-none-eabi
+
+# Build tools
+sudo apt-get install build-essential cmake git python3 python3-pip
+
+# Pico SDK (for RP2350B)
+git clone https://github.com/raspberrypi/pico-sdk.git ~/pico-sdk
+cd ~/pico-sdk && git submodule update --init
+export PICO_SDK_PATH=~/pico-sdk
+
+# Kernel headers (for apex_bridge driver)
+sudo apt-get install linux-headers-$(uname -r)
+```
+
+### Clone the Repository
 
 ```bash
 git clone https://github.com/jayis1/ghostblade.git
 cd ghostblade
 ```
-
-### 2. Install System Dependencies
-
-```bash
-# Build essentials
-sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build python3 python3-pip \
-  gcc-arm-none-eabi libnewlib-arm-none-eabi
-
-# Kernel module build
-sudo apt-get install -y linux-headers-$(uname -r) kmod
-
-# Device tree compiler
-sudo apt-get install -y device-tree-compiler
-
-# Static analysis tools
-sudo apt-get install -y cppcheck sparse clang-format
-```
-
-### 3. Set Up Pico SDK (for firmware build)
-
-```bash
-git clone --depth 1 --branch 2.0.0 \
-  https://github.com/raspberrypi/pico-sdk.git /opt/pico-sdk
-cd /opt/pico-sdk && git submodule update --init --recursive
-cd -
-
-export PICO_SDK_PATH=/opt/pico-sdk
-```
-
----
-
-## Quick Build from Project Root
-
-The top-level `Makefile` provides convenience targets for building sub-projects:
-
-```bash
-make help        # Show all available targets
-make firmware    # Build RP2350B firmware (requires PICO_SDK_PATH)
-make driver      # Build Linux kernel driver
-make libapex     # Build userspace C library + Python bindings
-make tests       # Build and run unit tests
-make dtb         # Compile device tree sources
-make validate    # Validate DTS syntax
-make clean       # Remove all build artifacts
-```
-
-See the [Build Instructions](build-instructions.md) document for detailed per-component build steps.
 
 ---
 
@@ -189,324 +181,237 @@ See the [Build Instructions](build-instructions.md) document for detailed per-co
 
 ```bash
 cd firmware/rp2350b
-mkdir build && cd build
-cmake .. -DPICO_SDK_PATH=$PICO_SDK_PATH -DPICO_PLATFORM=rp2350 -G Ninja
-ninja
+
+# Create build directory
+mkdir -p build && cd build
+
+# Configure (adjust for your Pico SDK path)
+cmake ..
+
+# Build
+make -j$(nproc)
+
+# Output files:
+#   ghostblade_rp2350b.elf   - Debug ELF with symbols
+#   ghostblade_rp2350b.bin   - Binary for flashing
+#   ghostblade_rp2350b.uf2   - UF2 for USB drag-and-drop
 ```
 
-Output: `apex_one.uf2` (flashable via Pico boot mode) and `apex_one.elf` (debug).
+### Flashing the RP2350B
 
-### Flashing the Firmware
+```bash
+# Method 1: OpenOCD via SWD
+openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
+    -c "program ghostblade_rp2350b.elf verify reset exit"
 
-1. Hold BOOTSEL button on the RP2350B
-2. Connect USB
-3. Copy `apex_one.uf2` to the mass storage device
-4. The MCU will reboot with the new firmware
+# Method 2: UF2 USB boot (hold BOOTSEL while plugging in USB)
+cp ghostblade_rp2350b.uf2 /media/$USER/RPI-RP2/
+```
 
 ---
 
-## Building the Kernel Driver
+## Building the Linux Driver
 
 ```bash
 cd software/linux-drivers
+
+# Build the kernel module
 make -C /lib/modules/$(uname -r)/build M=$(pwd) modules
+
+# Load the driver
 sudo insmod apex_bridge.ko
-```
 
-Verify:
-```bash
-dmesg | grep apex
+# Verify it loaded
+dmesg | grep apex_bridge
 ls /dev/apex_bridge0
+ls /sys/class/apex/apex_bridge0/
+
+# Unload
+sudo rmmod apex_bridge
 ```
 
----
-
-## Building libapex and Python Bindings
-
-### C Library
+### Building libapex
 
 ```bash
 cd software/libapex
-make all
+mkdir -p build && cd build
+cmake ..
+make -j$(nproc)
+
+# Install (optional)
 sudo make install
-```
-
-### Python Extension
-
-```bash
-cd software/libapex
-pip3 install .
-```
-
-Or for development:
-```bash
-python3 setup.py build_ext --inplace
-```
-
-### Quick Test
-
-```python
-import pyapex
-dev = pyapex.open()
-telem = dev.get_telemetry()
-print(f"Battery: {telem['vbat_mv']} mV")
-dev.close()
+sudo ldconfig
 ```
 
 ---
 
 ## Running Tests
 
-### SPI Protocol Unit Tests
+### Unit Tests (Host-side, no hardware required)
 
 ```bash
+# Build and run CRC validation tests
 cd tests
-make test_spi_protocol
+gcc -Wall -Wextra -O2 -I../firmware/rp2350b/include \
+    test_crc_validation.c -o test_crc_validation
+./test_crc_validation
+
+# Expected output:
+# === GhostBlade SPI Protocol CRC Validation Tests ===
+# Test: CRC-64 known vectors
+# Test: CRC-32 known vectors
+# ...
+# === Results ===
+# Tests run:    XX
+# Tests passed: XX
+# Tests failed: 0
+```
+
+### SPI Protocol Tests
+
+```bash
+# Build and run SPI protocol framing tests
+gcc -Wall -Wextra -O2 -I../firmware/rp2350b/include \
+    test_spi_protocol.c -o test_spi_protocol
 ./test_spi_protocol
 ```
 
-Expected output:
-```
-=== SPI Protocol Unit Tests ===
-...
-=== Results: 158/158 passed, 0 failed ===
-```
-
-### Battery Monitor Unit Tests
+### Hardware-in-the-Loop Tests
 
 ```bash
-make test_battery_monitor
-./test_battery_monitor
+# Requires a GhostBlade board connected
+cd tests
+./hitl_test.sh --verbose
+
+# Skip specific subsystems
+./hitl_test.sh --skip-sdr --skip-nfc
+
+# Custom device path
+./hitl_test.sh --device /dev/apex_bridge0
 ```
-
-Expected output:
-```
-=== Battery Monitor Unit Tests ===
-...
-=== Results: 95/95 passed, 0 failed ===
-```
-
-### CC1101 Configuration Unit Tests
-
-```bash
-make test_cc1101_config
-./test_cc1101_config
-```
-
-Expected output:
-```
-=== CC1101 Configuration Unit Tests ===
-...
-=== Results: 37/37 passed, 0 failed ===
-```
-
-### Watchdog Timer Unit Tests
-
-```bash
-make test_watchdog
-./test_watchdog
-```
-
-Expected output:
-```
-=== Watchdog Unit Tests ===
-...
-=== Results: 72/72 passed, 0 failed ===
-```
-
-Tests the watchdog timer configuration, brownout detection magic values,
-load value calculations, bark/reset timing, kick interval safety, and
-boot sequence reset reason handling.
-
-### Power State Machine Unit Tests
-
-```bash
-make test_power_states
-./test_power_states
-```
-
-Expected output:
-```
-=== Power State Machine Unit Tests ===
-...
-=== Results: 57/57 passed, 0 failed ===
-```
-
-Tests the battery monitor power state machine transitions (ACTIVE → IDLE →
-SLEEP → SHUTDOWN), voltage threshold hysteresis, brownout detection,
-overtemperature protection, and boundary conditions.
-
-### SDR DMA Ring Buffer Unit Tests
-
-```bash
-make test_sdr_dma
-./test_sdr_dma
-```
-
-Expected output:
-```
-=== SDR DMA Ring Buffer Unit Tests ===
-...
-=== Results: 52/52 passed, 0 failed ===
-```
-
-Tests the SDR DMA ring buffer manager: block produce/consume cycles, overrun
-and underrun detection, wrap-around integrity, sustained streaming patterns,
-and rapid stress testing.
-
-### SPI0 ISR Frame Assembly Unit Tests
-
-```bash
-make test_spi0_isr
-./test_spi0_isr
-```
-
-Expected output:
-```
-=== SPI0 ISR Frame Assembly Unit Tests ===
-...
-=== Results: 42/42 passed, 0 failed ===
-```
-
-Tests the SPI0 slave interrupt handler's frame assembly state machine: sync
-byte detection, header and payload CRC validation, error recovery, resync,
-back-to-back frame processing, and statistics tracking.
-
-### ST25R3916 NFC Controller Unit Tests
-
-```bash
-make test_st25r3916_init
-./test_st25r3916_init
-```
-
-Expected output:
-```
-=== ST25R3916 NFC Controller Init Unit Tests ===
-...
-=== Results: XX/XX passed, 0 failed ===
-```
-
-Tests the ST25R3916 NFC controller initialization: register address and value
-validation, SPI protocol encoding (read/write/burst/direct command), Space B
-gateway mechanism, IRQ status bit definitions, initialization sequence ordering,
-and voltage measurement conversion.
-
-### Run All Userspace Tests
-
-```bash
-make all
-make run
-```
-
-### With cmocka (if installed)
-
-```bash
-sudo apt-get install libcmocka-dev
-# Rebuild with cmocka support (remove -DNO_CMOCKA from CFLAGS in Makefile)
-make clean && make all
-```
-
-See `tests/README.md` for detailed test documentation.
 
 ---
 
-## Code Style and Conventions
+## SPI Protocol Overview
 
-### C Code (Firmware and Driver)
+The RK3576 (host) communicates with the RP2350B (MCU) over SPI0 using a framed protocol with CRC integrity checking.
 
-- **Kernel driver**: Follow Linux kernel coding style
-  - Tab indentation (8-column tabs)
-  - 80-column line limit (100 max)
-  - `snake_case` for functions and variables
-  - Prefix module functions: `apex_bridge_`, `cc1101_`, `st25r3916_`
-  - Use `dev_err()`, `dev_info()`, `dev_dbg()` for logging
+### Frame Format
 
-- **Firmware**: Similar kernel-style adapted for bare-metal
-  - Use `__attribute__((packed))` for protocol structures
-  - Use `volatile` for hardware register access
-  - Define register blocks with `#define` at file top
-  - Use `static` for file-local functions
+```
+┌─────────────────────────────────────────────────────┐
+│ Sync (1B) │ Cmd (1B) │ Len (2B) │ Rsvd (4B) │ CRC-64 (8B) │
+│   0xAA    │  opcode  │ payload  │   0x0000   │  header CRC │
+│           │          │ length   │            │             │
+├───────────┴──────────┴──────────┴────────────┴─────────────┤
+│                     Payload (0–4092 bytes)                  │
+├────────────────────────────────────────────────────────────┤
+│                  CRC-32 (4 bytes)                          │
+└────────────────────────────────────────────────────────────┘
+```
 
-### Python Code
+### Command Opcodes
 
-- PEP 8 style
-- Type hints preferred
-- Docstrings for all public functions
+| Opcode | Name | Direction | Payload |
+|--------|------|-----------|---------|
+| 0x01 | SDR_TUNE | Host → MCU | freq_hz(4), bw_khz(2), gain_db_x10(2) |
+| 0x02 | SDR_STREAM | Host → MCU | enable(1) |
+| 0x03 | ANT_SELECT | Host → MCU | ant_id(1) |
+| 0x04 | CC1101_CFG | Host → MCU | reg_addr(1), reg_len(1), data(reg_len) |
+| 0x05 | NFC_TRANSACT | Host → MCU | cmd(1), flags(1), data_len(2), data(n) |
+| 0x06 | TELEMETRY_REQ | Host → MCU | (none) |
+| 0x07 | RESET_MCU | Host → MCU | magic(4) = 0x52534554 |
+| 0x81 | TELEMETRY | MCU → Host | rssi(2), temp(2), vbat(2), cc1101_rssi(2), nfc_field(2), flags(2), uptime(4) |
+| 0x82 | SDR_IQ_CHUNK | MCU → Host | IQ data(n) |
+
+See `docs/spi-protocol-timing.md` for detailed timing diagrams.
+
+---
+
+## Coding Conventions
+
+### C Code Style
+
+- **Indentation**: 4 spaces (no tabs)
+- **Line length**: 100 characters max
+- **Naming**: `snake_case` for functions and variables, `UPPER_SNAKE_CASE` for macros
+- **Comments**: Use `/* ... */` for block comments, `//` for single-line comments
+- **Headers**: Every file must have an SPDX license identifier header
+- **Kernel code**: Follow the Linux kernel coding style for `apex_bridge.c`
+
+### File Headers
+
+Every source file must begin with:
+
+```c
+/*
+ * filename.c — Brief description
+ *
+ * Copyright (C) 2026 GhostBlade Project
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ *
+ * Detailed description of the file's purpose and functionality.
+ */
+```
 
 ### Commit Messages
 
-Format:
+Use descriptive commit messages following this format:
+
 ```
-subsystem: Brief description of change
+subsystem: brief summary of changes
 
-Longer explanation if needed. Wrap at 72 columns.
-
-Signed-off-by: Your Name <email@example.com>
+More detailed explanation if needed. Wrap at 72 characters.
+Include motivation for the change and any relevant issue numbers.
 ```
 
-Example:
-```
-firmware: Add CC1101 sub-GHz radio initialization
-
-Implement the full CC1101 register configuration for 868 MHz ISM band
-with GFSK modulation at 250 kbps. Includes RX/TX mode control, RSSI
-conversion, and PATABLE power settings.
-
-Signed-off-by: Jane Doe <jane@example.com>
-```
+Examples:
+- `firmware: add LMS7002M SDR driver with PLL tuning support`
+- `driver: add DMA scatter-gather engine for SDR IQ streaming`
+- `tests: add CRC-64/CRC-32 validation unit tests`
+- `docs: add getting-started guide for contributors`
 
 ---
 
-## Contributing Workflow
+## Submitting Changes
 
 1. **Fork** the repository on GitHub
-2. **Create a branch**: `improvement/YYYY-MM-DD-topic`
-3. **Make changes** following code style conventions
-4. **Run tests** locally before pushing
-5. **Commit** with descriptive messages (see format above)
-6. **Push** your branch to your fork
-7. **Open a Pull Request** against `main`
-8. Address review feedback
+2. **Create a feature branch**: `git checkout -b feature/my-feature`
+3. **Make your changes** following the coding conventions above
+4. **Add tests** for any new functionality
+5. **Run existing tests** to ensure nothing is broken
+6. **Commit** with descriptive commit messages
+7. **Push** your branch to your fork
+8. **Open a Pull Request** against the `main` branch
 
-See `docs/contributing.md` for full details.
+### What to Contribute
 
----
+We welcome contributions in these areas:
 
-## Hardware-in-the-Loop Testing
+- **Firmware**: New peripheral drivers, bug fixes, performance improvements
+- **Linux drivers**: Kernel module improvements, sysfs attributes, DMA support
+- **Documentation**: Better diagrams, tutorials, API references
+- **Testing**: Unit tests, integration tests, hardware-in-the-loop tests
+- **Hardware**: Schematic improvements, PCB layout fixes, test point additions
+- **Tools**: Python bindings, CLI utilities, signal processing scripts
 
-For developers with physical GhostBlade hardware:
+### Important Notes
 
-1. Flash the latest firmware to the RP2350B
-2. Load the kernel driver on the RK3576
-3. Run the libapex test suite
-4. Verify telemetry readings (battery voltage, temperature)
-5. Test SDR streaming at various frequencies
-6. Test CC1101 TX/RX at 868 MHz
-7. Test NFC tag detection with ISO 14443A cards
-
-**Important**: Always verify RF emissions comply with local regulations
-before transmitting. Use terminators on unused antenna ports.
-
----
-
-## Documentation Guidelines
-
-- All docs use Markdown with consistent formatting
-- Include timing diagrams for hardware protocols
-- Add register tables for new peripheral drivers
-- Keep README.md concise; detailed docs go in `docs/`
-- Use ASCII art for diagrams when SVG/Excalidraw isn't available
-- Reference datasheets by document number and section
+- **No CI/CD workflows**: Do not add `.github/workflows/` files
+- **No force pushes to main**: Use feature branches and PRs
+- **License**: All code must be GPL-2.0-or-later or MIT compatible
+- **Binary files**: Do not commit binary files (firmware images, PDFs) — use Git LFS if needed
 
 ---
 
-## Getting Help
+## Useful Resources
 
-- **Issues**: https://github.com/jayis1/ghostblade/issues
-- **Discussions**: https://github.com/jayis1/ghostblade/discussions
-- **Wiki**: Architecture details and design decisions
+- **RP2350B Datasheet**: [Raspberry Pi Documentation](https://www.raspberrypi.com/documentation/microcontrollers/)
+- **LMS7002M Documentation**: [Lime Microsystems](https://limemicro.com/)
+- **CC1101 Datasheet**: [Texas Instruments SWRU066](https://www.ti.com/product/CC1101)
+- **ST25R3916**: [STMicroelectronics DS12290](https://www.st.com/en/nfc/st25r3916.html)
+- **RK3576 TRM**: Rockchip Technical Reference Manual (NDA required)
 
-## License
+---
 
-This project is licensed under GPL-2.0-or-later. By contributing, you
-agree that your contributions will be licensed under the same terms.
+*Last updated: July 2026*
