@@ -275,6 +275,15 @@ static void spi0_process_byte(uint8_t byte) {
         if (spi0_rx.pos < SPI_HDR_SIZE) {
             spi0_rx.buf[spi0_rx.pos++] = byte;
 
+            /* Safety: if pos somehow exceeds header size without
+             * entering the validation branch, reset state machine.
+             * This can't happen in normal operation since pos
+             * increments by 1 per byte and we check == SPI_HDR_SIZE. */
+            if (spi0_rx.pos > SPI_HDR_SIZE) {
+                spi0_rx.state = FRAME_STATE_ERROR;
+                break;
+            }
+
             if (spi0_rx.pos == SPI_HDR_SIZE) {
                 /* Header complete — validate CRC-64 */
                 if (!validate_header_crc64(spi0_rx.buf)) {
@@ -307,7 +316,15 @@ static void spi0_process_byte(uint8_t byte) {
         break;
 
     case FRAME_STATE_PAYLOAD:
-        /* Accumulating payload + CRC-32 bytes */
+        /* Accumulating payload + CRC-32 bytes.
+         * Bounds check: prevent writing past the receive buffer.
+         * This should never trigger if payload_len was validated
+         * against SPI_MAX_PAYLOAD, but a corrupted payload_len
+         * or an ISR race could cause pos to exceed the buffer. */
+        if (spi0_rx.pos >= SPI_FRAME_BUF_SIZE) {
+            spi0_rx.state = FRAME_STATE_ERROR;
+            break;
+        }
         if (spi0_rx.pos < SPI_HDR_SIZE + spi0_rx.payload_len + SPI_CRC32_SIZE) {
             spi0_rx.buf[spi0_rx.pos++] = byte;
 

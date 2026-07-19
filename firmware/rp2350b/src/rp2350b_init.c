@@ -367,7 +367,7 @@ void rp2350b_gpio_set(uint8_t pin, bool value) {
  * Returns: true if pin is high, false if low
  */
 bool rp2350b_gpio_get(uint8_t pin) {
-    volatile uint32_t *in_reg = (volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x010C);
+    volatile uint32_t const *in_reg = (volatile uint32_t const *)(RP2350B_IO_BANK0_BASE + 0x010C);
     __asm__ volatile ("dmb" ::: "memory");
     return !!(*in_reg & (1UL << pin));
 }
@@ -383,7 +383,7 @@ bool rp2350b_gpio_get(uint8_t pin) {
  */
 static void unreset_block_wait(uint32_t reset_mask) {
     volatile uint32_t *reset_reg = (volatile uint32_t *)(RP2350B_RESETS_BASE + RESETS_RESET);
-    volatile uint32_t *reset_done = (volatile uint32_t *)(RP2350B_RESETS_BASE + RESETS_RESET_DONE);
+    volatile uint32_t const *reset_done = (volatile uint32_t const *)(RP2350B_RESETS_BASE + RESETS_RESET_DONE);
 
     /* Deassert reset for specified peripherals */
     *reset_reg &= ~reset_mask;
@@ -968,7 +968,7 @@ void apex_nfc_cs_release(void) {
  */
 uint8_t apex_nfc_spi_xfer(uint8_t tx_byte) {
     volatile uint32_t *dr = (volatile uint32_t *)SPI2_SSPDR;
-    volatile uint32_t *sr = (volatile uint32_t *)SPI2_SSPSR;
+    volatile uint32_t const *sr = (volatile uint32_t const *)SPI2_SSPSR;
 
     while (!(*sr & SSPSR_TNF))
         ;

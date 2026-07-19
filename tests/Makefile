@@ -64,6 +64,7 @@ help:
 	@echo "  test_power_states     - Build power state machine unit tests"
 	@echo "  test_sleep_wake       - Build sleep/wake state machine unit tests"
 	@echo "  test_libapex          - Build libapex userspace library unit tests"
+	@echo "  test_libapex_framing  - Build libapex frame encoding/parsing unit tests"
 	@echo "  test_sdr_dma          - Build SDR DMA ring buffer unit tests"
 	@echo "  test_spi0_isr         - Build SPI0 ISR frame assembly unit tests"
 	@echo "  test_st25r3916_init   - Build ST25R3916 NFC controller init tests"
@@ -97,6 +98,9 @@ test_sleep_wake: test_sleep_wake.c
 
 test_libapex: test_libapex.c
 	$(CC) $(CFLAGS) -I$(CURDIR)/../software/libapex -o $@ $< $(LDFLAGS) -lm
+
+test_libapex_framing: test_libapex_framing.c
+	$(CC) $(CFLAGS) -I$(CURDIR)/../software/libapex/include -o $@ $< $(LDFLAGS)
 
 test_sdr_dma: test_sdr_dma.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
@@ -140,6 +144,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running libapex Unit Tests ==="
 	@./test_libapex
+	@echo ""
+	@echo "=== Running libapex Frame Encoding/Parsing Unit Tests ==="
+	@./test_libapex_framing
 	@echo ""
 	@echo "=== Running SDR DMA Ring Buffer Unit Tests ==="
 	@./test_sdr_dma

@@ -151,9 +151,14 @@ static int build_spi_frame(uint8_t cmd, const uint8_t *payload,
         idx += payload_len;
     }
 
-    /* Payload CRC-32 */
-    if (payload_len > 0) {
-        uint32_t pay_crc = crc32_compute(payload, payload_len);
+    /* CRC-32 trailer (always present, even for zero-length payloads).
+     * The ISR state machine always expects 4 bytes of CRC-32 after
+     * the header + payload, regardless of payload length. For zero-length
+     * payloads, the CRC-32 is computed over empty data (result: 0x00000000). */
+    {
+        const uint8_t *pay_data = (payload_len > 0 && payload != NULL) ? payload : NULL;
+        uint32_t pay_crc = (pay_data != NULL) ? crc32_compute(pay_data, payload_len) :
+                           crc32_compute((const uint8_t *)"", 0);
         frame[idx++] = (uint8_t)(pay_crc & 0xFF);
         frame[idx++] = (uint8_t)((pay_crc >> 8) & 0xFF);
         frame[idx++] = (uint8_t)((pay_crc >> 16) & 0xFF);
@@ -399,8 +404,8 @@ static void test_isr_nop_frame(void) {
     TEST_ASSERT(sim_rx.frame_ready, "NOP frame: frame_ready = true");
     TEST_ASSERT_EQ((int)sim_rx.payload_len, 0,
                    "NOP frame: payload_len = 0");
-    TEST_ASSERT_EQ((int)sim_rx.pos, SPI_HDR_SIZE,
-                   "NOP frame: pos = 16 (header only)");
+    TEST_ASSERT_EQ((int)sim_rx.pos, SPI_HDR_SIZE + SPI_CRC32_SIZE,
+                   "NOP frame: pos = 20 (header + CRC-32)");
     TEST_ASSERT_EQ((int)sim_stats.frames_validated, 1,
                    "NOP frame: frames_validated = 1");
     TEST_ASSERT_EQ((int)sim_stats.frames_received, 1,
@@ -512,15 +517,11 @@ static void test_isr_bad_payload_crc(void) {
  */
 static void test_isr_oversized_payload(void) {
     printf("Test: ISR oversized payload\n");
-    uint8_t frame[8192];
-    uint8_t payload[SPI_MAX_PAYLOAD + 1];
-    int len;
 
     /* build_spi_frame rejects oversized payloads, so we manually construct
-     * a frame with an oversized payload_len field. */
+     * a frame header with an oversized payload_len field. */
     sim_reset();
 
-    memset(payload, 0x42, sizeof(payload));
     /* Manually craft a frame header with payload_len > SPI_MAX_PAYLOAD */
     uint8_t bad_frame[SPI_HDR_SIZE];
     bad_frame[0] = SPI_SYNC_BYTE;
@@ -733,11 +734,10 @@ static void test_isr_overflow(void) {
 }
 
 /**
- * Test 12: Zero-length payload frame (NOP with no CRC-32 trailer)
+ * Test 12: Zero-length payload frame (NOP with CRC-32 trailer)
  *
- * Note: In the current implementation, zero-length payload frames
- * still include a CRC-32 trailer (CRC-32 of empty data = 0x00000000).
- * The ISR processes 4 bytes for the CRC-32 after the header.
+ * The ISR state machine expects a CRC-32 trailer even for zero-length
+ * payloads. The total frame size is SPI_HDR_SIZE + 0 + SPI_CRC32_SIZE = 20.
  */
 static void test_isr_zero_payload_with_crc(void) {
     printf("Test: ISR zero-length payload frame with CRC-32\n");
@@ -747,13 +747,9 @@ static void test_isr_zero_payload_with_crc(void) {
     sim_reset();
     len = build_spi_frame(CMD_NOP, NULL, 0, frame);
 
-    /* NOP has zero payload but still includes CRC-32 of empty data.
-     * However, build_spi_frame only adds CRC-32 for non-zero payloads.
-     * The SPI protocol defines that zero-length payload frames have
-     * exactly SPI_HDR_SIZE bytes (no CRC-32 trailer).
-     *
-     * Let's verify: a 16-byte NOP frame is valid. */
-    TEST_ASSERT_EQ(len, SPI_HDR_SIZE, "Zero payload: frame = 16 bytes");
+    /* NOP has zero payload but includes CRC-32 of empty data.
+     * Total frame = 16 (header) + 0 (payload) + 4 (CRC-32) = 20 bytes. */
+    TEST_ASSERT_EQ(len, SPI_HDR_SIZE + SPI_CRC32_SIZE, "Zero payload: frame = 20 bytes");
 
     sim_feed_frame(frame, len);
     TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
