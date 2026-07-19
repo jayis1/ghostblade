@@ -16,7 +16,7 @@
 #   make help        — Show available targets
 # ============================================================================
 
-.PHONY: all firmware driver libapex tests dtb validate validate-dts check clean help
+.PHONY: all firmware driver libapex tests dtb validate validate-dts validate-netlist check clean help
 
 all: help
 
@@ -32,6 +32,7 @@ help:
 	@echo "  dtb         — Compile device tree sources to DTB/DTBO"
 	@echo "  validate    — Validate DTS syntax"
 	@echo "  validate-dts — Cross-reference DTS GPIOs with firmware and schematic"
+	@echo "  validate-netlist — Cross-reference netlist, manifest, DTS, and firmware pins"
 	@echo "  check       — Check toolchain availability"
 	@echo "  clean       — Remove all build artifacts"
 	@echo ""
@@ -81,6 +82,10 @@ validate:
 validate-dts:
 	@echo "Running DTS cross-reference validation..."
 	python3 tools/validate_dts.py
+
+validate-netlist:
+	@echo "Running netlist cross-reference validation..."
+	python3 tools/validate_netlist.py
 
 # ── Clean ────────────────────────────────────────────────────────────────────
 clean:

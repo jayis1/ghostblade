@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 GhostBlade Project
 """Check markdown links in the GhostBlade project."""
 import re, os, glob
 

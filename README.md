@@ -269,7 +269,10 @@ ghostblade/
 │   └── hil_spi_bridge_test.sh                 # HIL SPI bridge test script
 ├── tools/
 │   ├── generate_gerbers.py                    # Gerber/fab-note generation script
-│   └── check_links.py                         # Markdown link checker
+│   ├── check_links.py                         # External markdown link checker
+│   ├── check_internal_links.py                # Internal markdown link checker
+│   ├── validate_dts.py                        # DTS GPIO cross-reference validator
+│   └── validate_netlist.py                    # Netlist/manifest/DTS/firmware pin cross-reference
 ├── .clang-format                               # Linux kernel-style formatting config
 ├── .codespell.ignore                           # Project-specific spellcheck ignore list
 ├── .editorconfig                               # Cross-editor formatting rules

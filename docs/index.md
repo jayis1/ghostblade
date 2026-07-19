@@ -57,6 +57,16 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | `ghostblade-options.dts` | Optional hardware: GPS (u-blox NEO-M10N on UART2), external LNA, Bluetooth |
 | `ghostblade-sleep-overlay.dts` | Power management: sleep/wake state transitions, brownout thresholds, thermal scaling |
 
+## Validation Tools
+
+|| Tool | Description |
+||------|-------------|
+|| `tools/validate_dts.py` | Cross-reference DTS GPIOs with firmware pins and schematic nets |
+|| `tools/validate_netlist.py` | Cross-reference manifest, KiCad netlist, DTS, firmware pins, and 3D models |
+|| `tools/check_links.py` | Check external markdown links in documentation |
+|| `tools/check_internal_links.py` | Check internal markdown links across the repository |
+|| `tools/generate_gerbers.py` | Generate Gerber files, drill files, and fabrication notes from KiCad PCB |
+
 ## Contributing
 
 | Document | Description |

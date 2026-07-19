@@ -15,7 +15,15 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Added
 
-- Development environment quick-setup guide (`docs/development-environment.md`)
+- Netlist cross-reference validation tool (`tools/validate_netlist.py`) — checks GhostBlade.mf manifest nets against KiCad netlist, DTS GPIO assignments, board_pins.h pin definitions, and 3D model references
+- `validate-netlist` target in top-level Makefile for integrated netlist verification
+- SPDX-License-Identifier and copyright headers added to `tools/validate_dts.py`, `tools/check_links.py`, `tools/check_internal_links.py`
+
+### Changed
+
+- README repository structure updated with all current tools (`check_links.py`, `check_internal_links.py`, `validate_dts.py`, `validate_netlist.py`)
+- Top-level Makefile help text updated to include `validate-netlist` target
+- `stats.json` updated with current line counts and file totals
 - CC1101, NFC, Wi-Fi, and sleep DTS overlay references added to system manifest (`GhostBlade.mf`)
 - LMS7002M driver, sleep/wake, peripheral power, and ADC calibration source files added to README repository structure
 - SPDX license headers verified on all source files

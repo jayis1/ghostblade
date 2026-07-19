@@ -131,10 +131,16 @@ static void watchdog_bark_handler(void)
     /* Put CC1101 in idle */
     cc1101_enter_idle();
 
-    /* Re-kick watchdog — if we got here, the main loop is stuck.
-     * Give the system one more chance before letting the watchdog
-     * reset us. */
+    /* Feed the watchdog FIRST to give us time for a clean shutdown.
+     * The bark fires 1 tick before reset, so we must feed immediately
+     * to get a full timeout window for the remaining operations.
+     * Without this feed, the peripheral shutdown code below may not
+     * complete before the hardware reset occurs. */
     watchdog_kick();
+
+    /* Log diagnostic info: bark handler was invoked.
+     * The main loop will detect the stuck condition and the watchdog
+     * will eventually reset if it remains stuck. */
 }
 
 /* ── Initialization sequence ───────────────────────────────────────────────── */

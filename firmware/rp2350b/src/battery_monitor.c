@@ -174,6 +174,10 @@ static uint16_t adc_read_channel(uint8_t channel) {
     volatile uint32_t *adc_cs = (volatile uint32_t *)(RP2350B_ADC_BASE + ADC_CS);
     const volatile uint32_t *adc_result = (const volatile uint32_t *)(RP2350B_ADC_BASE + ADC_RESULT);
 
+    /* Validate channel to prevent out-of-range access */
+    if (channel > 4)
+        return 0;
+
     /* Select channel (bits 12-17 in CS) */
     uint32_t cs_val = *adc_cs;
     cs_val &= ~(0x1F << 12);       /* Clear channel select */
@@ -187,12 +191,28 @@ static uint16_t adc_read_channel(uint8_t channel) {
 
     *adc_cs = cs_val;
 
+    /* Clear any sticky error flag from a previous conversion before
+     * starting a new one. This prevents stale error bits from causing
+     * the READY bit to be misinterpreted. */
+    *adc_cs |= ADC_CS_ERR_STICKY;
+
     /* Start single conversion */
     *adc_cs |= ADC_CS_START_ONCE;
 
-    /* Wait for conversion to complete */
-    while (!(*adc_cs & ADC_CS_READY))
-        ;
+    /* Wait for conversion to complete with timeout.
+     * The ADC conversion typically takes ~2 µs at 48 MHz ADC clock.
+     * A timeout of 1000 iterations (~10 µs at typical core clock)
+     * is more than sufficient. If the timeout expires, return 0 to
+     * indicate a failed conversion rather than hanging indefinitely.
+     * This prevents a stuck ADC from locking up the entire firmware. */
+    uint32_t timeout = 1000;
+    while (!(*adc_cs & ADC_CS_READY)) {
+        if (--timeout == 0) {
+            /* ADC conversion timed out — return 0 to indicate failure.
+             * Callers should treat 0 as an invalid reading. */
+            return 0;
+        }
+    }
 
     /* Read result (12-bit value, bits 0-11) */
     return (uint16_t)(*adc_result & 0xFFF);

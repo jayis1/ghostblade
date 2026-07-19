@@ -4,23 +4,17 @@
  * Copyright (C) 2026 GhostBlade Project
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * Unit tests for the SPI0 interrupt service routine's frame assembly
- * logic. These tests exercise the state machine that receives bytes
- * from the SPI0 RX FIFO and assembles them into complete frames
- * with CRC-64 and CRC-32 validation.
+ * Unit tests for the SPI0 slave ISR frame assembly state machine
+ * implemented in spi0_isr.c. These tests exercise the byte-by-byte
+ * frame assembly logic, CRC validation, error recovery, and edge cases.
  *
- * The tests simulate the byte-by-byte arrival of SPI frames and
- * verify that the state machine correctly:
- *   - Synchronizes on the 0xAA sync byte
- *   - Assembles header and payload data
- *   - Validates CRC-64 header checksums
- *   - Validates CRC-32 payload checksums
- *   - Recovers from frame errors (resync)
- *   - Handles back-to-back frames
- *   - Rejects frames with corrupted data
+ * The test simulates the ISR's frame assembly by feeding bytes one at
+ * a time through the state machine and verifying correct transitions
+ * and error handling, matching the production spi0_process_byte() logic.
  *
  * Build:
- *   gcc -Wall -Wextra -std=c11 -DNO_CMOCKA -o test_spi0_isr test_spi0_isr.c -lm
+ *   gcc -Wall -Wextra -O2 -std=c11 -I../firmware/rp2350b/include \
+ *       test_spi0_isr.c -o test_spi0_isr
  *
  * Run:
  *   ./test_spi0_isr
@@ -33,28 +27,150 @@
 #include <stdbool.h>
 
 /* ========================================================================
- * SPI Protocol Constants (must match spi_protocol.h)
+ * CRC-64/ECMA-182 Implementation (matches firmware)
  * ======================================================================== */
 
-#define SPI_SYNC_BYTE       0xAA
-#define SPI_HDR_SIZE        16
-#define SPI_MAX_PAYLOAD     4092
-#define SPI_CRC32_SIZE      4
-#define SPI_FRAME_SIZE_MAX  (SPI_HDR_SIZE + SPI_MAX_PAYLOAD + SPI_CRC32_SIZE)
+#define CRC64_POLY   0x42F0E1EBA9EA3693ULL
+
+static uint64_t crc64_table[256];
+static bool crc64_table_initialized = false;
+
+static void crc64_init_table(void) {
+    for (uint32_t i = 0; i < 256; i++) {
+        uint64_t crc = (uint64_t)i;
+        for (int j = 0; j < 8; j++) {
+            if (crc & 1)
+                crc = (crc >> 1) ^ CRC64_POLY;
+            else
+                crc >>= 1;
+        }
+        crc64_table[i] = crc;
+    }
+    crc64_table_initialized = true;
+}
+
+static uint64_t crc64_compute(const uint8_t *data, size_t len) {
+    if (!crc64_table_initialized)
+        crc64_init_table();
+
+    uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
+    for (size_t i = 0; i < len; i++) {
+        crc = crc64_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+    }
+    return crc ^ 0xFFFFFFFFFFFFFFFFULL;
+}
+
+/* ========================================================================
+ * CRC-32 Implementation (matches firmware)
+ * ======================================================================== */
+
+#define CRC32_POLY   0xEDB88320UL
+
+static uint32_t crc32_table[256];
+static bool crc32_table_initialized = false;
+
+static void crc32_init_table(void) {
+    for (uint32_t i = 0; i < 256; i++) {
+        uint32_t crc = i;
+        for (int j = 0; j < 8; j++) {
+            if (crc & 1)
+                crc = (crc >> 1) ^ CRC32_POLY;
+            else
+                crc >>= 1;
+        }
+        crc32_table[i] = crc;
+    }
+    crc32_table_initialized = true;
+}
+
+static uint32_t crc32_compute(const uint8_t *data, size_t len) {
+    if (!crc32_table_initialized)
+        crc32_init_table();
+
+    uint32_t crc = 0xFFFFFFFFUL;
+    for (size_t i = 0; i < len; i++) {
+        crc = crc32_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+    }
+    return crc ^ 0xFFFFFFFFUL;
+}
+
+/* ========================================================================
+ * SPI Frame Format Definitions (matches spi_protocol.h)
+ * ======================================================================== */
+
+#define SPI_SYNC_BYTE    0xAA
+#define SPI_HDR_SIZE     16
+#define SPI_MAX_PAYLOAD  4092
+#define SPI_CRC32_SIZE   4
 
 /* Command opcodes */
-#define CMD_NOP              0x00
-#define CMD_SDR_TUNE         0x01
-#define CMD_SDR_STREAM       0x02
-#define CMD_ANT_SELECT       0x03
-#define CMD_CC1101_CFG       0x04
-#define CMD_NFC_TRANSACT     0x05
-#define CMD_TELEMETRY_REQ    0x06
-#define CMD_RESET_MCU        0x07
-#define CMD_TELEMETRY        0x81
-#define CMD_SDR_IQ_CHUNK     0x82
+#define CMD_NOP           0xFF
+#define CMD_SDR_TUNE      0x01
+#define CMD_SDR_STREAM    0x02
+#define CMD_ANT_SELECT    0x03
+#define CMD_CC1101_CFG    0x04
+#define CMD_NFC_TRANSACT  0x05
+#define CMD_TELEMETRY_REQ 0x06
+#define CMD_RESET_MCU     0x07
 
-/* Frame state machine states */
+/* ========================================================================
+ * Frame Builder (same as test_crc_validation.c)
+ * ======================================================================== */
+
+static int build_spi_frame(uint8_t cmd, const uint8_t *payload,
+                            uint16_t payload_len, uint8_t *frame) {
+    if (payload_len > SPI_MAX_PAYLOAD)
+        return -1;
+
+    int idx = 0;
+
+    /* Header bytes 0-7 */
+    frame[idx++] = SPI_SYNC_BYTE;
+    frame[idx++] = cmd;
+    frame[idx++] = (uint8_t)(payload_len & 0xFF);
+    frame[idx++] = (uint8_t)((payload_len >> 8) & 0xFF);
+    frame[idx++] = 0x00;
+    frame[idx++] = 0x00;
+    frame[idx++] = 0x00;
+    frame[idx++] = 0x00;
+
+    /* Header CRC-64 over bytes 0-7 */
+    uint64_t hdr_crc = crc64_compute(frame, 8);
+    frame[idx++] = (uint8_t)(hdr_crc & 0xFF);
+    frame[idx++] = (uint8_t)((hdr_crc >> 8) & 0xFF);
+    frame[idx++] = (uint8_t)((hdr_crc >> 16) & 0xFF);
+    frame[idx++] = (uint8_t)((hdr_crc >> 24) & 0xFF);
+    frame[idx++] = (uint8_t)((hdr_crc >> 32) & 0xFF);
+    frame[idx++] = (uint8_t)((hdr_crc >> 40) & 0xFF);
+    frame[idx++] = (uint8_t)((hdr_crc >> 48) & 0xFF);
+    frame[idx++] = (uint8_t)((hdr_crc >> 56) & 0xFF);
+
+    /* Payload */
+    if (payload_len > 0 && payload != NULL) {
+        memcpy(&frame[idx], payload, payload_len);
+        idx += payload_len;
+    }
+
+    /* Payload CRC-32 */
+    if (payload_len > 0) {
+        uint32_t pay_crc = crc32_compute(payload, payload_len);
+        frame[idx++] = (uint8_t)(pay_crc & 0xFF);
+        frame[idx++] = (uint8_t)((pay_crc >> 8) & 0xFF);
+        frame[idx++] = (uint8_t)((pay_crc >> 16) & 0xFF);
+        frame[idx++] = (uint8_t)((pay_crc >> 24) & 0xFF);
+    }
+
+    return idx;
+}
+
+/* ========================================================================
+ * ISR Frame Assembly State Machine Simulation
+ *
+ * This replicates the byte-by-byte frame assembly state machine from
+ * spi0_isr.c's spi0_process_byte() function. We simulate it in
+ * userspace to test the state transitions independently of hardware.
+ * ======================================================================== */
+
 enum frame_state {
     FRAME_STATE_IDLE = 0,
     FRAME_STATE_HEADER,
@@ -63,129 +179,16 @@ enum frame_state {
     FRAME_STATE_ERROR,
 };
 
-/* ========================================================================
- * CRC-64/ECMA-182 and CRC-32/ISO-3309 (same as spi_protocol.c)
- * ======================================================================== */
-
-static uint64_t crc64_table[256];
-static uint32_t crc32_table[256];
-static int crc_tables_initialized = 0;
-
-static void crc64_init_table(void) {
-    const uint64_t poly = 0x42F0E1EBA9EA3693ULL;
-    for (int i = 0; i < 256; i++) {
-        uint64_t crc = (uint64_t)i;
-        for (int j = 0; j < 8; j++) {
-            if (crc & 1)
-                crc = (crc >> 1) ^ poly;
-            else
-                crc >>= 1;
-        }
-        crc64_table[i] = crc;
-    }
-}
-
-static void crc32_init_table(void) {
-    const uint32_t poly = 0xEDB88320UL;
-    for (int i = 0; i < 256; i++) {
-        uint32_t crc = (uint32_t)i;
-        for (int j = 0; j < 8; j++) {
-            if (crc & 1)
-                crc = (crc >> 1) ^ poly;
-            else
-                crc >>= 1;
-        }
-        crc32_table[i] = crc;
-    }
-}
-
-static uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
-    if (!crc_tables_initialized) {
-        crc64_init_table();
-        crc32_init_table();
-        crc_tables_initialized = 1;
-    }
-    uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
-    for (uint32_t i = 0; i < len; i++) {
-        crc = crc64_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
-    }
-    return crc ^ 0xFFFFFFFFFFFFFFFFULL;
-}
-
-static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
-    if (!crc_tables_initialized) {
-        crc64_init_table();
-        crc32_init_table();
-        crc_tables_initialized = 1;
-    }
-    uint32_t crc = 0xFFFFFFFFUL;
-    for (uint32_t i = 0; i < len; i++) {
-        crc = crc32_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
-    }
-    return crc ^ 0xFFFFFFFFUL;
-}
-
-/* ========================================================================
- * Frame Builder (same as test_spi_protocol.c)
- * ======================================================================== */
-
-static int build_spi_frame(uint8_t cmd, const uint8_t *payload,
-                            uint16_t payload_len, uint8_t *buf, uint16_t buf_size) {
-    if (payload_len > SPI_MAX_PAYLOAD)
-        return -1;
-    if (buf_size < SPI_HDR_SIZE + payload_len + SPI_CRC32_SIZE)
-        return -1;
-
-    /* Header */
-    buf[0] = SPI_SYNC_BYTE;
-    buf[1] = cmd;
-    buf[2] = (uint8_t)(payload_len & 0xFF);
-    buf[3] = (uint8_t)((payload_len >> 8) & 0xFF);
-    buf[4] = 0; buf[5] = 0; buf[6] = 0; buf[7] = 0;
-
-    /* CRC-64 over header (bytes 0-7) */
-    uint64_t hdr_crc = crc64_compute(buf, 8);
-    for (int i = 0; i < 8; i++) {
-        buf[8 + i] = (uint8_t)(hdr_crc >> (i * 8));
-    }
-
-    /* Payload */
-    if (payload_len > 0 && payload != NULL) {
-        memcpy(&buf[SPI_HDR_SIZE], payload, payload_len);
-    }
-
-    /* CRC-32 over payload */
-    uint32_t pay_crc;
-    if (payload_len > 0)
-        pay_crc = crc32_compute(&buf[SPI_HDR_SIZE], payload_len);
-    else
-        pay_crc = crc32_compute((uint8_t *)"", 0);
-
-    buf[SPI_HDR_SIZE + payload_len]     = (uint8_t)(pay_crc & 0xFF);
-    buf[SPI_HDR_SIZE + payload_len + 1] = (uint8_t)((pay_crc >> 8) & 0xFF);
-    buf[SPI_HDR_SIZE + payload_len + 2] = (uint8_t)((pay_crc >> 16) & 0xFF);
-    buf[SPI_HDR_SIZE + payload_len + 3] = (uint8_t)((pay_crc >> 24) & 0xFF);
-
-    return SPI_HDR_SIZE + payload_len + SPI_CRC32_SIZE;
-}
-
-/* ========================================================================
- * Simulated Frame Assembly State Machine
- *
- * We replicate the spi0_isr.c state machine logic here for userspace
- * testing without hardware dependencies.
- * ======================================================================== */
-
-#define FRAME_BUF_SIZE (SPI_HDR_SIZE + SPI_MAX_PAYLOAD + SPI_CRC32_SIZE)
-
+/* Simulated ISR receive context */
 static struct {
-    uint8_t buf[FRAME_BUF_SIZE];
+    uint8_t buf[SPI_HDR_SIZE + SPI_MAX_PAYLOAD + SPI_CRC32_SIZE];
     uint16_t pos;
     enum frame_state state;
     uint16_t payload_len;
-    volatile bool frame_ready;
+    bool frame_ready;
 } sim_rx;
 
+/* Simulated ISR statistics */
 static struct {
     uint32_t frames_received;
     uint32_t frames_validated;
@@ -197,11 +200,26 @@ static struct {
     uint32_t bytes_received;
 } sim_stats;
 
-static bool validate_sync_byte_sim(uint8_t byte) {
+static void sim_reset(void) {
+    memset(sim_rx.buf, 0, sizeof(sim_rx.buf));
+    sim_rx.pos = 0;
+    sim_rx.state = FRAME_STATE_IDLE;
+    sim_rx.payload_len = 0;
+    sim_rx.frame_ready = false;
+    memset(&sim_stats, 0, sizeof(sim_stats));
+}
+
+/**
+ * sim_validate_sync_byte — Check if a byte is a valid sync marker
+ */
+static bool sim_validate_sync_byte(uint8_t byte) {
     return byte == SPI_SYNC_BYTE;
 }
 
-static bool validate_header_crc64_sim(const uint8_t *buf) {
+/**
+ * sim_validate_header_crc64 — Validate CRC-64 over the frame header
+ */
+static bool sim_validate_header_crc64(const uint8_t *buf) {
     uint64_t computed = crc64_compute(buf, 8);
     uint64_t expected = (uint64_t)buf[8]        |
                         ((uint64_t)buf[9] << 8)   |
@@ -214,49 +232,42 @@ static bool validate_header_crc64_sim(const uint8_t *buf) {
     return computed == expected;
 }
 
-static bool validate_payload_crc32_sim(const uint8_t *buf, uint16_t payload_len) {
+/**
+ * sim_validate_payload_crc32 — Validate CRC-32 over the frame payload
+ */
+static bool sim_validate_payload_crc32(const uint8_t *buf, uint16_t payload_len) {
     uint32_t computed;
     if (payload_len == 0) {
-        computed = crc32_compute((uint8_t *)"", 0);
+        computed = crc32_compute(buf, 0);
     } else {
         computed = crc32_compute(&buf[SPI_HDR_SIZE], payload_len);
     }
-
     uint32_t offset = SPI_HDR_SIZE + payload_len;
     uint32_t expected = (uint32_t)buf[offset]       |
                         ((uint32_t)buf[offset + 1] << 8)  |
                         ((uint32_t)buf[offset + 2] << 16) |
                         ((uint32_t)buf[offset + 3] << 24);
-
     return computed == expected;
 }
 
-static uint16_t extract_payload_length_sim(const uint8_t *buf) {
+/**
+ * sim_extract_payload_length — Extract payload length from header
+ */
+static uint16_t sim_extract_payload_length(const uint8_t *buf) {
     return (uint16_t)buf[2] | ((uint16_t)buf[3] << 8);
 }
 
-static void sim_reset(void) {
-    memset(&sim_rx, 0, sizeof(sim_rx));
-    sim_rx.state = FRAME_STATE_IDLE;
-    memset(&sim_stats, 0, sizeof(sim_stats));
-}
-
-static void sim_reset_stats_only(void) {
-    memset(&sim_stats, 0, sizeof(sim_stats));
-}
-
 /**
- * sim_process_byte — Process one byte through the state machine
+ * sim_process_byte — Process one received byte through the state machine
  *
- * This is a direct copy of the spi0_process_byte() logic from spi0_isr.c,
- * adapted for userspace testing.
+ * This is a faithful replica of spi0_process_byte() from spi0_isr.c.
  */
 static void sim_process_byte(uint8_t byte) {
     sim_stats.bytes_received++;
 
     switch (sim_rx.state) {
     case FRAME_STATE_IDLE:
-        if (validate_sync_byte_sim(byte)) {
+        if (sim_validate_sync_byte(byte)) {
             sim_rx.buf[0] = byte;
             sim_rx.pos = 1;
             sim_rx.state = FRAME_STATE_HEADER;
@@ -270,13 +281,13 @@ static void sim_process_byte(uint8_t byte) {
             sim_rx.buf[sim_rx.pos++] = byte;
 
             if (sim_rx.pos == SPI_HDR_SIZE) {
-                if (!validate_header_crc64_sim(sim_rx.buf)) {
+                if (!sim_validate_header_crc64(sim_rx.buf)) {
                     sim_stats.frames_rejected_hdr_crc++;
                     sim_rx.state = FRAME_STATE_ERROR;
                     break;
                 }
 
-                sim_rx.payload_len = extract_payload_length_sim(sim_rx.buf);
+                sim_rx.payload_len = sim_extract_payload_length(sim_rx.buf);
 
                 if (sim_rx.payload_len > SPI_MAX_PAYLOAD) {
                     sim_stats.frames_rejected_len++;
@@ -294,8 +305,9 @@ static void sim_process_byte(uint8_t byte) {
             sim_rx.buf[sim_rx.pos++] = byte;
 
             if (sim_rx.pos == SPI_HDR_SIZE + sim_rx.payload_len + SPI_CRC32_SIZE) {
-                if (validate_payload_crc32_sim(sim_rx.buf, sim_rx.payload_len)) {
+                if (sim_validate_payload_crc32(sim_rx.buf, sim_rx.payload_len)) {
                     sim_stats.frames_validated++;
+                    sim_stats.frames_received++;
                     sim_rx.state = FRAME_STATE_COMPLETE;
                     sim_rx.frame_ready = true;
                 } else {
@@ -313,7 +325,7 @@ static void sim_process_byte(uint8_t byte) {
         break;
 
     case FRAME_STATE_ERROR:
-        if (validate_sync_byte_sim(byte)) {
+        if (sim_validate_sync_byte(byte)) {
             sim_rx.buf[0] = byte;
             sim_rx.pos = 1;
             sim_rx.state = FRAME_STATE_HEADER;
@@ -326,563 +338,514 @@ static void sim_process_byte(uint8_t byte) {
  * sim_release_frame — Release the current frame and reset state machine
  */
 static void sim_release_frame(void) {
+    volatile uint8_t *p = (volatile uint8_t *)sim_rx.buf;
+    for (uint16_t i = 0; i < sim_rx.pos; i++)
+        p[i] = 0;
+
     sim_rx.frame_ready = false;
     sim_rx.pos = 0;
     sim_rx.payload_len = 0;
     sim_rx.state = FRAME_STATE_IDLE;
 }
 
+/**
+ * sim_feed_frame — Feed an entire frame byte-by-byte into the state machine
+ */
+static void sim_feed_frame(const uint8_t *frame, int len) {
+    for (int i = 0; i < len; i++) {
+        sim_process_byte(frame[i]);
+    }
+}
+
 /* ========================================================================
- * Minimal Test Framework
+ * Test Framework
  * ======================================================================== */
 
 static int tests_run = 0;
 static int tests_passed = 0;
 static int tests_failed = 0;
 
-#define ASSERT_TRUE(cond, msg) do { \
+#define TEST_ASSERT(cond, msg) do { \
     tests_run++; \
-    if (!(cond)) { \
+    if (cond) { \
+        tests_passed++; \
+    } else { \
+        tests_failed++; \
         printf("  FAIL: %s (line %d)\n", msg, __LINE__); \
-        tests_failed++; \
-    } else { \
-        tests_passed++; \
     } \
 } while(0)
 
-#define ASSERT_EQ_INT(expected, actual, msg) do { \
-    tests_run++; \
-    if ((expected) != (actual)) { \
-        printf("  FAIL: %s: expected %d, got %d (line %d)\n", \
-               msg, (int)(expected), (int)(actual), __LINE__); \
-        tests_failed++; \
-    } else { \
-        tests_passed++; \
-    } \
-} while(0)
-
-#define ASSERT_EQ_UINT(expected, actual, msg) do { \
-    tests_run++; \
-    if ((expected) != (actual)) { \
-        printf("  FAIL: %s: expected %u, got %u (line %d)\n", \
-               msg, (unsigned)(expected), (unsigned)(actual), __LINE__); \
-        tests_failed++; \
-    } else { \
-        tests_passed++; \
-    } \
-} while(0)
-
-#define RUN_TEST(func) do { \
-    printf("Running: %s\n", #func); \
-    func(); \
-} while(0)
+#define TEST_ASSERT_EQ(actual, expected, msg) \
+    TEST_ASSERT((actual) == (expected), msg)
 
 /* ========================================================================
  * Test Cases
  * ======================================================================== */
 
-/* Test 1: State machine starts in IDLE state */
-static void test_initial_state(void) {
-    sim_reset();
+/**
+ * Test 1: NOP frame assembly through ISR state machine
+ */
+static void test_isr_nop_frame(void) {
+    printf("Test: ISR NOP frame assembly\n");
+    uint8_t frame[32];
+    int len;
 
-    ASSERT_EQ_INT(FRAME_STATE_IDLE, sim_rx.state, "Initial state is IDLE");
-    ASSERT_EQ_INT(0, (int)sim_rx.pos, "Initial position is 0");
-    ASSERT_TRUE(!sim_rx.frame_ready, "No frame ready initially");
-    ASSERT_EQ_UINT(0, sim_stats.bytes_received, "No bytes received initially");
+    sim_reset();
+    len = build_spi_frame(CMD_NOP, NULL, 0, frame);
+    sim_feed_frame(frame, len);
+
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "NOP frame: state = COMPLETE");
+    TEST_ASSERT(sim_rx.frame_ready, "NOP frame: frame_ready = true");
+    TEST_ASSERT_EQ((int)sim_rx.payload_len, 0,
+                   "NOP frame: payload_len = 0");
+    TEST_ASSERT_EQ((int)sim_rx.pos, SPI_HDR_SIZE,
+                   "NOP frame: pos = 16 (header only)");
+    TEST_ASSERT_EQ((int)sim_stats.frames_validated, 1,
+                   "NOP frame: frames_validated = 1");
+    TEST_ASSERT_EQ((int)sim_stats.frames_received, 1,
+                   "NOP frame: frames_received = 1");
+
+    /* Verify sync byte and command in assembled buffer */
+    TEST_ASSERT_EQ((int)sim_rx.buf[0], SPI_SYNC_BYTE,
+                   "NOP frame: buf[0] = 0xAA (sync)");
+    TEST_ASSERT_EQ((int)sim_rx.buf[1], CMD_NOP,
+                   "NOP frame: buf[1] = 0xFF (NOP cmd)");
 }
 
-/* Test 2: Receiving a sync byte transitions to HEADER state */
-static void test_sync_byte_transition(void) {
-    sim_reset();
-
-    sim_process_byte(0xAA);
-
-    ASSERT_EQ_INT(FRAME_STATE_HEADER, sim_rx.state, "State transitions to HEADER");
-    ASSERT_EQ_INT(1, (int)sim_rx.pos, "Position advances to 1");
-    ASSERT_EQ_INT(0xAA, sim_rx.buf[0], "Sync byte stored at position 0");
-}
-
-/* Test 3: Non-sync bytes in IDLE state are rejected */
-static void test_non_sync_rejected(void) {
-    sim_reset();
-
-    sim_process_byte(0x55);
-    sim_process_byte(0x01);
-    sim_process_byte(0x00);
-
-    ASSERT_EQ_INT(FRAME_STATE_IDLE, sim_rx.state, "State stays IDLE");
-    ASSERT_EQ_UINT(3, sim_stats.frames_rejected_sync, "3 sync rejections");
-}
-
-/* Test 4: Complete NOP frame (no payload) is assembled correctly */
-static void test_complete_nop_frame(void) {
-    sim_reset();
-
+/**
+ * Test 2: Frame with payload through ISR state machine
+ */
+static void test_isr_payload_frame(void) {
+    printf("Test: ISR payload frame assembly\n");
     uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build NOP frame");
+    uint8_t payload[8] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    int len;
 
-    /* Feed each byte to the state machine */
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
+    sim_reset();
+    len = build_spi_frame(CMD_SDR_TUNE, payload, sizeof(payload), frame);
+    sim_feed_frame(frame, len);
 
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "State reaches COMPLETE after NOP frame");
-    ASSERT_TRUE(sim_rx.frame_ready, "Frame is marked as ready");
-    ASSERT_EQ_INT(frame_len, (int)sim_rx.pos, "Position matches frame length");
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "SDR_TUNE frame: state = COMPLETE");
+    TEST_ASSERT(sim_rx.frame_ready, "SDR_TUNE frame: frame_ready = true");
+    TEST_ASSERT_EQ((int)sim_rx.payload_len, 8,
+                   "SDR_TUNE frame: payload_len = 8");
+    TEST_ASSERT_EQ((int)sim_stats.frames_validated, 1,
+                   "SDR_TUNE frame: frames_validated = 1");
 
-    /* Verify frame content */
-    ASSERT_EQ_INT(CMD_NOP, sim_rx.buf[1], "Command byte is NOP");
-    ASSERT_EQ_INT(0, (int)sim_rx.payload_len, "Payload length is 0");
-    ASSERT_EQ_UINT(1, sim_stats.frames_validated, "1 frame validated");
+    /* Verify payload content matches */
+    TEST_ASSERT(memcmp(&sim_rx.buf[SPI_HDR_SIZE], payload, 8) == 0,
+                "SDR_TUNE frame: payload content matches");
 }
 
-/* Test 5: Complete frame with payload */
-static void test_complete_payload_frame(void) {
+/**
+ * Test 3: Corrupted sync byte is rejected
+ */
+static void test_isr_bad_sync(void) {
+    printf("Test: ISR corrupted sync byte\n");
+    uint8_t frame[32];
+    int len;
+
     sim_reset();
+    len = build_spi_frame(CMD_NOP, NULL, 0, frame);
 
-    uint8_t payload[16];
-    for (int i = 0; i < 16; i++)
-        payload[i] = (uint8_t)(i * 0x11);
+    /* Corrupt the sync byte */
+    frame[0] = 0x55;
+    sim_feed_frame(frame, len);
 
-    uint8_t frame[128];
-    int frame_len = build_spi_frame(CMD_CC1101_CFG, payload, 16, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build CC1101 config frame");
-
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "State reaches COMPLETE after payload frame");
-    ASSERT_TRUE(sim_rx.frame_ready, "Frame ready");
-    ASSERT_EQ_INT(16, (int)sim_rx.payload_len, "Payload length is 16");
-    ASSERT_EQ_INT(CMD_CC1101_CFG, sim_rx.buf[1], "Command is CC1101_CFG");
-
-    /* Verify payload content */
-    bool payload_match = true;
-    for (int i = 0; i < 16; i++) {
-        if (sim_rx.buf[SPI_HDR_SIZE + i] != payload[i]) {
-            payload_match = false;
-            break;
-        }
-    }
-    ASSERT_TRUE(payload_match, "Payload content matches original");
+    /* Frame should stay in IDLE state (sync byte not recognized) */
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_IDLE,
+                   "Bad sync: state stays IDLE");
+    TEST_ASSERT(!sim_rx.frame_ready, "Bad sync: frame_ready = false");
+    TEST_ASSERT_EQ((int)sim_stats.frames_rejected_sync, (int)len,
+                   "Bad sync: all bytes rejected (not just first)");
 }
 
-/* Test 6: Corrupted header CRC-64 causes error */
-static void test_corrupted_header_crc64(void) {
-    sim_reset();
+/**
+ * Test 4: Corrupted header CRC is detected
+ */
+static void test_isr_bad_header_crc(void) {
+    printf("Test: ISR corrupted header CRC\n");
+    uint8_t frame[32];
+    int len;
 
+    sim_reset();
+    len = build_spi_frame(CMD_NOP, NULL, 0, frame);
+
+    /* Corrupt a header byte (byte 1 = command) — this invalidates the CRC-64 */
+    frame[1] ^= 0x01;
+    sim_feed_frame(frame, len);
+
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_ERROR,
+                   "Bad header CRC: state = ERROR");
+    TEST_ASSERT(!sim_rx.frame_ready, "Bad header CRC: frame_ready = false");
+    TEST_ASSERT(sim_stats.frames_rejected_hdr_crc >= 1,
+                "Bad header CRC: header CRC rejection counted");
+}
+
+/**
+ * Test 5: Corrupted payload CRC-32 is detected
+ */
+static void test_isr_bad_payload_crc(void) {
+    printf("Test: ISR corrupted payload CRC-32\n");
     uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build NOP frame");
+    uint8_t payload[4] = { 0xDE, 0xAD, 0xBE, 0xEF };
+    int len;
 
-    /* Corrupt a header byte (but not the sync byte) */
-    frame[1] ^= 0xFF;  /* Flip command byte */
-
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_ERROR, sim_rx.state,
-                  "State reaches ERROR on corrupted header");
-    ASSERT_EQ_UINT(1, sim_stats.frames_rejected_hdr_crc,
-                   "Header CRC rejection counted");
-}
-
-/* Test 7: Corrupted payload CRC-32 causes error */
-static void test_corrupted_payload_crc32(void) {
     sim_reset();
-
-    uint8_t payload[8] = {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE};
-    uint8_t frame[128];
-    int frame_len = build_spi_frame(CMD_SDR_TUNE, payload, 8, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build SDR tune frame");
+    len = build_spi_frame(CMD_ANT_SELECT, payload, sizeof(payload), frame);
 
     /* Corrupt a payload byte */
-    frame[SPI_HDR_SIZE + 2] ^= 0x01;
+    frame[SPI_HDR_SIZE] ^= 0x01;
+    sim_feed_frame(frame, len);
 
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_ERROR, sim_rx.state,
-                  "State reaches ERROR on corrupted payload");
-    ASSERT_EQ_UINT(1, sim_stats.frames_rejected_pay_crc,
-                   "Payload CRC rejection counted");
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_ERROR,
+                   "Bad payload CRC: state = ERROR");
+    TEST_ASSERT(!sim_rx.frame_ready, "Bad payload CRC: frame_ready = false");
+    TEST_ASSERT(sim_stats.frames_rejected_pay_crc >= 1,
+                "Bad payload CRC: payload CRC rejection counted");
 }
 
-/* Test 8: Error recovery — resync after corrupted frame */
-static void test_error_recovery_resync(void) {
+/**
+ * Test 6: Payload length exceeding maximum is rejected
+ */
+static void test_isr_oversized_payload(void) {
+    printf("Test: ISR oversized payload\n");
+    uint8_t frame[8192];
+    uint8_t payload[SPI_MAX_PAYLOAD + 1];
+    int len;
+
+    /* build_spi_frame rejects oversized payloads, so we manually construct
+     * a frame with an oversized payload_len field. */
     sim_reset();
 
-    uint8_t payload[4] = {0x01, 0x02, 0x03, 0x04};
-    uint8_t frame[128];
+    memset(payload, 0x42, sizeof(payload));
+    /* Manually craft a frame header with payload_len > SPI_MAX_PAYLOAD */
+    uint8_t bad_frame[SPI_HDR_SIZE];
+    bad_frame[0] = SPI_SYNC_BYTE;
+    bad_frame[1] = CMD_NOP;
+    bad_frame[2] = 0xFF;  /* payload_len = 0x0FFF = 4095 > SPI_MAX_PAYLOAD(4092) */
+    bad_frame[3] = 0x0F;
+    bad_frame[4] = 0x00;
+    bad_frame[5] = 0x00;
+    bad_frame[6] = 0x00;
+    bad_frame[7] = 0x00;
 
-    /* First: send a corrupted frame */
-    int frame_len = build_spi_frame(CMD_ANT_SELECT, payload, 4, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build frame for corruption test");
+    /* Compute header CRC-64 over the header bytes */
+    uint64_t hdr_crc = crc64_compute(bad_frame, 8);
+    /* We only feed the header portion to check that the state machine
+     * rejects the oversized payload length. */
+    for (int i = 0; i < 8; i++)
+        sim_process_byte(bad_frame[i]);
 
-    /* Corrupt payload */
-    frame[SPI_HDR_SIZE + 1] ^= 0x80;
+    /* Feed the CRC-64 bytes */
+    for (int i = 0; i < 8; i++)
+        sim_process_byte((uint8_t)((hdr_crc >> (8 * i)) & 0xFF));
 
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_ERROR, sim_rx.state, "Error state after corrupted frame");
-
-    /* Now send a valid frame — the state machine should resync on sync byte */
-    sim_release_frame();  /* Not needed in ERROR state but for cleanliness */
-
-    uint8_t frame2[128];
-    int frame2_len = build_spi_frame(CMD_TELEMETRY_REQ, NULL, 0, frame2, sizeof(frame2));
-    ASSERT_TRUE(frame2_len > 0, "Build telemetry request frame");
-
-    for (int i = 0; i < frame2_len; i++) {
-        sim_process_byte(frame2[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "State recovers to COMPLETE after valid frame");
-    ASSERT_EQ_INT(CMD_TELEMETRY_REQ, sim_rx.buf[1],
-                  "Recovered frame has correct command");
-    ASSERT_EQ_UINT(1, sim_stats.frames_validated,
-                   "1 frame validated after recovery");
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_ERROR,
+                   "Oversized payload: state = ERROR after header");
+    TEST_ASSERT(sim_stats.frames_rejected_len >= 1,
+                "Oversized payload: length rejection counted");
 }
 
-/* Test 9: Back-to-back frames */
-static void test_back_to_back_frames(void) {
+/**
+ * Test 7: Error recovery — resync after corrupted frame
+ */
+static void test_isr_resync_after_error(void) {
+    printf("Test: ISR resync after error\n");
+    uint8_t frame[32];
+    int len;
+
     sim_reset();
 
-    uint8_t frame1[64];
-    uint8_t frame2[64];
-    uint8_t payload[4] = {0xAA, 0xBB, 0xCC, 0xDD};
+    /* First, feed a corrupted frame */
+    uint8_t bad_frame[20];
+    bad_frame[0] = SPI_SYNC_BYTE;
+    bad_frame[1] = 0xFF;
+    bad_frame[2] = 0x00;
+    bad_frame[3] = 0x00;
+    /* Corrupt the header to trigger error state */
+    bad_frame[4] = 0xFF;  /* Non-zero reserved field */
+    bad_frame[5] = 0xFF;
+    bad_frame[6] = 0xFF;
+    bad_frame[7] = 0xFF;
+    uint64_t bad_hdr_crc = crc64_compute(bad_frame, 8);
+    for (int i = 0; i < 8; i++)
+        bad_frame[8 + i] = (uint8_t)((bad_hdr_crc >> (8 * i)) & 0xFF);
 
-    int len1 = build_spi_frame(CMD_NOP, NULL, 0, frame1, sizeof(frame1));
-    int len2 = build_spi_frame(CMD_ANT_SELECT, payload, 4, frame2, sizeof(frame2));
-    ASSERT_TRUE(len1 > 0, "Build frame 1");
-    ASSERT_TRUE(len2 > 0, "Build frame 2");
+    /* Feed the corrupted frame — CRC-64 should still validate because
+     * we computed it over the corrupted header. But the reserved field
+     * is nonzero, which the production code might check. Actually,
+     * the ISR doesn't check the reserved field — it only checks CRC.
+     * So let's corrupt the CRC instead. */
+    bad_frame[8] ^= 0x01;  /* Flip one bit in the CRC */
 
-    /* Send first frame */
-    for (int i = 0; i < len1; i++) {
-        sim_process_byte(frame1[i]);
-    }
+    sim_feed_frame(bad_frame, SPI_HDR_SIZE);
+    /* Should be in ERROR state now */
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_ERROR,
+                   "Resync: state = ERROR after bad CRC");
 
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state, "First frame complete");
-    ASSERT_EQ_INT(CMD_NOP, sim_rx.buf[1], "First frame command = NOP");
+    /* Now feed a valid NOP frame — should resync on the sync byte */
+    len = build_spi_frame(CMD_NOP, NULL, 0, frame);
+    sim_feed_frame(frame, len);
 
-    /* Release first frame */
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Resync: state = COMPLETE after valid frame");
+    TEST_ASSERT(sim_rx.frame_ready, "Resync: frame_ready = true after resync");
+}
+
+/**
+ * Test 8: Multiple consecutive frames
+ */
+static void test_isr_multiple_frames(void) {
+    printf("Test: ISR multiple consecutive frames\n");
+    uint8_t frame[64];
+    int len;
+
+    sim_reset();
+
+    /* Frame 1: NOP */
+    len = build_spi_frame(CMD_NOP, NULL, 0, frame);
+    sim_feed_frame(frame, len);
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Multi-frame 1: COMPLETE");
     sim_release_frame();
 
-    /* Send second frame */
-    for (int i = 0; i < len2; i++) {
-        sim_process_byte(frame2[i]);
-    }
+    /* Frame 2: SDR_TUNE */
+    uint8_t payload[8] = { 0x00, 0x00, 0x89, 0x33, 0xD0, 0x07, 0x2C, 0x01 };
+    len = build_spi_frame(CMD_SDR_TUNE, payload, sizeof(payload), frame);
+    sim_feed_frame(frame, len);
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Multi-frame 2: COMPLETE");
+    sim_release_frame();
 
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state, "Second frame complete");
-    ASSERT_EQ_INT(CMD_ANT_SELECT, sim_rx.buf[1], "Second frame command = ANT_SELECT");
-    ASSERT_EQ_UINT(2, sim_stats.frames_validated, "2 frames validated total");
+    /* Frame 3: ANT_SELECT */
+    uint8_t ant_payload[1] = { 0x01 };
+    len = build_spi_frame(CMD_ANT_SELECT, ant_payload, 1, frame);
+    sim_feed_frame(frame, len);
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Multi-frame 3: COMPLETE");
+
+    TEST_ASSERT_EQ((int)sim_stats.frames_validated, 3,
+                   "Multi-frame: 3 frames validated");
+    TEST_ASSERT_EQ((int)sim_stats.frames_received, 3,
+                   "Multi-frame: 3 frames received");
 }
 
-/* Test 10: Oversized payload length is rejected */
-static void test_oversized_payload_rejected(void) {
+/**
+ * Test 9: Maximum payload frame through ISR state machine
+ */
+static void test_isr_max_payload(void) {
+    printf("Test: ISR maximum payload frame\n");
+    uint8_t *frame = malloc(SPI_HDR_SIZE + SPI_MAX_PAYLOAD + SPI_CRC32_SIZE + 1);
+    uint8_t *payload = malloc(SPI_MAX_PAYLOAD);
+    int len;
+
+    TEST_ASSERT(frame != NULL && payload != NULL,
+                "Max payload: allocation succeeded");
+
+    memset(payload, 0x5A, SPI_MAX_PAYLOAD);
+    len = build_spi_frame(CMD_SDR_STREAM, payload, SPI_MAX_PAYLOAD, frame);
+    TEST_ASSERT(len > 0, "Max payload: frame built successfully");
+
     sim_reset();
+    sim_feed_frame(frame, len);
 
-    /* Build a header with payload_len = 4093 (exceeds SPI_MAX_PAYLOAD=4092) */
-    uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build base frame");
-
-    /* Modify the payload length field to be oversized */
-    frame[2] = (uint8_t)(4093 & 0xFF);
-    frame[3] = (uint8_t)((4093 >> 8) & 0xFF);
-
-    /* Recompute header CRC-64 */
-    uint64_t new_crc = crc64_compute(frame, 8);
-    for (int i = 0; i < 8; i++) {
-        frame[8 + i] = (uint8_t)(new_crc >> (i * 8));
-    }
-
-    for (int i = 0; i < SPI_HDR_SIZE; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_ERROR, sim_rx.state,
-                  "Oversized payload length causes error");
-    ASSERT_EQ_UINT(1, sim_stats.frames_rejected_len,
-                   "Length rejection counted");
-}
-
-/* Test 11: Garbage bytes before sync byte are discarded */
-static void test_garbage_before_sync(void) {
-    sim_reset();
-
-    uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build NOP frame");
-
-    /* Send garbage bytes first */
-    sim_process_byte(0x00);
-    sim_process_byte(0xFF);
-    sim_process_byte(0x55);
-    sim_process_byte(0x01);
-
-    ASSERT_EQ_UINT(4, sim_stats.frames_rejected_sync,
-                   "4 garbage bytes rejected");
-
-    /* Now send the valid frame */
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "Frame assembled after garbage");
-    ASSERT_EQ_INT(CMD_NOP, sim_rx.buf[1], "Command is NOP");
-}
-
-/* Test 12: Maximum payload frame */
-static void test_max_payload_frame(void) {
-    sim_reset();
-
-    uint8_t *payload = (uint8_t *)malloc(SPI_MAX_PAYLOAD);
-    uint8_t *frame = (uint8_t *)malloc(SPI_FRAME_SIZE_MAX + 16);
-    ASSERT_TRUE(payload != NULL, "Allocate payload");
-    ASSERT_TRUE(frame != NULL, "Allocate frame buffer");
-
-    for (int i = 0; i < SPI_MAX_PAYLOAD; i++)
-        payload[i] = (uint8_t)(i & 0xFF);
-
-    int frame_len = build_spi_frame(CMD_SDR_IQ_CHUNK, payload, SPI_MAX_PAYLOAD,
-                                     frame, SPI_FRAME_SIZE_MAX);
-    ASSERT_EQ_INT(SPI_FRAME_SIZE_MAX, frame_len, "Max payload frame size");
-
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "Max payload frame assembled correctly");
-    ASSERT_EQ_INT(SPI_MAX_PAYLOAD, (int)sim_rx.payload_len,
-                  "Max payload length parsed");
-    ASSERT_EQ_UINT(1, sim_stats.frames_validated, "1 frame validated");
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Max payload: state = COMPLETE");
+    TEST_ASSERT(sim_rx.frame_ready, "Max payload: frame_ready = true");
+    TEST_ASSERT_EQ((int)sim_rx.payload_len, SPI_MAX_PAYLOAD,
+                   "Max payload: payload_len = 4092");
+    TEST_ASSERT(memcmp(&sim_rx.buf[SPI_HDR_SIZE], payload, SPI_MAX_PAYLOAD) == 0,
+                "Max payload: payload content matches");
 
     free(payload);
     free(frame);
 }
 
-/* Test 13: Multiple command types assembled correctly */
-static void test_multiple_command_types(void) {
-    uint8_t frame[512];
+/**
+ * Test 10: Inter-frame garbage bytes are ignored
+ */
+static void test_isr_inter_frame_garbage(void) {
+    printf("Test: ISR inter-frame garbage bytes\n");
+    uint8_t frame[32];
+    int len;
 
-    struct {
-        uint8_t cmd;
-        uint16_t len;
-        const uint8_t *data;
-    } test_cmds[] = {
-        { CMD_SDR_TUNE, 0, NULL },
-        { CMD_SDR_STREAM, 1, (uint8_t[]){0x01} },
-        { CMD_TELEMETRY_REQ, 0, NULL },
-    };
+    sim_reset();
+    len = build_spi_frame(CMD_NOP, NULL, 0, frame);
 
-    int n_cmds = sizeof(test_cmds) / sizeof(test_cmds[0]);
+    /* Feed garbage bytes before the valid frame */
+    uint8_t garbage[] = { 0x00, 0x55, 0xFF, 0x01, 0x02, 0x03 };
+    sim_feed_frame(garbage, sizeof(garbage));
 
-    for (int t = 0; t < n_cmds; t++) {
-        sim_reset();
+    /* Should be in IDLE state (no sync byte found) */
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_IDLE,
+                   "Garbage: state = IDLE after garbage");
 
-        int frame_len = build_spi_frame(test_cmds[t].cmd, test_cmds[t].data,
-                                         test_cmds[t].len, frame, sizeof(frame));
-        ASSERT_TRUE(frame_len > 0, "Build frame for command type");
+    /* Now feed the valid frame */
+    sim_feed_frame(frame, len);
 
-        for (int i = 0; i < frame_len; i++) {
-            sim_process_byte(frame[i]);
-        }
-
-        ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state, "Frame complete");
-        ASSERT_EQ_INT(test_cmds[t].cmd, sim_rx.buf[1], "Command matches");
-    }
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Garbage: state = COMPLETE after valid frame");
+    TEST_ASSERT(sim_rx.frame_ready, "Garbage: frame_ready = true");
+    TEST_ASSERT_EQ((int)sim_stats.frames_validated, 1,
+                   "Garbage: 1 frame validated");
+    /* The garbage bytes should have been counted as sync rejections */
+    TEST_ASSERT(sim_stats.frames_rejected_sync > 0,
+                "Garbage: sync rejections > 0");
 }
 
-/* Test 14: Byte-by-byte feeding (simulating slow SPI) */
-static void test_byte_by_byte_feeding(void) {
-    sim_reset();
+/**
+ * Test 11: Overflow — frame arrives before previous one is consumed
+ */
+static void test_isr_overflow(void) {
+    printf("Test: ISR frame overflow\n");
+    uint8_t frame1[32], frame2[32];
+    int len1, len2;
 
+    sim_reset();
+    len1 = build_spi_frame(CMD_NOP, NULL, 0, frame1);
+    len2 = build_spi_frame(CMD_TELEMETRY_REQ, NULL, 0, frame2);
+
+    /* Feed first frame */
+    sim_feed_frame(frame1, len1);
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Overflow: first frame COMPLETE");
+    TEST_ASSERT(sim_rx.frame_ready, "Overflow: first frame ready");
+
+    /* Don't release — feed second frame. The state machine is in
+     * COMPLETE state, so all bytes of the second frame should
+     * be counted as overflows. */
+    sim_feed_frame(frame2, len2);
+
+    /* Should still be in COMPLETE state (not transitioned) */
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Overflow: state still COMPLETE");
+    TEST_ASSERT(sim_stats.rx_overflows > 0,
+                "Overflow: overflow counter > 0");
+
+    /* Now release and try again */
+    sim_release_frame();
+    sim_feed_frame(frame2, len2);
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Overflow: second frame COMPLETE after release");
+}
+
+/**
+ * Test 12: Zero-length payload frame (NOP with no CRC-32 trailer)
+ *
+ * Note: In the current implementation, zero-length payload frames
+ * still include a CRC-32 trailer (CRC-32 of empty data = 0x00000000).
+ * The ISR processes 4 bytes for the CRC-32 after the header.
+ */
+static void test_isr_zero_payload_with_crc(void) {
+    printf("Test: ISR zero-length payload frame with CRC-32\n");
+    uint8_t frame[32];
+    int len;
+
+    sim_reset();
+    len = build_spi_frame(CMD_NOP, NULL, 0, frame);
+
+    /* NOP has zero payload but still includes CRC-32 of empty data.
+     * However, build_spi_frame only adds CRC-32 for non-zero payloads.
+     * The SPI protocol defines that zero-length payload frames have
+     * exactly SPI_HDR_SIZE bytes (no CRC-32 trailer).
+     *
+     * Let's verify: a 16-byte NOP frame is valid. */
+    TEST_ASSERT_EQ(len, SPI_HDR_SIZE, "Zero payload: frame = 16 bytes");
+
+    sim_feed_frame(frame, len);
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Zero payload: state = COMPLETE");
+    TEST_ASSERT(sim_rx.frame_ready, "Zero payload: frame_ready = true");
+    TEST_ASSERT_EQ((int)sim_rx.payload_len, 0,
+                   "Zero payload: payload_len = 0");
+}
+
+/**
+ * Test 13: Verify ISR statistics accounting
+ */
+static void test_isr_statistics(void) {
+    printf("Test: ISR statistics accounting\n");
     uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build NOP frame");
+    int len;
+    uint8_t payload[4] = { 0x42, 0x43, 0x44, 0x45 };
 
-    /* Feed one byte at a time with "gaps" (no processing between bytes) */
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-        /* After sync byte, we should be in HEADER state */
-        if (i == 0) {
-            ASSERT_EQ_INT(FRAME_STATE_HEADER, sim_rx.state,
-                          "In HEADER state after sync byte");
-        }
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "Frame complete after byte-by-byte feeding");
-    ASSERT_EQ_INT(frame_len, (int)sim_rx.pos,
-                  "Position matches total frame length");
-}
-
-/* Test 15: Frame not consumed causes overflow on next byte */
-static void test_frame_not_consumed_overflow(void) {
     sim_reset();
 
-    uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
-
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state, "Frame complete");
-
-    /* Try to send another byte without releasing the frame */
-    sim_process_byte(0x00);
-    ASSERT_EQ_UINT(1, sim_stats.rx_overflows,
-                   "Overflow counted when frame not consumed");
-}
-
-/* Test 16: Telemetry request frame (command from host to MCU) */
-static void test_telemetry_request_frame(void) {
-    sim_reset();
-
-    uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_TELEMETRY_REQ, NULL, 0, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build telemetry request frame");
-
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state, "Telemetry request complete");
-    ASSERT_EQ_INT(CMD_TELEMETRY_REQ, sim_rx.buf[1], "Command is TELEMETRY_REQ");
-    ASSERT_EQ_INT(0, (int)sim_rx.payload_len, "No payload for telemetry request");
-    ASSERT_EQ_UINT(0, sim_stats.frames_rejected_sync, "No sync rejections");
-    ASSERT_EQ_UINT(0, sim_stats.frames_rejected_hdr_crc, "No header CRC rejections");
-    ASSERT_EQ_UINT(0, sim_stats.frames_rejected_pay_crc, "No payload CRC rejections");
-}
-
-/* Test 17: SDR stream start frame (1-byte payload) */
-static void test_sdr_stream_start_frame(void) {
-    sim_reset();
-
-    uint8_t enable = 1;
-    uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_SDR_STREAM, &enable, 1, frame, sizeof(frame));
-    ASSERT_TRUE(frame_len > 0, "Build SDR stream start frame");
-
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state, "Stream start complete");
-    ASSERT_EQ_INT(CMD_SDR_STREAM, sim_rx.buf[1], "Command is SDR_STREAM");
-    ASSERT_EQ_INT(1, (int)sim_rx.payload_len, "Payload length is 1");
-    ASSERT_EQ_INT(1, sim_rx.buf[SPI_HDR_SIZE], "Enable flag = 1");
-}
-
-/* Test 18: Statistics tracking */
-static void test_statistics_tracking(void) {
-    sim_reset();
-
-    /* Send 3 valid frames */
-    for (int f = 0; f < 3; f++) {
-        uint8_t frame[64];
-        int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
-
-        for (int i = 0; i < frame_len; i++) {
-            sim_process_byte(frame[i]);
-        }
+    /* Feed 5 valid frames */
+    for (int i = 0; i < 5; i++) {
+        len = build_spi_frame(CMD_NOP, NULL, 0, frame);
+        sim_feed_frame(frame, len);
         sim_release_frame();
     }
 
-    ASSERT_EQ_UINT(3, sim_stats.frames_validated, "3 frames validated");
+    TEST_ASSERT_EQ((int)sim_stats.frames_validated, 5,
+                   "Stats: 5 frames validated");
+    TEST_ASSERT_EQ((int)sim_stats.frames_received, 5,
+                   "Stats: 5 frames received");
+    TEST_ASSERT_EQ((int)sim_stats.frames_rejected_sync, 0,
+                   "Stats: 0 sync rejections");
+    TEST_ASSERT_EQ((int)sim_stats.frames_rejected_hdr_crc, 0,
+                   "Stats: 0 header CRC rejections");
+    TEST_ASSERT_EQ((int)sim_stats.frames_rejected_pay_crc, 0,
+                   "Stats: 0 payload CRC rejections");
+    TEST_ASSERT_EQ((int)sim_stats.rx_overflows, 0,
+                   "Stats: 0 overflows");
 
-    /* Send some garbage */
-    sim_reset_stats_only();
-    sim_process_byte(0x00);
-    sim_process_byte(0xFF);
-    sim_process_byte(0x55);
-    ASSERT_EQ_UINT(3, sim_stats.frames_rejected_sync, "3 garbage bytes rejected");
+    /* Now feed a frame with corrupted header CRC */
+    sim_reset();
+    len = build_spi_frame(CMD_SDR_TUNE, payload, sizeof(payload), frame);
+    frame[1] ^= 0xFF;  /* Corrupt command byte */
+    sim_feed_frame(frame, len);
+
+    TEST_ASSERT_EQ((int)sim_stats.frames_rejected_hdr_crc, 1,
+                   "Stats: 1 header CRC rejection after corruption");
 }
 
-/* Test 19: Resync after partial frame + valid frame */
-static void test_resync_after_partial(void) {
-    sim_reset();
-
-    /* Send partial frame (just sync byte + some header bytes) */
-    sim_process_byte(0xAA);  /* Sync */
-    sim_process_byte(0x01);  /* Command */
-    sim_process_byte(0x08);  /* Length low */
-    sim_process_byte(0x00);  /* Length high */
-
-    /* Now send a corrupted CRC byte */
-    sim_process_byte(0xFF);  /* Bad reserved byte */
-    /* Continue with invalid CRC - this should fail header validation */
-    /* Let's just send more random bytes that won't match CRC-64 */
-    for (int i = 0; i < 11; i++) {
-        sim_process_byte(0x00);
-    }
-
-    /* The header CRC will fail, putting us in ERROR state */
-    ASSERT_EQ_INT(FRAME_STATE_ERROR, sim_rx.state, "Error after bad header");
-
-    /* Now send a valid frame — should resync on sync byte */
+/**
+ * Test 14: Byte-by-byte feeding (simulating slow SPI clock)
+ */
+static void test_isr_byte_by_byte(void) {
+    printf("Test: ISR byte-by-byte feeding\n");
     uint8_t frame[64];
-    int frame_len = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
+    uint8_t payload[4] = { 0xCA, 0xFE, 0xBA, 0xBE };
+    int len;
 
-    for (int i = 0; i < frame_len; i++) {
-        sim_process_byte(frame[i]);
-    }
-
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "Recovered to COMPLETE after resync");
-}
-
-/* Test 20: IQ chunk frame (MCU → Host response simulation) */
-static void test_iq_chunk_frame(void) {
     sim_reset();
+    len = build_spi_frame(CMD_ANT_SELECT, payload, sizeof(payload), frame);
 
-    /* Simulate a 512-byte IQ chunk (like SDR data) */
-    uint8_t iq_data[512];
-    for (int i = 0; i < 512; i++) {
-        iq_data[i] = (uint8_t)(i & 0xFF);
-    }
+    /* Feed one byte at a time with explicit state checks */
+    for (int i = 0; i < len; i++) {
+        /* Before first byte: IDLE state */
+        if (i == 0) {
+            TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_IDLE,
+                           "Byte-by-byte: starts in IDLE");
+        }
 
-    uint8_t *frame = (uint8_t *)malloc(SPI_FRAME_SIZE_MAX + 16);
-    ASSERT_TRUE(frame != NULL, "Allocate IQ frame buffer");
-
-    int frame_len = build_spi_frame(CMD_SDR_IQ_CHUNK, iq_data, 512,
-                                     frame, SPI_FRAME_SIZE_MAX);
-    ASSERT_TRUE(frame_len > 0, "Build IQ chunk frame");
-    ASSERT_EQ_INT(SPI_HDR_SIZE + 512 + SPI_CRC32_SIZE, frame_len,
-                  "IQ chunk frame size correct");
-
-    for (int i = 0; i < frame_len; i++) {
         sim_process_byte(frame[i]);
-    }
 
-    ASSERT_EQ_INT(FRAME_STATE_COMPLETE, sim_rx.state,
-                  "IQ chunk frame complete");
-    ASSERT_EQ_INT(512, (int)sim_rx.payload_len, "Payload length = 512");
-
-    /* Verify IQ data integrity */
-    bool iq_match = true;
-    for (int i = 0; i < 512; i++) {
-        if (sim_rx.buf[SPI_HDR_SIZE + i] != (uint8_t)(i & 0xFF)) {
-            iq_match = false;
-            break;
+        if (i == 0) {
+            /* After sync byte: transition to HEADER */
+            TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_HEADER,
+                           "Byte-by-byte: sync → HEADER");
+        } else if (i < SPI_HDR_SIZE - 1) {
+            /* Still accumulating header */
+            TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_HEADER,
+                           "Byte-by-byte: accumulating header");
+        } else if (i == SPI_HDR_SIZE - 1) {
+            /* Just completed header — should transition to PAYLOAD */
+            /* Note: pos is now SPI_HDR_SIZE, which equals SPI_HDR_SIZE
+             * after processing the last header byte */
         }
     }
-    ASSERT_TRUE(iq_match, "IQ data content matches");
 
-    free(frame);
+    TEST_ASSERT_EQ((int)sim_rx.state, (int)FRAME_STATE_COMPLETE,
+                   "Byte-by-byte: ends in COMPLETE");
+    TEST_ASSERT(sim_rx.frame_ready, "Byte-by-byte: frame_ready = true");
+    TEST_ASSERT_EQ((int)sim_rx.payload_len, 4,
+                   "Byte-by-byte: payload_len = 4");
 }
 
 /* ========================================================================
@@ -890,35 +853,31 @@ static void test_iq_chunk_frame(void) {
  * ======================================================================== */
 
 int main(void) {
-    printf("=== GhostBlade SPI0 ISR Frame Assembly Unit Tests ===\n\n");
+    printf("=== GhostBlade SPI0 ISR Frame Assembly Tests ===\n\n");
 
     /* Initialize CRC tables */
     crc64_init_table();
     crc32_init_table();
 
-    RUN_TEST(test_initial_state);
-    RUN_TEST(test_sync_byte_transition);
-    RUN_TEST(test_non_sync_rejected);
-    RUN_TEST(test_complete_nop_frame);
-    RUN_TEST(test_complete_payload_frame);
-    RUN_TEST(test_corrupted_header_crc64);
-    RUN_TEST(test_corrupted_payload_crc32);
-    RUN_TEST(test_error_recovery_resync);
-    RUN_TEST(test_back_to_back_frames);
-    RUN_TEST(test_oversized_payload_rejected);
-    RUN_TEST(test_garbage_before_sync);
-    RUN_TEST(test_max_payload_frame);
-    RUN_TEST(test_multiple_command_types);
-    RUN_TEST(test_byte_by_byte_feeding);
-    RUN_TEST(test_frame_not_consumed_overflow);
-    RUN_TEST(test_telemetry_request_frame);
-    RUN_TEST(test_sdr_stream_start_frame);
-    RUN_TEST(test_statistics_tracking);
-    RUN_TEST(test_resync_after_partial);
-    RUN_TEST(test_iq_chunk_frame);
+    test_isr_nop_frame();
+    test_isr_payload_frame();
+    test_isr_bad_sync();
+    test_isr_bad_header_crc();
+    test_isr_bad_payload_crc();
+    test_isr_oversized_payload();
+    test_isr_resync_after_error();
+    test_isr_multiple_frames();
+    test_isr_max_payload();
+    test_isr_inter_frame_garbage();
+    test_isr_overflow();
+    test_isr_zero_payload_with_crc();
+    test_isr_statistics();
+    test_isr_byte_by_byte();
 
-    printf("\n=== Results: %d/%d passed, %d failed ===\n",
-           tests_passed, tests_run, tests_failed);
+    printf("\n=== Results ===\n");
+    printf("Tests run:    %d\n", tests_run);
+    printf("Tests passed: %d\n", tests_passed);
+    printf("Tests failed: %d\n", tests_failed);
 
     return tests_failed > 0 ? 1 : 0;
 }

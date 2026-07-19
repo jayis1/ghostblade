@@ -52,7 +52,9 @@ Be respectful, constructive, and professional. We're all here to build something
 5. Verify DTS nodes/properties match `GhostBlade.mf` before submitting
 6. Ensure pinctrl entries have correct drive-strength and bias settings matching the schematic
 7. Run `cd software/dts && make validate` to validate syntax before submitting
-8. Use `cd software/dts && make all` to compile DTB/DTBO outputs
+8. Run `make validate-dts` from project root to cross-reference DTS GPIOs with firmware and schematic
+9. Run `make validate-netlist` from project root to cross-reference netlist, manifest, DTS, and firmware pins
+10. Use `cd software/dts && make all` to compile DTB/DTBO outputs
 
 ### Documentation
 
@@ -81,9 +83,10 @@ Before submitting a PR, ensure:
    - test_st25r3916_init: ST25R3916 NFC register map, SPI encoding, init sequence
    - test_libapex: Userspace library API, error codes, telemetry flags
 4. **DTS validates**: `cd software/dts && make validate`
-5. **Markdown lints clean**: `markdownlint docs/ README.md CONTRIBUTING.md`
-6. **No spelling errors**: `codespell --config .codespell.ignore`
-7. **Top-level build works**: `make tests` (from project root)
+5. **Netlist cross-references validate**: `make validate-netlist`
+6. **Markdown lints clean**: `markdownlint docs/ README.md CONTRIBUTING.md`
+7. **No spelling errors**: `codespell --config .codespell.ignore`
+8. **Top-level build works**: `make tests` (from project root)
 
 ## Pull Request Process
 

@@ -43,7 +43,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_libapex_framing test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c

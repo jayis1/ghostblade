@@ -245,7 +245,7 @@ volatile uint32_t spi_rx_tail = 0;  /* Protocol handler reads here */
  * rising edge of SCK (Mode 0).
  */
 void spi0_isr_handler(void) {
-    volatile uint32_t *sr = (volatile uint32_t *)(RP2350B_SPI0_BASE + SPI0_SSPSR);
+    volatile uint32_t const *sr = (volatile uint32_t const *)(RP2350B_SPI0_BASE + SPI0_SSPSR);
     volatile uint32_t *dr = (volatile uint32_t *)(RP2350B_SPI0_BASE + SPI0_SSPDR);
 
     /* Drain all available bytes from the SPI0 RX FIFO.
@@ -438,7 +438,7 @@ static void spi0_slave_init(void) {
     *cr1 = SSPCR1_SSE | SSPCR1_MS;  /* SSE=1, MS=1 (slave mode) */
 
     /* Drain any stale data in RX FIFO */
-    volatile uint32_t *sr = (volatile uint32_t *)(RP2350B_SPI0_BASE + SPI0_SSPSR);
+    volatile uint32_t const *sr = (volatile uint32_t const *)(RP2350B_SPI0_BASE + SPI0_SSPSR);
     volatile uint32_t *dr = (volatile uint32_t *)(RP2350B_SPI0_BASE + SPI0_SSPDR);
     while (*sr & SSPSR_RNE) {
         (void)*dr;  /* Read and discard */
@@ -802,7 +802,7 @@ void apex_cc1101_cs_release(void) {
  */
 uint8_t apex_cc1101_spi_xfer(uint8_t tx_byte) {
     volatile uint32_t *dr = (volatile uint32_t *)SPI1_SSPDR;
-    volatile uint32_t *sr = (volatile uint32_t *)SPI1_SSPSR;
+    volatile uint32_t const *sr = (volatile uint32_t const *)SPI1_SSPSR;
 
     /* Wait until TX FIFO has space */
     while (!(*sr & SSPSR_TNF))

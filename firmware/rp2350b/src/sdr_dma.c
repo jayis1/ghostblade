@@ -129,9 +129,22 @@ static volatile uint32_t dma_irq_count = 0;
 
 /* Ensure visibility of volatile variables between ISR and main context.
  * On ARM Cortex-M33 with data cache, we need DMB after ISR writes
- * and before main-loop reads to ensure cache coherency. */
+ * and before main-loop reads to ensure cache coherency.
+ * Also used as a secure memory barrier after wiping sensitive data
+ * (ring buffers, protocol state) to prevent the compiler from
+ * optimizing away the zeroing. */
 static inline void sdr_dmb(void) {
     __asm__ volatile ("dmb" ::: "memory");
+}
+
+/* Secure zeroing of sensitive data buffers — equivalent to
+ * memzero_explicit() in Linux. Uses a volatile function pointer
+ * to prevent the compiler from optimizing away the memset call. */
+static inline void sdr_secure_zero(void *buf, uint32_t len) {
+    volatile uint8_t *p = (volatile uint8_t *)buf;
+    for (uint32_t i = 0; i < len; i++)
+        p[i] = 0;
+    sdr_dmb();  /* Ensure the zeroing is visible before any subsequent access */
 }
 
 /* Statistics */
@@ -219,6 +232,14 @@ void sdr_dma_irq_handler(void) {
  * the specified block of the ring buffer.
  */
 static void sdr_dma_start_block(uint8_t block_idx) {
+    if (block_idx >= SDR_RING_NUM_BLOCKS) {
+        /* Defensive: prevent out-of-bounds DMA write. Should never
+         * happen in normal operation, but a corrupted block_idx would
+         * cause a write past the ring buffer boundary. */
+        dma_stats.overruns++;
+        return;
+    }
+
     uint32_t block_addr = (uint32_t)&sdr_ring_buf[block_idx * SDR_RING_BLOCK_SIZE];
 
     /* Configure DMA channel 0 for SPI1 RX → ring buffer */
@@ -261,8 +282,10 @@ static void sdr_dma_start_block(uint8_t block_idx) {
  * Returns: 0 on success (always succeeds; ring buffer is statically allocated)
  */
 int sdr_dma_init(void) {
-    /* Clear ring buffer */
-    memset(sdr_ring_buf, 0, SDR_RING_BUF_SIZE);
+    /* Securely clear ring buffer — IQ sample data from previous
+     * sessions must not leak. Use sdr_secure_zero() instead of
+     * memset() to prevent the compiler from eliding the zeroing. */
+    sdr_secure_zero(sdr_ring_buf, SDR_RING_BUF_SIZE);
 
     /* Reset state */
     dma_write_block = 0;
@@ -335,11 +358,11 @@ void sdr_dma_stop(void) {
     REG32(DMA_INTS0) = (1 << 0);
 
     /* Securely wipe the ring buffer to prevent leakage of captured
-     * IQ samples through subsequent DMA transfers or SRAM inspection. */
-    volatile uint8_t *p = (volatile uint8_t *)sdr_ring_buf;
-    for (uint32_t i = 0; i < SDR_RING_BUF_SIZE; i++)
-        p[i] = 0;
-    sdr_dmb();
+     * IQ samples through subsequent DMA transfers or SRAM inspection.
+     * Use sdr_secure_zero() to prevent the compiler from optimizing
+     * away the zeroing — the data is security-sensitive (captured RF
+     * spectrum data) and must not remain in memory. */
+    sdr_secure_zero(sdr_ring_buf, SDR_RING_BUF_SIZE);
 }
 
 /**

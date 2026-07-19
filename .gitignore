@@ -79,6 +79,7 @@ tests/test_adc_calibration
 tests/test_peripheral_power
 tests/test_cc1101_lms7002m
 tests/test_sleep_wake
+tests/test_crc_validation
 
 # Coverage / analysis
 *.gcda

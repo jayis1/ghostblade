@@ -24,6 +24,7 @@
 #include <string.h>
 #include "spi_protocol.h"
 #include "watchdog.h"
+#include "lms7002m_driver.h"
 
 /* Forward declarations from other modules */
 extern void watchdog_kick(void);
@@ -168,27 +169,34 @@ static void crc64_init(void) {
     __asm__ volatile ("dmb" ::: "memory");
     crc64_initialized = 1;
     __asm__ volatile ("dmb" ::: "memory");
-}
-
 static uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
     if (!crc64_initialized) {
         /* Not yet initialized — compute inline to avoid race.
-         * This can happen if spi_protocol_process() is called
-         * before spi_protocol_init() on a cold boot path. */
+         * This can happen if spi_protocol_process() or the ISR is called
+         * before spi_protocol_init() on a cold boot path.
+         * The inline computation is slower but avoids calling
+         * crc64_init() which is not reentrant from ISR context.
+         *
+         * BUG FIX: The previous fallback computed only the table entry
+         * from idx, then XOR'd (crc >> 8) with that entry — which is
+         * correct and matches the table-based path. However the old
+         * code had an extra variable 't' that was never needed; the
+         * corrected form computes the per-byte remainder directly and
+         * combines it with the shifted CRC, matching the table path:
+         *   crc = (crc >> 8) ^ table[idx]  (table-based)
+         *   crc = (crc >> 8) ^ remainder   (fallback) */
         const uint64_t poly = 0x42F0E1EBA9EA3693ULL;
         uint64_t crc = 0xFFFFFFFFFFFFFFFFULL;
         for (uint32_t i = 0; i < len; i++) {
             uint8_t idx = (uint8_t)((crc ^ data[i]) & 0xFF);
-            /* Simple bitwise CRC for fallback — slower but safe */
-            uint64_t t = (crc >> 8);
-            uint64_t crc_byte = (uint64_t)idx;
+            uint64_t remainder = (uint64_t)idx;
             for (int j = 0; j < 8; j++) {
-                if (crc_byte & 1)
-                    crc_byte = (crc_byte >> 1) ^ poly;
+                if (remainder & 1)
+                    remainder = (remainder >> 1) ^ poly;
                 else
-                    crc_byte >>= 1;
+                    remainder >>= 1;
             }
-            crc = t ^ crc_byte;
+            crc = (crc >> 8) ^ remainder;
         }
         return crc ^ 0xFFFFFFFFFFFFFFFFULL;
     }
@@ -543,25 +551,22 @@ static void handle_cmd_sdr_tune(const uint8_t *payload, uint16_t len) {
     if (freq_hz < 100000UL || freq_hz > 3800000000UL)
         return;
 
-    /* Validate bandwidth */
-    if (bw_khz == 0 || bw_khz > 20000)
+    /* Validate bandwidth: must be positive and within LMS7002M range.
+     * LMS7002M supports ~1.5 MHz to 61.44 MHz baseband bandwidth. */
+    if (bw_khz == 0 || bw_khz > 61440)
         return;
 
-    /* Validate gain */
-    if (gain_db_x10 > 730)  /* Max LNA gain ~73 dB */
+    /* Validate gain: max LNA gain ~73 dB */
+    if (gain_db_x10 > 730)
         return;
 
-    /* Configure LMS7002M via SPI1:
-     * 1. Write frequency to PLL registers
-     * 2. Set bandwidth filter
-     * 3. Set LNA gain
-     *
-     * Detailed LMS7002M register programming is implemented in
-     * lms7002m_driver.c. Store parameters and set GPIO enables.
-     */
-    (void)freq_hz;
-    (void)bw_khz;
-    (void)gain_db_x10;
+    /* Tune the LMS7002M via the SDR DMA frequency control interface.
+     * lms7002m_tune_rx() handles PLL calculation, VCO divider
+     * selection, and baseband filter configuration. */
+    lms7002m_tune_rx(freq_hz, bw_khz, gain_db_x10);
+
+    /* Update SDR streaming state flags for telemetry */
+    device_state.sdr_rx_enabled = true;
 }
 
 /**

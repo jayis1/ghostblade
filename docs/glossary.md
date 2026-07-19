@@ -18,8 +18,8 @@ throughout the GhostBlade documentation.
 | **LMS7002M** | Lime Microsystems LMS7002M — full-duplex SDR transceiver (100 kHz – 3.8 GHz) |
 | **CC1101** | Texas Instruments CC1101 — sub-GHz RF transceiver (433/868/915 MHz ISM bands) |
 | **ST25R3916** | STMicroelectronics ST25R3916 — NFC reader/writer controller (13.56 MHz, ISO 14443A/B) |
-| **MT7922** | MediaTek MT7922 — Wi-Fi 6E + Bluetooth 5.3 combo module |
-| **RK817** | Rockchip RK860-2 PMIC — power management IC for the RK3576 |
+| **MT7922** | MediaTek MT7922 — Wi-Fi 6E + Bluetooth 5.4 combo module |
+| **RK817** | Rockchip RK817 PMIC — power management IC for the RK3576 (4× BUCK, 3× LDO, battery charger) |
 | **PE42422** | pSemi (Murata) PE42422 — SP4T RF switch for antenna selection |
 
 ## Bus and Interface Terms
