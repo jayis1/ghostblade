@@ -533,17 +533,10 @@ static void test_endianness(void) {
 static void test_battery_helpers(void) {
     printf("Test: Battery helper functions\n");
 
-    /* Test apex_battery_percent equivalent logic */
-    auto uint8_t battery_percent(uint16_t vbat_mv) -> uint8_t {
-        if (vbat_mv >= 4200) return 100;
-        if (vbat_mv <= 3000) return 0;
-        if (vbat_mv >= 3700)
-            return (uint8_t)((uint32_t)(vbat_mv - 3700) * 50 / 500 + 50);
-        else if (vbat_mv >= 3300)
-            return (uint8_t)((uint32_t)(vbat_mv - 3300) * 40 / 400 + 10);
-        else
-            return (uint8_t)((uint32_t)(vbat_mv - 3000) * 10 / 300);
-    };
+    /* Test apex_battery_percent equivalent logic — C11 compatible helpers */
+    uint8_t battery_percent(uint16_t vbat_mv);
+    bool is_low_battery(uint16_t vbat_mv);
+    bool is_overtemp(int16_t temp_c_x10);
 
     TEST_ASSERT_EQ((int)battery_percent(4200), 100, "Battery: 4200mV = 100%");
     TEST_ASSERT_EQ((int)battery_percent(3000), 0, "Battery: 3000mV = 0%");
@@ -553,19 +546,11 @@ static void test_battery_helpers(void) {
     TEST_ASSERT_EQ((int)battery_percent(4500), 100, "Battery: 4500mV = 100% (clamped)");
     TEST_ASSERT_EQ((int)battery_percent(2800), 0, "Battery: 2800mV = 0% (clamped)");
 
-    /* Test is_low_battery equivalent */
-    auto bool is_low_battery(uint16_t vbat_mv) -> bool {
-        return vbat_mv < 3300;
-    };
     TEST_ASSERT(is_low_battery(3200), "Low battery: 3200mV is low");
     TEST_ASSERT(!is_low_battery(3400), "Low battery: 3400mV is not low");
     TEST_ASSERT(is_low_battery(3299), "Low battery: 3299mV is low");
     TEST_ASSERT(!is_low_battery(3300), "Low battery: 3300mV is threshold");
 
-    /* Test is_overtemp equivalent */
-    auto bool is_overtemp(int16_t temp_c_x10) -> bool {
-        return temp_c_x10 > 850;  /* 85.0°C */
-    };
     TEST_ASSERT(is_overtemp(900), "Overtemp: 90.0°C is overtemp");
     TEST_ASSERT(!is_overtemp(800), "Overtemp: 80.0°C is normal");
     TEST_ASSERT(!is_overtemp(850), "Overtemp: 85.0°C is threshold (not over)");
