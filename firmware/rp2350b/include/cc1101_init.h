@@ -108,6 +108,16 @@
 #define CC1101_TXFIFO        0x3F    /**< TX FIFO (write: 0x3F, read: 0xBF) */
 #define CC1101_RXFIFO        0x3F    /**< RX FIFO (write: 0x7F, read: 0xFF) */
 
+/* ── CC1101 SPI access macros (header-byte encoding) ────────────────────── */
+/* These encode the SPI header byte for CC1101 register access.
+ * The CC1101 SPI protocol uses bit 7 (R/W) and bit 6 (burst/single)
+ * to encode the access mode, with bits 5:0 as the register address. */
+
+#define CC1101_WRITE_SINGLE(addr)    ((uint8_t)((addr) & 0x3F))
+#define CC1101_WRITE_BURST(addr)     ((uint8_t)(((addr) & 0x3F) | 0x40))
+#define CC1101_READ_SINGLE(addr)     ((uint8_t)(((addr) & 0x3F) | 0x80))
+#define CC1101_READ_BURST(addr)      ((uint8_t)(((addr) & 0x3F) | 0xC0))
+
 /* ── CC1101 public API ─────────────────────────────────────────────────── */
 
 /**

@@ -110,13 +110,10 @@
  * CC1101 SPI Access Macros
  * ======================================================================== */
 
-/* Write: bit7=0, burst=bit6 (single=0, burst=1) */
-#define CC1101_WRITE_SINGLE(addr)    ((addr) & 0x3F)
-#define CC1101_WRITE_BURST(addr)     (((addr) & 0x3F) | 0x40)
-
-/* Read: bit7=1, burst=bit6 (single=0, burst=1) */
-#define CC1101_READ_SINGLE(addr)     (((addr) & 0x3F) | 0x80)
-#define CC1101_READ_BURST(addr)      (((addr) & 0x3F) | 0xC0)
+/* SPI access macros (CC1101_WRITE_SINGLE, CC1101_WRITE_BURST,
+ * CC1101_READ_SINGLE, CC1101_READ_BURST) are now defined in cc1101_init.h
+ * so they can be shared across translation units (rp2350b_init.c uses
+ * the burst macros for CC1101 register access). */
 
 /* Command strobe: bit7=0, bit6=0, addr 0x30-0x3D */
 #define CC1101_STROBE(cmd)           ((cmd) & 0x3F)

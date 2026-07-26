@@ -27,6 +27,7 @@
 #include <string.h>
 #include "rp2350b_init.h"
 #include "board_pins.h"
+#include "cc1101_init.h"    /* CC1101_WRITE_BURST, CC1101_READ_BURST macros */
 
 /* ========================================================================
  * RP2350B Register Base Addresses

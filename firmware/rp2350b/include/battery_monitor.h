@@ -10,10 +10,10 @@
  * temperature is read from the internal temperature sensor on
  * ADC channel 4.
  *
- * Voltage divider: VBAT → R1 (100kΩ) → ADC → R2 (100kΩ) → GND
- * ADC reads VBAT/2, so VBAT = ADC_raw × (3.3 × 2) / 4095
+ * Voltage divider: VBAT → R1 (100kΩ) → ADC → R2 (33kΩ) → GND
+ * ADC reads VBAT × 33/133, so VBAT = ADC_raw × (3.3 × 133/33) / 4095
  *
- * Brownout detection: When VBAT drops below 3.0V (3000 mV), the
+ * Brownout detection: When VBAT drops below 2.8V (2800 mV), the
  * firmware marks a brownout flag in the watchdog scratch register
  * and prepares for an imminent power loss.
  */

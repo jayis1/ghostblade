@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "sdr_dma.h"
 
 /* ========================================================================
  * RP2350B DMA Controller Register Map
