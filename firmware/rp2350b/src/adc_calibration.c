@@ -49,6 +49,7 @@ static struct adc_cal_coeffs cal_coeffs = {
 static uint16_t adc_read_channel(uint8_t channel) {
     volatile uint32_t *cs = (volatile uint32_t *)(RP2350B_ADC_BASE + ADC_CS);
     const volatile uint32_t *result = (const volatile uint32_t *)(RP2350B_ADC_BASE + ADC_RESULT);
+    uint32_t timeout;
 
     uint32_t cs_val = *cs;
     cs_val &= ~(0x1FUL << 12);
@@ -62,8 +63,11 @@ static uint16_t adc_read_channel(uint8_t channel) {
     *cs = cs_val;
     *cs |= ADC_CS_START_ONCE;
 
+    /* Wait for conversion with timeout to prevent indefinite hang */
+    timeout = 1000;
     while (!(*cs & ADC_CS_READY))
-        ;
+        if (--timeout == 0)
+            return 0;  /* ADC conversion timed out */
 
     return (uint16_t)(*result & 0xFFF);
 }

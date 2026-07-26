@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "pico/stdlib.h"
 #include "peripheral_power.h"
 #include "board_pins.h"
 
@@ -67,14 +68,12 @@ static const struct power_rail_config rail_configs[POWER_RAIL_COUNT] = {
  * ======================================================================== */
 
 static void delay_ms(uint32_t ms) {
-    /* Approximate delay: at 150 MHz, ~150000 NOPs per ms.
-     * This is a rough busy-wait; for production code, use a
-     * hardware timer or sleep_ms() from the Pico SDK. */
-    for (uint32_t i = 0; i < ms; i++) {
-        for (volatile uint32_t j = 0; j < 15000; j++) {
-            __asm__ volatile("nop");
-        }
-    }
+    /* Use the Pico SDK sleep_ms for accurate timing.
+     * The previous implementation was a calibrated busy-loop that
+     * drifted with clock speed changes (e.g., after sleep_wake
+     * transitions to 48 MHz). Using the SDK timer ensures correct
+     * delay regardless of the current system clock frequency. */
+    sleep_ms(ms);
 }
 
 /* ========================================================================

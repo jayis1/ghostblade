@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>          /* NULL */
 #include "st25r3916_init.h"
 
 /* ========================================================================

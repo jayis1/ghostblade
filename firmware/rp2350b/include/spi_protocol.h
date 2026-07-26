@@ -63,10 +63,14 @@
 #define TELEM_FLAG_NFC_ACTIVE       (1 << 4)
 /** Telemetry flag: NFC tag present */
 #define TELEM_FLAG_NFC_TAG_PRESENT  (1 << 5)
-/** Telemetry flag: low battery / brownout */
-#define TELEM_FLAG_LOW_BATTERY      (1 << 6)
-/** Telemetry flag: watchdog reset occurred */
-#define TELEM_FLAG_WD_RESET         (1 << 7)
+/** Telemetry flag: overtemperature (must match APEX_FLAG_OVERTEMP in kernel driver) */
+#define TELEM_FLAG_OVERTEMP          (1 << 6)
+/** Telemetry flag: low battery / brownout (must match APEX_FLAG_LOW_BATTERY in kernel driver) */
+#define TELEM_FLAG_LOW_BATTERY      (1 << 7)
+/** Telemetry flag: SPI error (must match APEX_FLAG_SPI_ERR in kernel driver) */
+#define TELEM_FLAG_SPI_ERR           (1 << 8)
+/** Telemetry flag: DMA error (must match APEX_FLAG_DMA_ERR in kernel driver) */
+#define TELEM_FLAG_DMA_ERR           (1 << 9)
 
 /* ── Command opcodes ────────────────────────────────────────────────────── */
 
@@ -197,5 +201,16 @@ void spi_protocol_tick(void);
  * @active: true if brownout condition detected, false if cleared
  */
 void spi_protocol_set_brownout(bool active);
+
+/**
+ * spi_protocol_set_overtemp — Set or clear the overtemperature flag
+ *
+ * When active, the OVERTEMP flag is set in the telemetry bitmap
+ * sent to the RK3576 host, allowing the kernel driver to react
+ * appropriately (e.g., throttle SDR DMA or initiate shutdown).
+ *
+ * @active: true if overtemperature condition detected, false if cleared
+ */
+void spi_protocol_set_overtemp(bool active);
 
 #endif /* SPI_PROTOCOL_H */

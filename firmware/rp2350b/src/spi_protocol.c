@@ -73,18 +73,6 @@ static void secure_wipe(void *ptr, size_t len) {
 #define CMD_SDR_IQ_CHUNK        0x82
 
 /* ========================================================================
- * SPI Frame Header Structure (16 bytes, little-endian)
- * ======================================================================== */
-
-struct spi_frame_header {
-    uint8_t  sync;           /* 0x00: Sync byte, always 0xAA */
-    uint8_t  cmd;            /* 0x01: Command opcode */
-    uint16_t len;            /* 0x02-03: Payload length (0-4092), little-endian */
-    uint32_t reserved;       /* 0x04-07: Reserved, must be 0 */
-    uint64_t hdr_crc;        /* 0x08-0F: CRC-64 over bytes 0-7 */
-} __attribute__((packed));
-
-/* ========================================================================
  * SDR Tune Command Payload (8 bytes)
  * ======================================================================== */
 
@@ -129,21 +117,14 @@ struct telemetry_payload {
     uint32_t uptime_ms;          /* MCU uptime in milliseconds */
 } __attribute__((packed));
 
-/* Telemetry flags */
-#define TELEM_FLAG_SDR_RX_ACTIVE     (1 << 0)
-#define TELEM_FLAG_SDR_TX_ACTIVE     (1 << 1)
-#define TELEM_FLAG_CC1101_RX         (1 << 2)
-#define TELEM_FLAG_CC1101_TX         (1 << 3)
-#define TELEM_FLAG_NFC_ACTIVE        (1 << 4)
-#define TELEM_FLAG_NFC_TAG_PRESENT   (1 << 5)
-#define TELEM_FLAG_OVERTEMP          (1 << 6)
-#define TELEM_FLAG_LOW_BATTERY       (1 << 7)
-#define TELEM_FLAG_SPI_ERR           (1 << 8)
-#define TELEM_FLAG_DMA_ERR           (1 << 9)
-
 /* ========================================================================
  * CRC Computation (must match kernel driver)
  * ======================================================================== */
+
+/* Forward declarations — the wrapper functions are defined after the
+ * static init functions below. spi0_isr.c references these as extern. */
+void crc64_init_table(void);
+void crc32_init_table(void);
 
 /* CRC-64 using polynomial 0x42F0E1EBA9EA3693 (ECMA-182) */
 static uint64_t crc64_table[256];
@@ -169,7 +150,12 @@ static void crc64_init(void) {
     __asm__ volatile ("dmb" ::: "memory");
     crc64_initialized = 1;
     __asm__ volatile ("dmb" ::: "memory");
-static uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
+}
+
+/* Exported for spi0_isr.c — must NOT be static since the ISR calls these
+ * from a separate translation unit. The extern declarations in spi0_isr.c
+ * reference these symbols directly. */
+uint64_t crc64_compute(const uint8_t *data, uint32_t len) {
     if (!crc64_initialized) {
         /* Not yet initialized — compute inline to avoid race.
          * This can happen if spi_protocol_process() or the ISR is called
@@ -228,7 +214,7 @@ static void crc32_init(void) {
     __asm__ volatile ("dmb" ::: "memory");
 }
 
-static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
+uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
     if (!crc32_initialized) {
         /* Not yet initialized — compute inline to avoid race.
          * This can happen if spi_protocol_process() is called
@@ -254,6 +240,12 @@ static uint32_t crc32_compute(const uint8_t *data, uint32_t len) {
     }
     return crc ^ 0xFFFFFFFFUL;
 }
+
+/* Public wrapper functions for external callers (spi0_isr.c declares
+ * these as extern). They simply call the static init functions.
+ * Defined here after the static functions they wrap. */
+void crc64_init_table(void) { crc64_init(); }
+void crc32_init_table(void) { crc32_init(); }
 
 /* TX Response Ring Buffer (protocol handler writes, SPI0 ISR reads)
  *
@@ -347,6 +339,7 @@ static struct {
     bool     nfc_active;           /* NFC polling active */
     bool     nfc_tag_present;      /* NFC tag detected */
     bool     brownout_active;      /* Brownout condition detected */
+    bool     overtemp_active;      /* Overtemperature condition detected */
     uint32_t uptime_ms;            /* System uptime counter */
     int16_t  last_rssi_dbm_x10;   /* Last SDR RSSI (signed dBm × 10) */
     uint16_t last_vbat_mv;         /* Last battery voltage */
@@ -854,6 +847,7 @@ void spi_protocol_send_telemetry(void) {
     if (device_state.nfc_active)        telem.flags |= TELEM_FLAG_NFC_ACTIVE;
     if (device_state.nfc_tag_present)   telem.flags |= TELEM_FLAG_NFC_TAG_PRESENT;
     if (device_state.brownout_active)   telem.flags |= TELEM_FLAG_LOW_BATTERY;
+    if (device_state.overtemp_active)   telem.flags |= TELEM_FLAG_OVERTEMP;
     /* Brownout/battery flag is set by the main loop via
      * spi_protocol_update_telemetry() when battery_is_brownout()
      * triggers — not here, since the flag depends on voltage
@@ -1116,4 +1110,18 @@ void spi_protocol_tick(void) {
  */
 void spi_protocol_set_brownout(bool active) {
     device_state.brownout_active = active;
+}
+
+/**
+ * spi_protocol_set_overtemp — Set or clear the overtemperature flag
+ *
+ * Called from the main loop when temperature_is_overtemp() changes state.
+ * The overtemp flag is included in the telemetry flags bitmap sent
+ * to the RK3576 host so the kernel driver can react appropriately
+ * (e.g., throttle SDR DMA or initiate graceful shutdown).
+ *
+ * @active: true if overtemperature condition detected, false if cleared
+ */
+void spi_protocol_set_overtemp(bool active) {
+    device_state.overtemp_active = active;
 }

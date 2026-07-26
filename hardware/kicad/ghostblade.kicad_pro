@@ -3,7 +3,7 @@
   (general
     (project "GhostBlade")
     (project_rev "1.0")
-    (comment 0 "Project Cyber-Swiss — Advanced Mobile Pentesting Lab")
+    (comment 0 "Project NullSpectre — Advanced Mobile Pentesting Lab")
     (comment 1 "Dual-Processor: RK3576 + RP2350B")
     (comment 2 "6-Layer FR-4, 1.6mm, IPC Class 3")
     (comment 3 "CERN-OHL-S v2")

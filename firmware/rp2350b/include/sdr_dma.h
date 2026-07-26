@@ -65,8 +65,10 @@ int sdr_dma_init(void);
  * Begins DMA transfers from the LMS7002M CSI-2 interface into the
  * ring buffer. Core 1 will call sdr_dma_process() in a tight loop
  * to feed completed buffers into the SPI protocol handler.
+ *
+ * Returns: 0 on success, negative on error
  */
-void sdr_dma_start(void);
+int sdr_dma_start(void);
 
 /**
  * sdr_dma_stop — Stop SDR IQ data streaming

@@ -18,6 +18,17 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 - Netlist cross-reference validation tool (`tools/validate_netlist.py`) — checks GhostBlade.mf manifest nets against KiCad netlist, DTS GPIO assignments, board_pins.h pin definitions, and 3D model references
 - `validate-netlist` target in top-level Makefile for integrated netlist verification
 - SPDX-License-Identifier and copyright headers added to `tools/validate_dts.py`, `tools/check_links.py`, `tools/check_internal_links.py`
+- FAQ & Troubleshooting expanded with test build guidance, battery percentage curve reference, telemetry flag bit table, and BOM/netlist reference designator troubleshooting
+- libapex Makefile now installs the `libapex.pc` pkg-config file to `$(PREFIX)/lib/pkgconfig/` and removes it on `uninstall`
+
+### Fixed
+
+- `tests/test_libapex_framing.c` — battery helper functions (`battery_percent`, `is_low_battery`, `is_overtemp`) were declared as block-scope prototypes instead of file-scope `static` definitions, causing linker errors. Now defined at file scope with logic matching `firmware/rp2350b/src/battery_monitor.c`.
+- `tests/test_libapex_framing.c` — telemetry test data corrections: `rssi_dbm_x10` byte changed from `0x38` to `0x3E` to encode -450 correctly, flags byte changed from `0x85` to `0x91` to correctly set `NFC_ACTIVE` (bit 4), and `battery_percent(3900)` expected value corrected from 80 to 70 to match the firmware piecewise-linear curve.
+- `hardware/bom/ghostblade-bom.csv` and `ghostblade-bom-interactive.html` — duplicate `U10` reference designator resolved: TPS63020 DC-DC converter renumbered from `U10` to `U16` (the eMMC `THGBMJG6C1LBAB7` retains `U10`).
+- `hardware/kicad/ghostblade.net` — VBAT net node updated to reference `U16` (TPS63020) instead of `U10`. Missing component definitions for U10 (eMMC), U11 (TLV75533), U12 (TLV75518), U13 (NCP303), U14 (W25Q128JVS), U15 (SY8120B), and U16 (TPS63020) added to the components section to resolve ERC "unresolved reference" warnings.
+- `hardware/kicad/ghostblade.kicad_pro` — project comment corrected from "Project Cyber-Swiss" to "Project NullSpectre".
+- `README.md` and `stats.json` — BOM component count corrected from "80+" / 66 to 67 (actual line-item count).
 
 ### Changed
 

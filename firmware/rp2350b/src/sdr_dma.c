@@ -176,6 +176,9 @@ static struct {
  * DMA IRQ Handler
  * ======================================================================== */
 
+/* Forward declaration — called from the IRQ handler before it's defined */
+static void sdr_dma_start_block(uint8_t block_idx);
+
 /**
  * sdr_dma_irq_handler — Called when DMA channel 0 completes a block transfer
  *
@@ -442,4 +445,74 @@ bool sdr_dma_is_running(void) {
 uint8_t sdr_dma_blocks_available(void) {
     sdr_dmb();
     return __atomic_load_n(&blocks_filled, __ATOMIC_RELAXED);
+}
+
+/* ========================================================================
+ * SDR DMA Process — Core 1 Loop
+ * ======================================================================== */
+
+/* External: SPI protocol handler for sending IQ chunks to host */
+extern void spi_protocol_send_iq_chunk(const uint8_t *data, uint16_t len);
+
+/**
+ * sdr_dma_process — Process completed DMA buffers (Core 1 loop)
+ *
+ * Checks for completed DMA buffers in the ring and pushes their IQ
+ * data into the SPI protocol handler for transmission to the RK3576
+ * host. Must be called frequently from Core 1's main loop.
+ */
+void sdr_dma_process(void) {
+    uint8_t block_idx;
+    uint16_t block_size;
+    const uint8_t *block_data;
+
+    /* Check if DMA is running and there are blocks available */
+    if (!dma_running)
+        return;
+
+    block_data = sdr_dma_get_block(&block_idx, &block_size);
+    if (block_data) {
+        /* Send the IQ chunk to the host via SPI protocol handler */
+        spi_protocol_send_iq_chunk(block_data, block_size);
+        /* Release the block back to the ring buffer */
+        sdr_dma_release_block();
+    }
+}
+
+/**
+ * sdr_dma_set_frequency — Tune the SDR center frequency
+ *
+ * @freq_hz:    Center frequency in Hz (100 kHz – 3.8 GHz)
+ * @bw_khz:     Bandwidth in kHz
+ * @gain_db_x10: LNA gain in dB × 10
+ */
+void sdr_dma_set_frequency(uint32_t freq_hz, uint16_t bw_khz,
+                            uint16_t gain_db_x10) {
+    extern void lms7002m_tune_rx(uint32_t, uint16_t, uint16_t);
+    lms7002m_tune_rx(freq_hz, bw_khz, gain_db_x10);
+}
+
+/**
+ * sdr_dma_get_state — Get the current DMA engine state
+ *
+ * Returns: current sdr_dma_state enum value
+ */
+enum sdr_dma_state sdr_dma_get_state(void) {
+    if (dma_running)
+        return SDR_DMA_STATE_RUNNING;
+    return SDR_DMA_STATE_IDLE;
+}
+
+/**
+ * sdr_dma_get_buffers_completed — Get count of completed buffers
+ */
+uint32_t sdr_dma_get_buffers_completed(void) {
+    return dma_stats.total_blocks_sent;
+}
+
+/**
+ * sdr_dma_get_overrun_count — Get count of ring buffer overruns
+ */
+uint32_t sdr_dma_get_overrun_count(void) {
+    return dma_stats.overruns;
 }

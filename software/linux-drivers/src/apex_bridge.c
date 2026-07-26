@@ -126,11 +126,17 @@ struct apex_bridge_dev {
 
 static struct apex_bridge_dev *apex_dev;
 
-/* Driver state flags */
-#define APEX_FLAG_MCU_READY     0
-#define APEX_FLAG_MCU_RESET    1
-#define APEX_FLAG_SPI_ERROR    2
-#define APEX_FLAG_LOW_BATTERY  3
+/* Driver internal state flags (bit indices into dev->flags bitmap).
+ * These are distinct from the telemetry wire-flag bits defined in
+ * apex_bridge_regs.h (APEX_FLAG_SDR_RX_ACTIVE, APEX_FLAG_LOW_BATTERY, etc.)
+ * which are protocol constants sent over the SPI wire.
+ * The internal flags track the driver's local state (MCU ready, reset,
+ * SPI errors, low-battery condition) and must NOT collide with the
+ * telemetry flag bit values. */
+#define APEX_STATE_MCU_READY     0
+#define APEX_STATE_MCU_RESET     1
+#define APEX_STATE_SPI_ERROR     2
+#define APEX_STATE_LOW_BATTERY   3
 
 /* ========================================================================
  * CRC Computation (Kernel Implementation)
@@ -214,7 +220,7 @@ static int apex_spi_xfer(struct apex_bridge_dev *dev,
     xfer.tx_buf = tx_buf;
     xfer.rx_buf = rx_buf;
     xfer.len = tx_len;
-    xfer.speed_hz = spi_speed_hz;
+    xfer.speed_hz = READ_ONCE(spi_speed_hz);
     xfer.bits_per_word = 8;
     xfer.cs_change = 0;
 
@@ -226,7 +232,7 @@ static int apex_spi_xfer(struct apex_bridge_dev *dev,
 
     if (ret < 0) {
         dev_err(&dev->spi->dev, "SPI transfer failed: %d\n", ret);
-        set_bit(APEX_FLAG_SPI_ERROR, &dev->flags);
+        set_bit(APEX_STATE_SPI_ERROR, &dev->flags);
         atomic_inc(&dev->spi_err_count);
         return ret;
     }
@@ -394,7 +400,7 @@ static int apex_gpio_init(struct apex_bridge_dev *dev)
     }
 
     /* MCU is initially in reset; will be released after SPI init */
-    set_bit(APEX_FLAG_MCU_RESET, &dev->flags);
+    set_bit(APEX_STATE_MCU_RESET, &dev->flags);
 
     return 0;
 }
@@ -402,21 +408,21 @@ static int apex_gpio_init(struct apex_bridge_dev *dev)
 static void apex_mcu_reset_assert(struct apex_bridge_dev *dev)
 {
     gpio_set_value(dev->gpio_mcu_reset, 0);  /* Active-low: assert reset */
-    set_bit(APEX_FLAG_MCU_RESET, &dev->flags);
+    set_bit(APEX_STATE_MCU_RESET, &dev->flags);
     msleep(10);  /* Hold reset for 10 ms */
 }
 
 static void apex_mcu_reset_release(struct apex_bridge_dev *dev)
 {
     gpio_set_value(dev->gpio_mcu_reset, 1);  /* Active-low: release reset */
-    clear_bit(APEX_FLAG_MCU_RESET, &dev->flags);
+    clear_bit(APEX_STATE_MCU_RESET, &dev->flags);
 
     /* Wait for MCU to boot and stabilize */
     msleep(100);
 
     /* Signal host readiness */
     gpio_set_value(dev->gpio_host_rdy, 0);  /* Active-low: assert HOST_RDY */
-    set_bit(APEX_FLAG_MCU_READY, &dev->flags);
+    set_bit(APEX_STATE_MCU_READY, &dev->flags);
 }
 
 /* ========================================================================
@@ -496,14 +502,17 @@ static void apex_rx_work_handler(struct work_struct *work)
             memcpy(&dev->last_telem, payload,
                    sizeof(struct apex_telemetry));
             new_flags = le16_to_cpu(dev->last_telem.flags);
-            /* Update driver flags from MCU telemetry */
+            /* Update driver flags from MCU telemetry.
+             * APEX_FLAG_LOW_BATTERY (BIT(7)) is the wire-protocol flag
+             * from the MCU. APEX_STATE_LOW_BATTERY is the internal
+             * driver state bit we set/clear in dev->flags. */
             if (new_flags & APEX_FLAG_LOW_BATTERY) {
-                set_bit(APEX_FLAG_LOW_BATTERY, &dev->flags);
+                set_bit(APEX_STATE_LOW_BATTERY, &dev->flags);
                 /* Edge detection: count brownout transitions (0→1) */
                 if (atomic_xchg(&dev->brownout_prev_flag, 1) == 0)
                     atomic_inc(&dev->brownout_count);
             } else {
-                clear_bit(APEX_FLAG_LOW_BATTERY, &dev->flags);
+                clear_bit(APEX_STATE_LOW_BATTERY, &dev->flags);
                 atomic_set(&dev->brownout_prev_flag, 0);
             }
             /* Also push to RX FIFO for user-space read() */
@@ -1068,11 +1077,11 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
     case APEX_IOC_GET_STATUS: {
         uint32_t status = 0;
 
-        if (test_bit(APEX_FLAG_MCU_READY, &dev->flags))
+        if (test_bit(APEX_STATE_MCU_READY, &dev->flags))
             status |= BIT(0);
-        if (test_bit(APEX_FLAG_MCU_RESET, &dev->flags))
+        if (test_bit(APEX_STATE_MCU_RESET, &dev->flags))
             status |= BIT(1);
-        if (test_bit(APEX_FLAG_SPI_ERROR, &dev->flags))
+        if (test_bit(APEX_STATE_SPI_ERROR, &dev->flags))
             status |= BIT(2);
 
         if (copy_to_user((uint32_t __user *)arg, &status, sizeof(status))) {
@@ -1154,15 +1163,15 @@ static __poll_t apex_bridge_poll(struct file *filp,
         mask |= EPOLLIN | EPOLLRDNORM;
 
     /* Report SPI error condition */
-    if (test_bit(APEX_FLAG_SPI_ERROR, &dev->flags))
+    if (test_bit(APEX_STATE_SPI_ERROR, &dev->flags))
         mask |= EPOLLERR;
 
     /* Report MCU reset as hangup */
-    if (test_bit(APEX_FLAG_MCU_RESET, &dev->flags))
+    if (test_bit(APEX_STATE_MCU_RESET, &dev->flags))
         mask |= EPOLLHUP;
 
     /* Report brownout/low battery as priority event */
-    if (test_bit(APEX_FLAG_LOW_BATTERY, &dev->flags))
+    if (test_bit(APEX_STATE_LOW_BATTERY, &dev->flags))
         mask |= EPOLLPRI;
 
     /* Writable when TX FIFO has space (or always if FIFO is large enough) */
@@ -1347,11 +1356,11 @@ static ssize_t driver_status_show(struct device *dev,
     if (!adev)
         return -ENODEV;
 
-    if (test_bit(APEX_FLAG_MCU_READY, &adev->flags))
+    if (test_bit(APEX_STATE_MCU_READY, &adev->flags))
         status |= BIT(0);
-    if (test_bit(APEX_FLAG_MCU_RESET, &adev->flags))
+    if (test_bit(APEX_STATE_MCU_RESET, &adev->flags))
         status |= BIT(1);
-    if (test_bit(APEX_FLAG_SPI_ERROR, &adev->flags))
+    if (test_bit(APEX_STATE_SPI_ERROR, &adev->flags))
         status |= BIT(2);
 
     return sprintf(buf, "0x%08x\n", status);
@@ -1430,7 +1439,7 @@ static ssize_t low_battery_show(struct device *dev,
         return -ENODEV;
 
     return sprintf(buf, "%u\n",
-                   test_bit(APEX_FLAG_LOW_BATTERY, &adev->flags) ? 1 : 0);
+                   test_bit(APEX_STATE_LOW_BATTERY, &adev->flags) ? 1 : 0);
 }
 static DEVICE_ATTR_RO(low_battery);
 

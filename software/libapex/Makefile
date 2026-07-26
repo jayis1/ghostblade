@@ -43,10 +43,12 @@ $(OBJ_DIR)/$(LIB_SHARED): $(OBJS)
 install: all
 	install -d $(PREFIX)/lib
 	install -d $(PREFIX)/include
+	install -d $(PREFIX)/lib/pkgconfig
 	install -m 644 $(OBJ_DIR)/$(LIB_STATIC) $(PREFIX)/lib/
 	install -m 755 $(OBJ_DIR)/$(LIB_SHARED) $(PREFIX)/lib/
 	install -m 644 include/libapex.h $(PREFIX)/include/
 	ln -sf $(LIB_SHARED) $(PREFIX)/lib/$(LIB_SHARED).0
+	sed -e 's|@PREFIX@|$(PREFIX)|g' libapex.pc.in > $(PREFIX)/lib/pkgconfig/libapex.pc
 	ldconfig || true
 
 uninstall:
@@ -54,6 +56,7 @@ uninstall:
 	rm -f $(PREFIX)/lib/$(LIB_SHARED)
 	rm -f $(PREFIX)/lib/$(LIB_SHARED).0
 	rm -f $(PREFIX)/include/libapex.h
+	rm -f $(PREFIX)/lib/pkgconfig/libapex.pc
 	ldconfig || true
 
 clean:

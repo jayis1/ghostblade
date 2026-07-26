@@ -18,6 +18,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>          /* NULL */
+#include "cc1101_init.h"     /* CC1101 register definitions, CC1101_PATABLE */
 
 /* ========================================================================
  * CC1101 Register Addresses (Configuration Registers, bank 0)

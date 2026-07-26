@@ -208,7 +208,7 @@ ghostblade/
 │       └── watchdog.c                      # Hardware watchdog handler
 ├── hardware/
 │   ├── bom/
-│   │   ├── ghostblade-bom.csv                  # Full BOM (80+ parts, MPN, price)
+│   │   ├── ghostblade-bom.csv                  # Full BOM (67 parts, MPN, price)
 │   │   └── ghostblade-bom-interactive.html     # Interactive HTML BOM
 │   ├── drc/
 │   │   ├── ghostblade-drc-rules.kicad_drc     # KiCad custom DRC rules (IPC Class 3)
@@ -371,7 +371,7 @@ ghostblade/
 | [ghostblade-footprints.kicad_mod](hardware/kicad/footprints/ghostblade-footprints.pretty/ghostblade-footprints.kicad_mod) | Footprint library (FCBGA-732, QFN-60, QFN-64, all packages) |
 | [ghostblade.net](hardware/kicad/ghostblade.net) | Schematic netlist (150+ nets, all IC connections) |
 | [ghostblade-drc-rules.kicad_drc](hardware/drc/ghostblade-drc-rules.kicad_drc) | Custom DRC rules (IPC Class 3, RF/high-speed constraints) |
-| [ghostblade-bom.csv](hardware/bom/ghostblade-bom.csv) | Full bill of materials (80+ line items, MPN, price) |
+| [ghostblade-bom.csv](hardware/bom/ghostblade-bom.csv) | Full bill of materials (67 line items, MPN, price) |
 | [ghostblade-bom-interactive.html](hardware/bom/ghostblade-bom-interactive.html) | Interactive HTML BOM (search, filter, sort, cost calc) |
 | [3D models README](hardware/kicad/3dmodels/README.md) | STEP model references and parametric generation scripts |
 

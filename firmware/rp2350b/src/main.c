@@ -64,7 +64,6 @@ bi_decl(bi_1pin_with_name(PIN_HOST_RDY, "HOST_RDY (from RK3576)"))
 #define TELEMETRY_INTERVAL_MS     100     /* Send telemetry every 100 ms */
 #define WATCHDOG_TIMEOUT_MS       5000    /* Watchdog bark after 5 s */
 #define BATTERY_UPDATE_INTERVAL_MS 1000   /* Read battery every 1 s */
-#define BARK_INTERRUPT_PRIORITY    0x40    /* Watchdog bark ISR priority */
 
 /* ── Module state tracking ─────────────────────────────────────────────────── */
 
@@ -247,6 +246,10 @@ static void collect_telemetry(void)
                                    vbat_mv,
                                    cc_rssi_x10,
                                    nfc_field_mv);
+
+    /* Overtemperature detection: flag overtemp in telemetry so
+     * the host kernel driver can throttle or shut down. */
+    spi_protocol_set_overtemp(temp_c_x10 > 850);  /* 85.0 °C */
 }
 
 /* ── Main entry point ──────────────────────────────────────────────────────── */
@@ -375,26 +378,26 @@ int main(void)
             /* If ADC has not been read yet, vbat will be 0. Skip
              * brownout detection on the first iteration to avoid
              * false positives. */
-            if (vbat == 0) goto skip_brownout;
-            static bool brownout_active = false;
-            if (battery_is_brownout(vbat, &brownout_active)) {
-                /* Mark brownout in watchdog scratch register so we
-                 * can detect it after the inevitable reset */
-                watchdog_mark_brownout();
-                /* Also set the brownout flag in protocol handler */
-                spi_protocol_set_brownout(true);
-                /* Deassert INT_REQ (active-high) to signal host
-                 * that MCU is entering brownout state. The host
-                 * kernel driver will see the LOW_BATTERY flag in
-                 * telemetry and the brownout_count sysfs attribute
-                 * increment. */
-                rp2350b_gpio_set(PIN_INT_REQ, false);
-            } else if (!brownout_active) {
-                spi_protocol_set_brownout(false);
-                /* Reassert INT_REQ once brownout condition clears */
-                rp2350b_gpio_set(PIN_INT_REQ, true);
+            if (vbat != 0) {
+                static bool brownout_active = false;
+                if (battery_is_brownout(vbat, &brownout_active)) {
+                    /* Mark brownout in watchdog scratch register so we
+                     * can detect it after the inevitable reset */
+                    watchdog_mark_brownout();
+                    /* Also set the brownout flag in protocol handler */
+                    spi_protocol_set_brownout(true);
+                    /* Deassert INT_REQ (active-high) to signal host
+                     * that MCU is entering brownout state. The host
+                     * kernel driver will see the LOW_BATTERY flag in
+                     * telemetry and the brownout_count sysfs attribute
+                     * increment. */
+                    rp2350b_gpio_set(PIN_INT_REQ, false);
+                } else if (!brownout_active) {
+                    spi_protocol_set_brownout(false);
+                    /* Reassert INT_REQ once brownout condition clears */
+                    rp2350b_gpio_set(PIN_INT_REQ, true);
+                }
             }
-        skip_brownout:;
         }
 
         /* Yield to avoid 100% CPU usage in idle state */

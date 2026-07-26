@@ -60,7 +60,7 @@ D2,TVS_SDR,1,Littelfuse,PESD5V0S2BA,SOT-23,Diode,0.15,"TVS diode 5V bidirectiona
 D3,LED_Power,1,Kingbright,APHHS1005QBDZGKC,0402,LED,0.04,"Green 0402 LED power indicator",https://www.kingbright.com/,ghostblade-footprints:LED_0402,Power good
 D4,LED_Activity,1,Kingbright,APHHS1005SURCK,0402,LED,0.04,"Red 0402 LED activity indicator",https://www.kingbright.com/,ghostblade-footprints:LED_0402,SDR activity
 D5,LED_BT,1,Kingbright,APHHS1005SYCK,0402,LED,0.04,"Yellow 0402 LED BT indicator",https://www.kingbright.com/,ghostblade-footprints:LED_0402,Bluetooth active
-U10,TPS63020,1,Texas Instruments,TPS63020,VQFN-14,IC/DCDC,2.10,"Buck-Boost 2A 3.3V output battery",https://www.ti.com/lit/ds/symlink/tps63020.pdf,ghostblade-footprints:VQFN-14_2.5x2.5mm,3.3V main rail from battery
+U16,TPS63020,1,Texas Instruments,TPS63020,VQFN-14,IC/DCDC,2.10,"Buck-Boost 2A 3.3V output battery",https://www.ti.com/lit/ds/symlink/tps63020.pdf,ghostblade-footprints:VQFN-14_2.5x2.5mm,3.3V main rail from battery
 U11,TLV75533,1,Texas Instruments,TLV75533DBVR,SOT-23-5,IC/LDO,0.30,"LDO 3.3V 500mA low-Iq",https://www.ti.com/lit/ds/symlink/tlv75533.pdf,ghostblade-footprints:SOT-23-5,RP2350B 3.3V rail
 U12,TLV75518,1,Texas Instruments,TLV75518DBVR,SOT-23-5,IC/LDO,0.30,"LDO 1.8V 500mA low-Iq",https://www.ti.com/lit/ds/symlink/tlv75518.pdf,ghostblade-footprints:SOT-23-5,1.8V IO rail
 U13,NCP303,1,ON Semiconductor,NCP303LSN09T1G,SOT-23-5,IC/Reset,0.20,"Voltage supervisor 0.9V threshold",https://www.onsemi.com/,ghostblade-footprints:SOT-23-5,RK3576 reset supervisor

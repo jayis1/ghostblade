@@ -384,13 +384,17 @@ bool rp2350b_gpio_get(uint8_t pin) {
 static void unreset_block_wait(uint32_t reset_mask) {
     volatile uint32_t *reset_reg = (volatile uint32_t *)(RP2350B_RESETS_BASE + RESETS_RESET);
     volatile uint32_t const *reset_done = (volatile uint32_t const *)(RP2350B_RESETS_BASE + RESETS_RESET_DONE);
+    uint32_t timeout = 1000000;
 
     /* Deassert reset for specified peripherals */
     *reset_reg &= ~reset_mask;
 
-    /* Wait for all specified peripherals to report reset done */
-    while ((*reset_done & reset_mask) != reset_mask)
-        ;
+    /* Wait for all specified peripherals to report reset done
+     * (with timeout to prevent hanging if hardware is faulty) */
+    while ((*reset_done & reset_mask) != reset_mask) {
+        if (--timeout == 0)
+            break;  /* Timeout: peripheral reset not completing */
+    }
 }
 
 /* ========================================================================
@@ -803,17 +807,22 @@ void apex_cc1101_cs_release(void) {
 uint8_t apex_cc1101_spi_xfer(uint8_t tx_byte) {
     volatile uint32_t *dr = (volatile uint32_t *)SPI1_SSPDR;
     volatile uint32_t const *sr = (volatile uint32_t const *)SPI1_SSPSR;
+    uint32_t timeout;
 
-    /* Wait until TX FIFO has space */
+    /* Wait until TX FIFO has space (with timeout to prevent hang) */
+    timeout = 100000;
     while (!(*sr & SSPSR_TNF))
-        ;
+        if (--timeout == 0)
+            return 0xFF;  /* SPI bus stuck */
 
     /* Write byte to TX FIFO */
     *dr = (uint32_t)tx_byte;
 
-    /* Wait until RX FIFO has data (transfer complete) */
+    /* Wait until RX FIFO has data (with timeout) */
+    timeout = 100000;
     while (!(*sr & SSPSR_RNE))
-        ;
+        if (--timeout == 0)
+            return 0xFF;  /* SPI transfer timeout */
 
     /* Read received byte from RX FIFO */
     return (uint8_t)(*dr & 0xFF);

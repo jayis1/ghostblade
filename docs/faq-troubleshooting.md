@@ -280,3 +280,78 @@ In short: fork, branch, commit, push, open a PR.
 Be patient — maintainers review PRs as time permits. You can bump by
 adding a polite comment after a few days. Make sure your branch is
 up-to-date with `main` and that all local checks pass.
+
+---
+
+## Testing
+
+### `make tests` fails to build `test_libapex_framing`
+
+This was caused by the battery helper test functions being declared
+as block-scope prototypes inside the test body rather than defined as
+file-scope `static` functions. If you see linker errors such as
+`undefined reference to 'battery_percent'`, make sure the helpers are
+defined at file scope (not declared as prototypes inside the function):
+
+```c
+/* Correct — file-scope static definitions */
+static uint8_t battery_percent(uint16_t vbat_mv) { ... }
+static bool is_low_battery(uint16_t vbat_mv) { ... }
+static bool is_overtemp(int16_t temp_c_x10) { ... }
+```
+
+The helper logic must match `battery_get_percent()`, `battery_is_low()`,
+and `temperature_is_overtemp()` in `firmware/rp2350b/src/battery_monitor.c`.
+
+### Test assertion failures in `test_battery_helpers`
+
+The battery percentage curve is piecewise-linear with four segments
+(3000–3300, 3300–3700, 3700–4200, and clamp). Common mistakes:
+- `battery_percent(3900)` returns **70** (not 80) — the 3700–4200
+  segment computes `(3900-3700)*50/500 + 50 = 70`.
+- `battery_percent(3500)` returns **30** — the 3300–3700 segment
+  computes `(3500-3300)*40/400 + 10 = 30`.
+- `battery_percent(3200)` returns **6** — the 3000–3300 segment
+  computes `(3200-3000)*10/300 = 6` (integer division).
+
+### Telemetry flag assertions fail
+
+The telemetry flag bits are defined in `test_libapex_framing.c`:
+
+| Bit | Mask | Flag |
+|-----|------|------|
+| 0 | `0x01` | `TELEM_FLAG_SDR_RX_ACTIVE` |
+| 1 | `0x02` | `TELEM_FLAG_SDR_TX_ACTIVE` |
+| 2 | `0x04` | `TELEM_FLAG_CC1101_RX` |
+| 3 | `0x08` | `TELEM_FLAG_CC1101_TX` |
+| 4 | `0x10` | `TELEM_FLAG_NFC_ACTIVE` |
+| 5 | `0x20` | `TELEM_FLAG_NFC_TAG_PRESENT` |
+| 6 | `0x40` | `TELEM_FLAG_OVERTEMP` |
+| 7 | `0x80` | `TELEM_FLAG_LOW_BATTERY` |
+
+A common error is encoding `NFC_ACTIVE | SDR_RX_ACTIVE | LOW_BATTERY`
+as `0x85` (which omits bit 4) instead of `0x91`.
+
+---
+
+## Hardware / BOM
+
+### Duplicate reference designators in the BOM
+
+Each reference designator (U-number, R-number, etc.) must be unique.
+A previous version of the BOM assigned `U10` to both the eMMC
+(`THGBMJG6C1LBAB7`) and the battery DC-DC converter (`TPS63020`).
+The TPS63020 is now `U16`. Run `tools/validate_netlist.py` after
+editing the BOM to catch such collisions:
+
+```bash
+python3 tools/validate_netlist.py
+```
+
+### Component appears in netlist but not in components section
+
+The KiCad netlist (`hardware/kicad/ghostblade.net`) must include a
+`(comp (ref "..."))` entry for every reference designator used in a
+`(node (ref "..."))` net entry. Missing component definitions cause
+ERC "unresolved reference" warnings. The `validate_netlist.py` tool
+cross-checks the manifest, netlist, DTS, and firmware pin definitions.

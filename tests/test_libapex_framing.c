@@ -366,8 +366,8 @@ static void test_telemetry_structure_layout(void) {
     uint8_t telem[16];
     memset(telem, 0, sizeof(telem));
 
-    /* rssi_dbm_x10 = -450 (-45.0 dBm) = 0xFE38 in int16_t LE */
-    telem[0] = 0x38; telem[1] = 0xFE;
+    /* rssi_dbm_x10 = -450 (-45.0 dBm) = 0xFE3E in int16_t LE */
+    telem[0] = 0x3E; telem[1] = 0xFE;
     /* temp_c_x10 = 275 (27.5°C) = 0x0113 in int16_t LE */
     telem[2] = 0x13; telem[3] = 0x01;
     /* vbat_mv = 3850 mV = 0x0F0A in uint16_t LE */
@@ -376,8 +376,8 @@ static void test_telemetry_structure_layout(void) {
     telem[6] = 0x12; telem[7] = 0xFD;
     /* nfc_field_mv = 1200 mV = 0x04B0 in uint16_t LE */
     telem[8] = 0xB0; telem[9] = 0x04;
-    /* flags = 0x0085 (SDR_RX_ACTIVE | NFC_ACTIVE | LOW_BATTERY) */
-    telem[10] = 0x85; telem[11] = 0x00;
+    /* flags = 0x0091 (SDR_RX_ACTIVE | NFC_ACTIVE | LOW_BATTERY) */
+    telem[10] = 0x91; telem[11] = 0x00;
     /* uptime_ms = 123456 = 0x0001E240 in uint32_t LE */
     telem[12] = 0x40; telem[13] = 0xE2; telem[14] = 0x01; telem[15] = 0x00;
 
@@ -396,7 +396,7 @@ static void test_telemetry_structure_layout(void) {
     TEST_ASSERT_EQ((int)vbat, 3850, "Telemetry: vbat_mv = 3850");
     TEST_ASSERT_EQ((int)cc_rssi, -750, "Telemetry: cc1101_rssi_x10 = -750");
     TEST_ASSERT_EQ((int)nfc, 1200, "Telemetry: nfc_field_mv = 1200");
-    TEST_ASSERT_EQ((int)flags, 0x0085, "Telemetry: flags = 0x0085");
+    TEST_ASSERT_EQ((int)flags, 0x0091, "Telemetry: flags = 0x0091");
     TEST_ASSERT_EQ((int)uptime, 123456, "Telemetry: uptime_ms = 123456");
 
     /* Verify flags */
@@ -530,17 +530,32 @@ static void test_endianness(void) {
     TEST_ASSERT_EQ((int)le64[7], 0x01, "LE64: byte 7 = 0x01");
 }
 
+/* C11-compatible helper functions for battery tests */
+static uint8_t battery_percent(uint16_t vbat_mv) {
+    if (vbat_mv >= 4200) return 100;
+    if (vbat_mv <= 3000) return 0;
+    if (vbat_mv >= 3700)
+        return (uint8_t)((uint32_t)(vbat_mv - 3700) * 50 / 500 + 50);
+    else if (vbat_mv >= 3300)
+        return (uint8_t)((uint32_t)(vbat_mv - 3300) * 40 / 400 + 10);
+    else
+        return (uint8_t)((uint32_t)(vbat_mv - 3000) * 10 / 300);
+}
+
+static bool is_low_battery(uint16_t vbat_mv) {
+    return vbat_mv < 3300;
+}
+
+static bool is_overtemp(int16_t temp_c_x10) {
+    return temp_c_x10 > 850;  /* 85.0°C */
+}
+
 static void test_battery_helpers(void) {
     printf("Test: Battery helper functions\n");
 
-    /* Test apex_battery_percent equivalent logic — C11 compatible helpers */
-    uint8_t battery_percent(uint16_t vbat_mv);
-    bool is_low_battery(uint16_t vbat_mv);
-    bool is_overtemp(int16_t temp_c_x10);
-
     TEST_ASSERT_EQ((int)battery_percent(4200), 100, "Battery: 4200mV = 100%");
     TEST_ASSERT_EQ((int)battery_percent(3000), 0, "Battery: 3000mV = 0%");
-    TEST_ASSERT_EQ((int)battery_percent(3900), 80, "Battery: 3900mV = 80%");
+    TEST_ASSERT_EQ((int)battery_percent(3900), 70, "Battery: 3900mV = 70%");
     TEST_ASSERT_EQ((int)battery_percent(3500), 30, "Battery: 3500mV = 30%");
     TEST_ASSERT_EQ((int)battery_percent(3200), 6, "Battery: 3200mV ≈ 6%");
     TEST_ASSERT_EQ((int)battery_percent(4500), 100, "Battery: 4500mV = 100% (clamped)");

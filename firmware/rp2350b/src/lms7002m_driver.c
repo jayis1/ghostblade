@@ -27,9 +27,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <string.h>
+#include <stddef.h>          /* NULL */
 #include "lms7002m_driver.h"
 #include "board_pins.h"
+#include "rp2350b_init.h"    /* rp2350b_gpio_set() */
 
 /* ========================================================================
  * LMS7002M SPI Protocol
@@ -140,17 +141,22 @@
 static uint32_t lms7002m_spi_xfer(uint32_t tx_data) {
     volatile uint32_t *dr = (volatile uint32_t *)SPI1_SSPDR;
     const volatile uint32_t *sr = (const volatile uint32_t *)SPI1_SSPSR;
+    uint32_t timeout;
 
-    /* Wait until TX FIFO has space */
+    /* Wait until TX FIFO has space (with timeout to prevent hang) */
+    timeout = 100000;
     while (!(*sr & (1 << 1)))  /* TNF: TX FIFO not full */
-        ;
+        if (--timeout == 0)
+            return 0xFFFFFFFF;  /* SPI bus stuck */
 
     /* Write 32-bit data */
     *dr = tx_data;
 
-    /* Wait until RX FIFO has data */
+    /* Wait until RX FIFO has data (with timeout) */
+    timeout = 100000;
     while (!(*sr & (1 << 2)))  /* RNE: RX FIFO not empty */
-        ;
+        if (--timeout == 0)
+            return 0xFFFFFFFF;  /* SPI transfer timeout */
 
     /* Read 32-bit data */
     return *dr;
@@ -217,13 +223,14 @@ static uint16_t lms7002m_read_reg(uint16_t addr) {
     spi_cmd = LMS7002M_SPI_READ
             | ((uint32_t)(addr & 0x3FFF) << LMS7002M_SPI_ADDR_SHIFT);
 
+    /* LMS7002M read: single CS assertion, two 32-bit transfers.
+     * First transfer sends the read command (with dummy data).
+     * Second transfer sends dummy 0x0000 and captures the response.
+     * Both transfers must happen within the same CS assertion cycle. */
     lms7002m_cs_assert();
     /* First transfer: send read command */
     lms7002m_spi_xfer(spi_cmd);
-    lms7002m_cs_release();
-
-    /* Second transfer: read data (send dummy) */
-    lms7002m_cs_assert();
+    /* Second transfer: send dummy, capture response */
     rx_data = lms7002m_spi_xfer(0x00000000);
     lms7002m_cs_release();
 
@@ -239,6 +246,8 @@ static uint16_t lms7002m_read_reg(uint16_t addr) {
  */
 static void lms7002m_write_burst(uint16_t start_addr,
                                     const uint16_t *data, uint16_t count) {
+    if (!data || count == 0)
+        return;
     for (uint16_t i = 0; i < count; i++) {
         lms7002m_write_reg(start_addr + i, data[i]);
     }
