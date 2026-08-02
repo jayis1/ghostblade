@@ -642,7 +642,16 @@ static void handle_cmd_cc1101_cfg(const uint8_t *payload, uint16_t len) {
     uint8_t reg_len  = payload[1];
 
     /* Validate register address range (0x00-0x2E config, 0x30-0x3D command/status).
-     * Address 0x2F is reserved/invalid on CC1101. */
+     * Address 0x2F is reserved/invalid on CC1101.
+     * Special case: 0xFF is a sentinel for band-switch commands from
+     * the userspace library (apex_cc1101_set_band). The band index is
+     * passed in reg_len, and the firmware calls cc1101_set_band(). */
+    if (reg_addr == 0xFF) {
+        /* Band switch: reg_len is the band index (0=433, 1=868, 2=915) */
+        cc1101_set_band(reg_len);
+        return;
+    }
+
     if (reg_addr > 0x3D || reg_addr == 0x2F)
         return;
 
