@@ -151,6 +151,27 @@ Number of bytes currently in the TX FIFO (userspace → kernel → MCU).
 - **Unit:** bytes
 - **Example:** `0` means the TX FIFO is empty
 
+### `low_battery`
+
+Current low-battery status.
+
+- **Type:** Read-only integer (0 or 1)
+- **Details:** Set to 1 when the MCU's LOW_BATTERY telemetry flag is set,
+  indicating battery voltage is below the brownout threshold. Clears when
+  the flag clears.
+- **Example:** `0` means battery is OK
+
+### `overtemp`
+
+Current overtemperature status.
+
+- **Type:** Read-only integer (0 or 1)
+- **Details:** Set to 1 when the MCU's OVERTEMP telemetry flag is set,
+  indicating the MCU die temperature exceeds 85°C. The host driver or
+  userspace should throttle SDR DMA or initiate graceful shutdown when
+  this is set.
+- **Example:** `0` means temperature is within safe range
+
 ## Scatter-Gather DMA Attributes
 
 These attributes report the state and statistics of the DMA scatter-gather
