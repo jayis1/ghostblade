@@ -1031,19 +1031,10 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         /* Send CMD_RESET_MCU frame with the magic value as payload.
          * The MCU firmware validates the magic before triggering a
          * watchdog reset, preventing accidental resets from corrupted
-         * frames. */
+         * frames. Reuse the outer frame/rx_buf allocations instead of
+         * allocating new ones (avoids variable shadowing and memory waste). */
         {
             uint8_t reset_payload[4];
-            uint8_t *frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
-            uint8_t *rx = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
-            int frame_len;
-
-            if (!frame || !rx) {
-                kfree_sensitive(frame);
-                kfree_sensitive(rx);
-                ret = -ENOMEM;
-                break;
-            }
 
             /* Pack magic value as little-endian payload */
             reset_payload[0] = (uint8_t)(APEX_RESET_MAGIC & 0xFF);
@@ -1057,7 +1048,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
                                          frame,
                                          APEX_SPI_FRAME_SIZE_MAX);
             if (frame_len > 0) {
-                apex_spi_xfer(dev, frame, frame_len, rx,
+                apex_spi_xfer(dev, frame, frame_len, rx_buf,
                               APEX_SPI_FRAME_SIZE_MAX);
                 dev_info(&dev->spi->dev,
                          "SOFT_RESET: MCU soft reset command sent\n");
@@ -1067,9 +1058,6 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
                         "SOFT_RESET: failed to build reset frame\n");
                 ret = -EIO;
             }
-
-            kfree_sensitive(frame);
-            kfree_sensitive(rx);
         }
         break;
     }
@@ -1443,6 +1431,25 @@ static ssize_t low_battery_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(low_battery);
 
+static ssize_t overtemp_show(struct device *dev,
+                               struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+    uint16_t flags;
+
+    if (!adev)
+        return -ENODEV;
+
+    spin_lock(&adev->rx_lock);
+    flags = adev->last_telem.flags;
+    spin_unlock(&adev->rx_lock);
+
+    /* APEX_FLAG_OVERTEMP is BIT(6) in the telemetry flags bitmap */
+    return sprintf(buf, "%u\n",
+                   (le16_to_cpu(flags) & APEX_FLAG_OVERTEMP) ? 1 : 0);
+}
+static DEVICE_ATTR_RO(overtemp);
+
 static ssize_t firmware_version_show(struct device *dev,
                                        struct device_attribute *attr, char *buf)
 {
@@ -1616,6 +1623,7 @@ static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_tx_fifo_count.attr,
     &dev_attr_brownout_count.attr,
     &dev_attr_low_battery.attr,
+    &dev_attr_overtemp.attr,
     &dev_attr_firmware_version.attr,
     /* Scatter-gather DMA attributes */
     &dev_attr_sg_state.attr,

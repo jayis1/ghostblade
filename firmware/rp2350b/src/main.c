@@ -40,6 +40,7 @@
 #include "sdr_dma.h"
 #include "cc1101_init.h"
 #include "st25r3916_init.h"
+#include "lms7002m_driver.h"
 #include "battery_monitor.h"
 #include "watchdog.h"
 #include "sleep_wake.h"
@@ -195,10 +196,19 @@ static int init_peripherals(void)
         printf("WARN: st25r3916_init failed (%d), NFC unavailable\r\n", ret);
     }
 
-    /* Step 7: Sleep/wake state machine for power management */
+    /* Step 7: LMS7002M SDR transceiver initialization.
+     * Performs hardware reset, SPI communication check, power-up,
+     * and default RX configuration (868 MHz, 2 MHz BW). */
+    extern int lms7002m_init(void);
+    ret = lms7002m_init();
+    if (ret != 0) {
+        printf("WARN: lms7002m_init failed (%d), SDR tuning unavailable\r\n", ret);
+    }
+
+    /* Step 8: Sleep/wake state machine for power management */
     sleep_wake_init();
 
-    /* Step 8: Peripheral power rails (enables SDR, NFC, sub-GHz rails) */
+    /* Step 9: Peripheral power rails (enables SDR, NFC, sub-GHz rails) */
     peripheral_power_init();
 
     return 0;
@@ -227,8 +237,12 @@ static void collect_telemetry(void)
         temp_c_x10 = battery_monitor_get_temp_c_x10();
     }
 
-    /* SDR RSSI (would come from LMS7002M driver; placeholder) */
-    /* TODO: Read LMS7002M RSSI register when SDR driver is integrated */
+    /* SDR RSSI from LMS7002M — read when SDR is active.
+     * lms7002m_read_rssi() returns dBm × 10 as a signed value.
+     * Cast to uint16_t for the telemetry wire format. */
+    if (g_state.sdr_dma_ready) {
+        rssi_dbm_x10 = (uint16_t)lms7002m_read_rssi();
+    }
 
     /* CC1101 RSSI — get_rssi_x10 reads the register internally */
     if (g_state.cc1101_ready) {

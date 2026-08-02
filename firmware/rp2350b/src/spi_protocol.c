@@ -94,6 +94,10 @@ struct cc1101_cfg_cmd {
 
 /* ========================================================================
  * NFC Transaction Command Payload (variable)
+ *
+ * Wire format documentation only — not instantiated as a struct
+ * because the flexible array member makes sizeof() unreliable.
+ * The handler extracts fields via byte-level reads instead.
  * ======================================================================== */
 
 struct nfc_transact_cmd {

@@ -258,13 +258,16 @@ static void sdr_dma_start_block(uint8_t block_idx) {
      * - Do NOT increment read address (SPI1 RX FIFO is fixed)
      * - Transfer request: SPI1 RX FIFO not empty
      * - Chain to self (auto-restart, but we manage via IRQ)
-     * - IRQ on completion
-     */
+     * - IRQ on completion (IRQ_QUIET=0 to allow per-channel completion IRQ)
+     *
+     * BUG FIX: Previously had DMA_CTRL_IRQ_QUIET set, which suppresses
+     * the per-channel completion interrupt. This prevented the DMA IRQ
+     * handler from firing, so the ring buffer would never advance.
+     * Removing IRQ_QUIET allows the completion interrupt to fire. */
     REG32(DMA_CH0_CTRL) = DMA_CTRL_EN                    |
                            DMA_CTRL_DATA_SIZE_8            |
                            DMA_CTRL_INCR_WRITE             |
-                           DMA_TREQ_SPI1_RX << 15          |
-                           DMA_CTRL_IRQ_QUIET;
+                           DMA_TREQ_SPI1_RX << 15;
 
     /* Enable DMA channel 0 interrupt */
     REG32(DMA_INTE0) |= (1 << 0);

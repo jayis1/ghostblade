@@ -247,11 +247,17 @@ volatile uint32_t spi_rx_tail = 0;  /* Protocol handler reads here */
  */
 void spi0_isr_handler(void) {
     volatile uint32_t const *sr = (volatile uint32_t const *)(RP2350B_SPI0_BASE + SPI0_SSPSR);
+    /* dr is the SSP data register — reading from it pops the RX FIFO,
+     * so it must NOT be const (read has side effect). */
     volatile uint32_t *dr = (volatile uint32_t *)(RP2350B_SPI0_BASE + SPI0_SSPDR);
+    uint32_t max_iterations = 256;  /* Safety: limit bytes processed per ISR */
 
     /* Drain all available bytes from the SPI0 RX FIFO.
-     * RNE (RX FIFO Not Empty) indicates data is available. */
-    while (*sr & SSPSR_RNE) {
+     * RNE (RX FIFO Not Empty) indicates data is available.
+     * The max_iterations limit prevents an infinite loop if the RNE
+     * bit is stuck due to a hardware fault. The RP2350B SSP has a
+     * 16-entry RX FIFO, so 256 is far more than needed. */
+    while ((*sr & SSPSR_RNE) && --max_iterations > 0) {
         uint8_t byte = (uint8_t)(*dr & 0xFF);
 
         /* Write byte to ring buffer if space available */

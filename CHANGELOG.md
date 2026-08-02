@@ -26,6 +26,12 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Fixed
 
+- `battery_monitor.c`: Removed duplicate definitions of `battery_monitor_init()`, `battery_monitor_update()`, `battery_monitor_get_vbat_mv()`, `battery_monitor_get_temp_c_x10()`, and `battery_voltage_to_percent()` that were accidentally introduced when the functions were already present earlier in the file — duplicate symbols would cause link errors
+- `sdr_dma.c`: Removed `DMA_CTRL_IRQ_QUIET` from DMA channel 0 control word — this bit suppresses the per-channel completion interrupt, preventing the DMA IRQ handler from firing and the ring buffer from advancing
+- `rp2350b_init.c`: Added 256-iteration safety limit to SPI0 ISR FIFO drain loop to prevent infinite loops if the RNE bit is stuck due to hardware fault
+- `apex_bridge.c`: Fixed memory leak in `APEX_IOC_SOFT_RESET` handler — was `kmalloc`-ing temporary frame/RX buffers instead of reusing the already-allocated `frame`/`rx_buf` from the ioctl function scope
+- `apex_bridge.c`: Added `overtemp` sysfs attribute (`/sys/class/apex/.../overtemp`) exposing the `APEX_FLAG_OVERTEMP` telemetry flag for userspace thermal monitoring
+- `main.c`: Added `lms7002m_init()` call to peripheral initialization sequence and `lms7002m_read_rssi()` for SDR RSSI telemetry — replaces the TODO placeholder
 - `battery_monitor.c`: Added missing public API function implementations (`battery_monitor_init`, `battery_monitor_update`, `battery_monitor_get_vbat_mv`, `battery_monitor_get_temp_c_x10`, `battery_voltage_to_percent`) that were declared in the header and called from `main.c` but were absent from the .c file, causing unresolved symbol link errors
 - `spi_protocol.c`: Removed dead `rx_ring`/`rx_head`/`rx_tail` variables (8 KB of unused SRAM) — the actual SPI0 RX ring buffer lives in `rp2350b_init.c` as `spi_rx_buf`/`spi_rx_head`/`spi_rx_tail`; the local copies were never written by the ISR and confused the code
 - `spi_protocol.c`: Guarded `PIN_INT_REQ` redefinition with `#ifndef` to avoid macro redefinition warning when `board_pins.h` is included in the same translation unit
