@@ -359,6 +359,7 @@ static struct {
 extern void apex_antenna_select(uint8_t ant_id);
 extern void apex_cc1101_write_burst(uint8_t addr, const uint8_t *data, uint8_t len);
 extern void apex_cc1101_read_burst(uint8_t addr, uint8_t *data, uint8_t len);
+extern int cc1101_set_band(int band);
 extern void apex_nfc_write_register(uint8_t addr, uint8_t val);
 extern uint8_t apex_nfc_read_register(uint8_t addr);
 extern void apex_sdr_reset_assert(void);
