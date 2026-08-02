@@ -402,6 +402,81 @@ static bool temperature_is_critical(int16_t temp_dc10) {
 }
 
 /* ========================================================================
+ * Cached readings (updated by battery_monitor_update)
+ * ======================================================================== */
+
+static uint16_t cached_vbat_mv = 0;
+static int16_t  cached_temp_c_x10 = 0;
+
+/* ========================================================================
+ * Public API: Init / Update / Getters (declared in battery_monitor.h)
+ * ======================================================================== */
+
+/**
+ * battery_monitor_init — Initialize the battery monitor
+ *
+ * The ADC peripheral is initialized by rp2350b_init() / adc_init().
+ * This function clears the cached readings and performs one initial
+ * conversion so that callers don't read stale zeros.
+ *
+ * Returns: 0 on success (always succeeds; ADC is statically allocated)
+ */
+int battery_monitor_init(void) {
+    cached_vbat_mv = 0;
+    cached_temp_c_x10 = 0;
+
+    /* Perform one initial reading so get_vbat_mv() returns a valid value */
+    battery_monitor_update();
+
+    return 0;
+}
+
+/**
+ * battery_monitor_update — Trigger a new ADC reading cycle
+ *
+ * Reads battery voltage and die temperature, caching the results
+ * for retrieval via battery_monitor_get_vbat_mv() and
+ * battery_monitor_get_temp_c_x10(). Should be called periodically
+ * (e.g., every 1 second) from the main loop.
+ */
+void battery_monitor_update(void) {
+    cached_vbat_mv = battery_read_voltage_mv();
+    cached_temp_c_x10 = temperature_read_dc10();
+}
+
+/**
+ * battery_monitor_get_vbat_mv — Get the latest cached battery voltage
+ *
+ * Returns: Battery voltage in mV, or 0 if no reading has been taken yet
+ */
+uint16_t battery_monitor_get_vbat_mv(void) {
+    return cached_vbat_mv;
+}
+
+/**
+ * battery_monitor_get_temp_c_x10 — Get the latest cached die temperature
+ *
+ * Returns: Temperature in °C × 10 (e.g., 275 = 27.5°C), or 0 if
+ *          no reading has been taken yet
+ */
+int16_t battery_monitor_get_temp_c_x10(void) {
+    return cached_temp_c_x10;
+}
+
+/**
+ * battery_voltage_to_percent — Convert battery voltage to charge percentage
+ *
+ * Uses the same piecewise linear Li-Po discharge curve as
+ * battery_get_percent() but is exported via the public header.
+ *
+ * @vbat_mv: Battery voltage in mV
+ * Returns: Estimated charge percentage (0–100)
+ */
+uint8_t battery_voltage_to_percent(uint16_t vbat_mv) {
+    return battery_get_percent(vbat_mv);
+}
+
+/* ========================================================================
  * Combined Monitor
  * ======================================================================== */
 
@@ -438,6 +513,95 @@ void battery_monitor_read(uint16_t *vbat_mv, int16_t *temp_dc10,
     if (temp_dc10)  *temp_dc10 = temp;
     if (batt_pct)   *batt_pct  = pct;
     if (flags)      *flags     = f;
+}
+
+/* ========================================================================
+ * Public API (declared in battery_monitor.h, called from main.c)
+ *
+ * The functions below implement the cached-reading API used by the main
+ * loop. battery_monitor_update() performs a fresh ADC conversion cycle
+ * and stores the results; battery_monitor_get_vbat_mv() and
+ * battery_monitor_get_temp_c_x10() return the cached values without
+ * re-reading the ADC, so they are safe to call from any context.
+ *
+ * The earlier battery_monitor_read() function performs an uncached
+ * one-shot read and remains for backward compatibility.
+ * ======================================================================== */
+
+/* Cached readings — updated by battery_monitor_update() */
+static uint16_t cached_vbat_mv = 0;
+static int16_t  cached_temp_c_x10 = 0;
+static bool     monitor_initialized = false;
+
+/**
+ * battery_monitor_init — Initialize ADC for battery and temperature reading
+ *
+ * Enables the ADC peripheral, selects channel 0 (VBAT divider), and
+ * performs an initial conversion to populate the cache.
+ *
+ * Returns: 0 on success, -1 if ADC did not become ready
+ */
+int battery_monitor_init(void) {
+    volatile uint32_t *adc_cs = (volatile uint32_t *)(RP2350B_ADC_BASE + ADC_CS);
+
+    /* Enable the ADC block */
+    *adc_cs |= ADC_CS_EN;
+
+    /* Wait for ADC ready (bit 8 is set when a conversion completes;
+     * for initialization we just need to ensure the enable bit sticks
+     * and the analog block has settled). A short delay loop is used
+     * since there is no explicit "ADC ready" bit separate from READY. */
+    for (volatile int i = 0; i < 100; i++)
+        ;  /* Small settling delay (~1 µs at 150 MHz) */
+
+    /* Perform an initial reading to populate the cache */
+    battery_monitor_update();
+
+    monitor_initialized = true;
+    return 0;
+}
+
+/**
+ * battery_monitor_update — Trigger a new ADC reading cycle
+ *
+ * Reads both the battery voltage (ADC channel 0) and die temperature
+ * (ADC channel 4) with oversampling, and caches the results for
+ * subsequent get_*() calls. Should be called every 1 second from
+ * the main loop.
+ */
+void battery_monitor_update(void) {
+    cached_vbat_mv     = battery_read_voltage_mv();
+    cached_temp_c_x10  = temperature_read_dc10();
+}
+
+/**
+ * battery_monitor_get_vbat_mv — Get the latest cached battery voltage
+ *
+ * Returns: Battery voltage in mV (3000–4200 typical), 0 if no reading yet
+ */
+uint16_t battery_monitor_get_vbat_mv(void) {
+    return cached_vbat_mv;
+}
+
+/**
+ * battery_monitor_get_temp_c_x10 — Get the latest cached die temperature
+ *
+ * Returns: Temperature in 0.1 °C units (e.g., 275 = 27.5 °C)
+ */
+int16_t battery_monitor_get_temp_c_x10(void) {
+    return cached_temp_c_x10;
+}
+
+/**
+ * battery_voltage_to_percent — Convert battery voltage to charge percentage
+ *
+ * Wraps the internal battery_get_percent() for external callers.
+ *
+ * @vbat_mv: Battery voltage in mV
+ * Returns: Estimated charge percentage (0–100)
+ */
+uint8_t battery_voltage_to_percent(uint16_t vbat_mv) {
+    return battery_get_percent(vbat_mv);
 }
 
 /* ========================================================================

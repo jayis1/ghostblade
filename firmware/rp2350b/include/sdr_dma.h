@@ -124,4 +124,16 @@ uint32_t sdr_dma_get_buffers_completed(void);
  */
 uint32_t sdr_dma_get_overrun_count(void);
 
+/**
+ * sdr_dma_get_underrun_count — Get count of ring buffer underruns
+ *
+ * An underrun occurs when the protocol handler requests a block
+ * but the ring buffer is empty (DMA hasn't filled any blocks yet).
+ * Persistent underruns indicate the DMA sample rate is too low
+ * or the consumer is polling too aggressively.
+ *
+ * Returns: number of underrun events since last start
+ */
+uint32_t sdr_dma_get_underrun_count(void);
+
 #endif /* SDR_DMA_H */

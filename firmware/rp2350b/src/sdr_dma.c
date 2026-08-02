@@ -517,3 +517,10 @@ uint32_t sdr_dma_get_buffers_completed(void) {
 uint32_t sdr_dma_get_overrun_count(void) {
     return dma_stats.overruns;
 }
+
+/**
+ * sdr_dma_get_underrun_count — Get count of ring buffer underruns
+ */
+uint32_t sdr_dma_get_underrun_count(void) {
+    return dma_stats.underruns;
+}

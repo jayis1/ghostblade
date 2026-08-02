@@ -33,7 +33,8 @@ DTO_SOURCES = ghostblade-options.dts \
               ghostblade-cc1101-overlay.dts \
               ghostblade-nfc-overlay.dts \
               ghostblade-wifi-overlay.dts \
-              ghostblade-sleep-overlay.dts
+              ghostblade-sleep-overlay.dts \
+              ghostblade-gps-overlay.dts
 
 # Output files
 DTB_OUTPUTS = $(DTS_SOURCES:.dts=.dtb)

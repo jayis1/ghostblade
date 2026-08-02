@@ -249,6 +249,7 @@ ghostblade/
 │       ├── ghostblade-nfc-overlay.dts          # NFC (ST25R3916) configuration overlay
 │       ├── ghostblade-wifi-overlay.dts          # Wi-Fi 6E (MT7922) configuration overlay
 │       ├── ghostblade-sleep-overlay.dts          # Sleep/wake power state overlay
+│       ├── ghostblade-gps-overlay.dts            # Optional GPS (u-blox NEO-M10N) overlay
 │       └── Makefile                            # DTS compile & validate targets
 │   └── toolchain.conf                          # Cross-compilation toolchain setup
 ├── tests/
@@ -368,7 +369,7 @@ ghostblade/
 |------|-------------|
 | [ghostblade.kicad_pro](hardware/kicad/ghostblade.kicad_pro) | KiCad 8 project file (6-layer stackup, net classes) |
 | [ghostblade-symbols.kicad_sym](hardware/kicad/symbols/ghostblade-symbols.kicad_sym) | Symbol library (RK3576, RP2350B, LMS7002M, CC1101, ST25R3916, PE42422, MT7922, RK817, LPDDR5) |
-| [ghostblade-footprints.kicad_mod](hardware/kicad/footprints/ghostblade-footprints.pretty/ghostblade-footprints.kicad_mod) | Footprint library (FCBGA-732, QFN-60, QFN-64, all packages) |
+| [ghostblade-footprints.kicad_mod](hardware/kicad/footprints/ghostblade-footprints.pretty/ghostblade-footprints.kicad_mod) | Footprint library (FCBGA-732, QFN-60, QFN-64, BGA-153, SOT-23-5/6, SOP-8, VQFN-14, USB-C, MicroSD, 0402 passives, all packages) |
 | [ghostblade.net](hardware/kicad/ghostblade.net) | Schematic netlist (150+ nets, all IC connections) |
 | [ghostblade-drc-rules.kicad_drc](hardware/drc/ghostblade-drc-rules.kicad_drc) | Custom DRC rules (IPC Class 3, RF/high-speed constraints) |
 | [ghostblade-bom.csv](hardware/bom/ghostblade-bom.csv) | Full bill of materials (67 line items, MPN, price) |

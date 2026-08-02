@@ -56,6 +56,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | `ghostblade-wifi-overlay.dts` | Wi-Fi 6E (MT7922) runtime config: regulatory domain, TX power, monitor mode, BT |
 | `ghostblade-options.dts` | Optional hardware: GPS (u-blox NEO-M10N on UART2), external LNA, Bluetooth |
 | `ghostblade-sleep-overlay.dts` | Power management: sleep/wake state transitions, brownout thresholds, thermal scaling |
+| `ghostblade-gps-overlay.dts` | Optional GPS (u-blox NEO-M10N on UART2 + I2C2) with 1PPS time sync |
 
 ## Validation Tools
 

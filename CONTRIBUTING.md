@@ -73,15 +73,21 @@ Before submitting a PR, ensure:
 1. **Firmware builds** with no warnings: `cmake --build build -Werror=dev`
 2. **Kernel module compiles**: `make -C /path/to/kernel M=$(pwd) modules`
 3. **Unit tests pass**: `cd tests && make run`
-   - test_spi_protocol (158 tests): SPI frame format, CRC validation, edge cases
-   - test_battery_monitor (95 tests): ADC conversion, battery percentage, brownout hysteresis
-   - test_cc1101_config (37 tests): CC1101 register configuration validation
+   - test_spi_protocol (236 tests): SPI frame format, CRC-64/CRC-32 validation, edge cases, fuzzing
+   - test_battery_monitor (97 tests): ADC conversion, battery percentage, brownout hysteresis
+   - test_cc1101_config (794 tests): CC1101 register configuration validation
    - test_watchdog (72 tests): Watchdog timer constants, brownout magic values, reset reasons
    - test_power_states (57 tests): Power state machine transitions, voltage thresholds
-   - test_sdr_dma (52 tests): SDR DMA ring buffer management, overrun/underrun detection
-   - test_spi0_isr (42 tests): SPI0 ISR frame assembly, sync detection, CRC validation
-   - test_st25r3916_init: ST25R3916 NFC register map, SPI encoding, init sequence
-   - test_libapex: Userspace library API, error codes, telemetry flags
+   - test_sleep_wake (248 tests): Sleep/wake state machine transitions
+   - test_libapex (238 tests): Userspace library API, error codes, telemetry flags
+   - test_libapex_framing (89 tests): Frame encoding/parsing round-trip
+   - test_sdr_dma (1162 tests): SDR DMA ring buffer management, overrun/underrun detection
+   - test_spi0_isr (78 tests): SPI0 ISR frame assembly, sync detection, CRC validation
+   - test_st25r3916_init (395 tests): ST25R3916 NFC register map, SPI encoding, init sequence
+   - test_adc_calibration (45 tests): ADC offset/gain correction, voltage divider math
+   - test_peripheral_power (186 tests): Power rail sequencing order and timing
+   - test_cc1101_lms7002m (315 tests): CC1101/LMS7002M PLL calculations, SPI encoding
+   - test_crc_validation (110 tests): CRC-64/CRC-32 known vectors, error detection
 4. **DTS validates**: `cd software/dts && make validate`
 5. **Netlist cross-references validate**: `make validate-netlist`
 6. **Markdown lints clean**: `markdownlint docs/ README.md CONTRIBUTING.md`

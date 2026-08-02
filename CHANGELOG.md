@@ -15,6 +15,28 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Added
 
+- `battery_monitor_init()`, `battery_monitor_update()`, `battery_monitor_get_vbat_mv()`, `battery_monitor_get_temp_c_x10()`, and `battery_voltage_to_percent()` implementations in `battery_monitor.c` — these functions were declared in `battery_monitor.h` and called from `main.c` but were never defined, which would cause link errors in the firmware build
+- `sdr_dma_get_underrun_count()` function and header declaration for API completeness, complementing the existing `sdr_dma_get_overrun_count()`
+- 15 missing KiCad footprint definitions added to `ghostblade-footprints.kicad_mod`: BGA-153 (eMMC), SOT-23-5 (LDOs/supervisor), SOT-23-6 (DC-DC), SOP-8 (SPI flash), VQFN-14 (buck-boost), USB-C 24-pin, MicroSD push-push, SOT-23 (TVS diodes), R_0402, C_0402, C_1206, LED_0402, Crystal_HC49_SMD, Pin_Header_2x05_1.27mm (JTAG), Switch_Tactile_6x3.5mm — all BOM-referenced footprints now have definitions
+- 3D model references added to new footprints: `eMMC.step`, `W25Q128JVS.step`, `TPS63020.step`, `USB-C_24pin.step`
+- GPS device tree overlay (`ghostblade-gps-overlay.dts`) for optional u-blox NEO-M10N on UART2 + I2C2 with 1PPS time synchronization
+- Pinctrl references added to `gpio_keys`, `leds`, and `sdio` DTS nodes — previously defined pinctrl groups were not referenced by their consumer nodes
+- `test_libapex_framing` added to `.gitignore` (was missing, causing tracked binary)
+- DTS validator (`tools/validate_dts.py`) improved: multi-reference pinctrl-0 parsing (`<&foo &bar>`) and hyphenated pinctrl label matching (`gpio-keys-pins`)
+
+### Fixed
+
+- `battery_monitor.c`: Added missing public API function implementations (`battery_monitor_init`, `battery_monitor_update`, `battery_monitor_get_vbat_mv`, `battery_monitor_get_temp_c_x10`, `battery_voltage_to_percent`) that were declared in the header and called from `main.c` but were absent from the .c file, causing unresolved symbol link errors
+- `spi_protocol.c`: Removed dead `rx_ring`/`rx_head`/`rx_tail` variables (8 KB of unused SRAM) — the actual SPI0 RX ring buffer lives in `rp2350b_init.c` as `spi_rx_buf`/`spi_rx_head`/`spi_rx_tail`; the local copies were never written by the ISR and confused the code
+- `spi_protocol.c`: Guarded `PIN_INT_REQ` redefinition with `#ifndef` to avoid macro redefinition warning when `board_pins.h` is included in the same translation unit
+- `main.c`: Replaced `watchdog_enable(WATCHDOG_TIMEOUT_MS, true)` (Pico SDK function not available in bare-metal register-level build) with `watchdog_reboot(true)` in the fatal-error path
+- `main.c`: Fixed incorrect comment stating INT_REQ is "active-high" — it is active-low; driving LOW asserts the interrupt
+- `main.c`: Fixed comment "Reassert INT_REQ" to "Deassert INT_REQ" when brownout condition clears (driving HIGH = inactive for active-low signal)
+- `GhostBlade.mf` manifest: CC1101 SPI bus labels corrected from `SPI1_SCK`/`SPI1_TX`/`SPI1_RX` to `SPI2_SCK`/`SPI2_TX`/`SPI2_RX` — matches KiCad netlist and `board_pins.h` (CC1101 is on a separate SPI2 bus, not the shared SDR SPI1 bus)
+- `tools/validate_dts.py`: regex for pinctrl group definitions now correctly matches hyphenated label names (e.g. `gpio-keys-pins`, `bridge-gpio-pins`)
+
+### Previous Added
+
 - Netlist cross-reference validation tool (`tools/validate_netlist.py`) — checks GhostBlade.mf manifest nets against KiCad netlist, DTS GPIO assignments, board_pins.h pin definitions, and 3D model references
 - `validate-netlist` target in top-level Makefile for integrated netlist verification
 - SPDX-License-Identifier and copyright headers added to `tools/validate_dts.py`, `tools/check_links.py`, `tools/check_internal_links.py`

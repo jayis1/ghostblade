@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Overlay — GhostBlade GPS (u-blox NEO-M10N)
+ * Project NullSpectre
+ *
+ * This overlay enables the optional u-blox NEO-M10N GPS receiver
+ * connected to UART2 and I2C2 on the RK3576. The GPS module provides
+ * NMEA 0183 sentences at 9600 baud (configurable up to 115200) and
+ * a 1PPS output for precise time synchronization.
+ *
+ * Usage:
+ *   dtc -I dts -O dtb -@ -o ghostblade-gps-overlay.dtbo ghostblade-gps-overlay.dts
+ *   sudo mkdir -p /sys/kernel/config/device-tree/overlays/gps
+ *   sudo cp ghostblade-gps-overlay.dtbo /sys/kernel/config/device-tree/overlays/gps/dtbo
+ *
+ * To remove:
+ *   sudo rmdir /sys/kernel/config/device-tree/overlays/gps
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+/ {
+	compatible = "ghostblade,nullspectre", "rockchip,rk3576";
+
+	/*
+	 * Fragment 0: Enable UART2 for GPS NMEA data
+	 */
+	fragment@0 {
+		target = <&uart2>;
+
+		__overlay__ {
+			status = "okay";
+			current-speed = <9600>; /* NEO-M10N default baud */
+
+			gps: gps-neo-m10n {
+				compatible = "u-blox,neo-m10n";
+				current-speed = <9600>;
+				/*
+				 * 1PPS output on GPIO1_C2 (active-high, 100ms pulse)
+				 * Used for precise time synchronization.
+				 */
+				pinctrl-0 = <&gps_pps_pin>;
+				pinctrl-names = "default";
+				interrupt-parent = <&gpio1>;
+				interrupts = <17 IRQ_TYPE_EDGE_RISING>; /* GPIO1_C2 */
+				u-blox,pps-width-us = <100000>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 1: Enable I2C2 for GPS configuration interface
+	 * The NEO-M10N exposes an I2C slave at address 0x42 for
+	 * configuration and aid data transfer.
+	 */
+	fragment@1 {
+		target = <&i2c2>;
+
+		__overlay__ {
+			status = "okay";
+			clock-frequency = <100000>;
+
+			gps-i2c: gps@42 {
+				compatible = "u-blox,neo-m10n-i2c";
+				reg = <0x42>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 2: Add GPS 1PPS pinctrl entry
+	 */
+	fragment@2 {
+		target = <&pinctrl>;
+
+		__overlay__ {
+			gps_pps_pin: gps-pps-pin {
+				pins = "GPIO1_C2"; /* 1PPS input */
+				function = "gpio";
+				input-enable;
+				bias-pull-down;
+				drive-strength = <2>;
+			};
+		};
+	};
+};

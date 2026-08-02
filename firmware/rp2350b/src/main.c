@@ -278,13 +278,13 @@ int main(void)
     printf("[MAIN] Initializing peripherals...\r\n");
     if (init_peripherals() != 0) {
         printf("[MAIN] FATAL: Peripheral initialization failed, rebooting\r\n");
-        /* Use WATCHDOG_TIMEOUT_MS for the emergency reset rather than
-         * 1 ms — the Pico SDK watchdog_enable() takes (delay_ms, pause_on_debug).
-         * A 1 ms timeout would reset before the printf buffer flushes.
-         * Use the configured timeout to allow diagnostic output. */
-        watchdog_enable(WATCHDOG_TIMEOUT_MS, true);
-        while (1) tight_loop_contents();
-    }
+        /* Use watchdog_reboot() to force an immediate reset.
+         * This writes a minimal timeout to the watchdog and waits
+         * for the hardware reset. The intentional=true parameter
+         * writes a magic value to scratch0 so the reboot is
+         * recognized as intentional on the next boot. */
+        watchdog_reboot(true);
+        /* Does not return */
     printf("[MAIN] Peripherals initialized\r\n");
 
     /* Check for brownout reset (detected via watchdog scratch register) */
@@ -386,15 +386,16 @@ int main(void)
                     watchdog_mark_brownout();
                     /* Also set the brownout flag in protocol handler */
                     spi_protocol_set_brownout(true);
-                    /* Deassert INT_REQ (active-high) to signal host
-                     * that MCU is entering brownout state. The host
-                     * kernel driver will see the LOW_BATTERY flag in
-                     * telemetry and the brownout_count sysfs attribute
-                     * increment. */
+                    /* Assert INT_REQ (active-low) to signal host
+                     * that MCU is entering brownout state. Driving it
+                     * LOW asserts the interrupt. The host kernel driver
+                     * will see the LOW_BATTERY flag in telemetry and the
+                     * brownout_count sysfs attribute increment. */
                     rp2350b_gpio_set(PIN_INT_REQ, false);
                 } else if (!brownout_active) {
                     spi_protocol_set_brownout(false);
-                    /* Reassert INT_REQ once brownout condition clears */
+                    /* Deassert INT_REQ once brownout condition clears
+                     * (drive HIGH = inactive, since INT_REQ is active-low) */
                     rp2350b_gpio_set(PIN_INT_REQ, true);
                 }
             }

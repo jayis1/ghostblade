@@ -425,9 +425,8 @@ static void spi0_slave_init(void) {
      * - Serial clock rate: 0 (slave mode, clock from master) */
     *cr0 = (7 << SSPCR0_DSS_SHIFT)    /* 8-bit data */
          | (0 << SSPCR0_FRF_SHIFT)    /* SPI frame format */
-         | (0 << 6)                    /* CPOL=0 */
-         | (0 << 7)                    /* CPHA=0 */
-         | (0 << SSPCR0_SCR_SHIFT);   /* SCR=0 (slave, irrelevant) */
+                                       /* CPOL=0, CPHA=0: bits 6,7 cleared */
+         | (0 << SSPCR0_SCR_SHIFT);  /* SCR=0 (slave, irrelevant) */
 
     /* Clock prescale divisor (slave mode: not used for clock gen,
      * but must be non-zero to avoid divide-by-zero) */
@@ -444,7 +443,7 @@ static void spi0_slave_init(void) {
 
     /* Drain any stale data in RX FIFO */
     volatile uint32_t const *sr = (volatile uint32_t const *)(RP2350B_SPI0_BASE + SPI0_SSPSR);
-    volatile uint32_t *dr = (volatile uint32_t *)(RP2350B_SPI0_BASE + SPI0_SSPDR);
+    volatile uint32_t const *dr = (volatile uint32_t const *)(RP2350B_SPI0_BASE + SPI0_SSPDR);
     while (*sr & SSPSR_RNE) {
         (void)*dr;  /* Read and discard */
     }
@@ -477,8 +476,7 @@ static void spi1_master_init(void) {
      * - SCR = 4 → clock = f_periph / (CPSR × (SCR+1)) */
     *cr0 = (7 << SSPCR0_DSS_SHIFT)
          | (0 << SSPCR0_FRF_SHIFT)
-         | (0 << 6)                     /* CPOL=0 */
-         | (0 << 7)                     /* CPHA=0 */
+                                       /* CPOL=0, CPHA=0: bits 6,7 cleared */
          | (SPI_MASTER_SCR << SSPCR0_SCR_SHIFT);
 
     /* Clock prescale divisor:
@@ -511,8 +509,7 @@ static void spi2_master_init(void) {
     /* Same configuration as SPI1 */
     *cr0 = (7 << SSPCR0_DSS_SHIFT)
          | (0 << SSPCR0_FRF_SHIFT)
-         | (0 << 6)                     /* CPOL=0 */
-         | (0 << 7)                     /* CPHA=0 */
+                                       /* CPOL=0, CPHA=0: bits 6,7 cleared */
          | (SPI_MASTER_SCR << SSPCR0_SCR_SHIFT);
 
     *cpsr = SPI_MASTER_CLK_DIV;
@@ -979,12 +976,24 @@ void apex_nfc_cs_release(void) {
 uint8_t apex_nfc_spi_xfer(uint8_t tx_byte) {
     volatile uint32_t *dr = (volatile uint32_t *)SPI2_SSPDR;
     volatile uint32_t const *sr = (volatile uint32_t const *)SPI2_SSPSR;
+    uint32_t timeout;
 
+    /* Wait until TX FIFO has space (with timeout to prevent hang) */
+    timeout = 100000;
     while (!(*sr & SSPSR_TNF))
-        ;
+        if (--timeout == 0)
+            return 0xFF;  /* SPI bus stuck */
+
+    /* Write byte to TX FIFO */
     *dr = (uint32_t)tx_byte;
+
+    /* Wait until RX FIFO has data (with timeout) */
+    timeout = 100000;
     while (!(*sr & SSPSR_RNE))
-        ;
+        if (--timeout == 0)
+            return 0xFF;  /* SPI transfer timeout */
+
+    /* Read received byte from RX FIFO */
     return (uint8_t)(*dr & 0xFF);
 }
 

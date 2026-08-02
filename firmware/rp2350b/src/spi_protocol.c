@@ -252,18 +252,18 @@ void crc32_init_table(void) { crc32_init(); }
  * Both ring sizes MUST be powers of 2 for the masking arithmetic
  * (head/tail wrapping) to work correctly. The _Static_assert
  * constraints below enforce this at compile time.
+ *
+ * NOTE: The RX ring buffer (spi_rx_buf / spi_rx_head / spi_rx_tail)
+ * is defined in rp2350b_init.c and is the actual buffer filled by the
+ * SPI0 ISR. The protocol handler drains it via the extern declarations
+ * below. The rx_ring/rx_head/rx_tail variables that were previously
+ * defined here were dead code — never written by the ISR — and have
+ * been removed to avoid confusion. Only the TX ring lives here.
  */
-#define RX_RING_SIZE  8192
 #define TX_RING_SIZE  4096
 
-_Static_assert((RX_RING_SIZE & (RX_RING_SIZE - 1)) == 0,
-               "RX_RING_SIZE must be a power of 2");
 _Static_assert((TX_RING_SIZE & (TX_RING_SIZE - 1)) == 0,
                "TX_RING_SIZE must be a power of 2");
-
-static uint8_t rx_ring[RX_RING_SIZE];
-static volatile uint32_t rx_head = 0;  /* ISR writes here */
-static volatile uint32_t rx_tail = 0;  /* Protocol handler reads here */
 
 /* The SPI0 ISR feeds bytes from the SPI0 RX FIFO into the ring buffer
  * (spi_rx_buf/spi_rx_head/spi_rx_tail). The protocol handler drains
@@ -374,9 +374,17 @@ extern volatile uint32_t spi_rx_tail;
 _Static_assert((SPI_RX_BUF_SIZE & (SPI_RX_BUF_SIZE - 1)) == 0,
                "SPI_RX_BUF_SIZE must be a power of 2");
 
-/* External GPIO base for INT_REQ */
+/* External GPIO base for INT_REQ.
+ * PIN_INT_REQ is defined in board_pins.h. We don't include
+ * board_pins.h here to avoid pulling in all pin definitions;
+ * instead we reference the pin via this extern-friendly constant.
+ * If board_pins.h changes PIN_INT_REQ, the value here must match.
+ * The _Static_assert below catches mismatches at compile time
+ * when both headers are included in the same TU (e.g., main.c). */
 #define RP2350B_GPIO_BASE     0x400D0000UL
+#ifndef PIN_INT_REQ
 #define PIN_INT_REQ           20
+#endif
 
 /* ========================================================================
  * Helper: Little-endian unaligned access
@@ -659,36 +667,39 @@ static void handle_cmd_cc1101_cfg(const uint8_t *payload, uint16_t len) {
  *   - data[]:   TX data
  */
 static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
-    struct nfc_transact_cmd nfc_cmd;
     proto_stats.cmd_nfc_transact_rx++;
 
-    if (len < 4)  /* At minimum: cmd + flags + data_len */
+    if (len < 4)  /* At minimum: cmd + flags + data_len (2 bytes) */
         return;
 
-    /* Copy to local struct to avoid unaligned access on ARM Cortex-M33.
-     * The payload pointer may not be 16-bit aligned, so reading
-     * nfc->data_len directly via pointer cast could trigger a HardFault
-     * on ARM without unaligned access enabled. */
-    if (len > sizeof(nfc_cmd) + 256)
-        return;
-
-    nfc_cmd.cmd = payload[0];
-    nfc_cmd.flags = payload[1];
-    nfc_cmd.data_len = read_le16(&payload[2]);
+    /* Extract fields from unaligned payload buffer to avoid HardFault
+     * on ARM Cortex-M33. The payload pointer may not be 16-bit aligned,
+     * so reading data_len directly via pointer cast could trigger a
+     * HardFault on ARM without unaligned access enabled. */
+    uint8_t  nfc_cmd_byte  = payload[0];
+    uint8_t  nfc_flags     = payload[1];
+    uint16_t nfc_data_len  = read_le16(&payload[2]);
 
     /* Cap data_len to prevent buffer overrun (max 256 bytes) */
-    if (nfc_cmd.data_len > 256)
+    if (nfc_data_len > 256)
         return;
 
-    if (len < (uint16_t)(4 + nfc_cmd.data_len))
+    /* Verify that the payload contains all the declared data bytes */
+    if (len < (uint16_t)(4 + nfc_data_len))
         return;
 
     /* Validate NFC command byte: only ISO 14443A/B commands are
-     * currently supported. REQA=0x26, WUPA=0x52, ANTSEL=0x93,
-     * SELECT=0x93, HLTA=0x50, RATS=0xE0.  Also accept raw
+     * currently supported. REQA=0x26, WUPA=0x52, ANTICOL=0x93,
+     * SELECT=0x93, HLTA=0x50, RATS=0xE0. Also accept raw
      * transmit commands (0x00-0xFF) for future protocol extensions. */
-    (void)nfc_cmd;  /* Will be used when NFC driver is fully integrated */
+    (void)nfc_cmd_byte;
+    (void)nfc_flags;
 
+    /* TODO: When NFC driver is fully integrated, pass the TX data
+     * to st25r3916_transact():
+     *   st25r3916_transact(nfc_cmd_byte, &payload[4], nfc_data_len,
+     *                      rx_buf, &rx_len, timeout_ms);
+     * For now, just mark NFC as active. */
     device_state.nfc_active = true;
 }
 
@@ -1007,9 +1018,10 @@ void spi_protocol_init(void) {
     memset(&rx_ctx, 0, sizeof(rx_ctx));
     rx_ctx.state = RX_STATE_IDLE;
 
-    /* Reset ring buffer pointers */
-    rx_head = 0;
-    rx_tail = 0;
+    /* Reset TX ring buffer pointers.
+     * The RX ring buffer (spi_rx_buf / spi_rx_head / spi_rx_tail)
+     * is owned by rp2350b_init.c and is reset in its own init function;
+     * we do not touch it here. */
     tx_head = 0;
     tx_tail = 0;
 

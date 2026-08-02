@@ -74,16 +74,15 @@ def check_pinctrl_completeness():
         dts = f.read()
 
     # Find all pinctrl-0 references
-    pinctrl_refs = re.findall(r'pinctrl-0\s*=\s*<[&](\w+)', dts)
-    # Also find multi-reference: pinctrl-0 = <&foo &bar>
-    pinctrl_refs_multi = re.findall(r'pinctrl-0\s*=\s*<([^>]+)>', dts)
+    pinctrl_refs = re.findall(r'pinctrl-0\s*=\s*<([^>]+)>', dts)
     all_refs = set()
-    for ref in pinctrl_refs:
-        all_refs.add(ref)
+    for ref_group in pinctrl_refs:
+        for ref in re.findall(r'&(\w+)', ref_group):
+            all_refs.add(ref)
 
     # Find all pinctrl group definitions
-    pinctrl_defs = re.findall(r'(\w+):\s+\w+-pins\s*\{', dts)
-    pinctrl_defs += re.findall(r'(\w+):\s+\w+-pin\s*\{', dts)
+    pinctrl_defs = re.findall(r'(\w+):\s+[\w-]+-pins?\s*\{', dts)
+    pinctrl_defs += re.findall(r'(\w+):\s+[\w-]+-pin\s*\{', dts)
 
     defined = set(pinctrl_defs)
     for ref in sorted(all_refs):
