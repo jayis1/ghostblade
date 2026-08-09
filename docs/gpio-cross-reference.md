@@ -54,9 +54,9 @@ net names (in `hardware/kicad/ghostblade.net`).
 | PIN_SDR_GPIO0 | 32 | NET_SDR_GPIO0 | LMS7002M TX enable | LMS7002M pin |
 | PIN_SDR_GPIO1 | 33 | NET_SDR_GPIO1 | LMS7002M RX enable | LMS7002M pin |
 | PIN_SDR_LNA_EN | 34 | NET_SDR_LNA_EN | LMS7002M LNA enable | LNA power control |
-| PIN_CC_SPI_SCK | 8 | NET_CC_SPI_SCK | CC1101 SPI clock (shared SPI1) | CC1101 pin |
-| PIN_CC_SPI_TX | 9 | NET_CC_SPI_MOSI | CC1101 SPI data in (shared SPI1) | CC1101 pin |
-| PIN_CC_SPI_RX | 12 | NET_CC_SPI_MISO | CC1101 SPI data out (shared SPI1) | CC1101 pin |
+| PIN_CC_SPI_SCK | 8 | NET_CC_SPI_SCK | CC1101 SPI clock (SPI2) | CC1101 pin |
+| PIN_CC_SPI_TX | 9 | NET_CC_SPI_MOSI | CC1101 SPI data in (SPI2) | CC1101 pin |
+| PIN_CC_SPI_RX | 12 | NET_CC_SPI_MISO | CC1101 SPI data out (SPI2) | CC1101 pin |
 | PIN_CC_SPI_CSN | 10 | NET_CC_SPI_CSn | CC1101 SPI chip select | CC1101 pin |
 | PIN_CC_GDO0 | 13 | NET_CC_GDO0 | CC1101 GDO0 interrupt | CC1101 pin |
 | PIN_CC_GDO2 | 14 | NET_CC_GDO2 | CC1101 GDO2 interrupt | CC1101 pin |

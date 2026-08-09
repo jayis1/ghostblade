@@ -3,9 +3,9 @@
  * Device Tree Overlay — GhostBlade Wi-Fi 6E (MT7922) Configuration
  * Project NullSpectre
  *
- * This overlay configures the MediaTek MT7922 Wi-Fi 6E + Bluetooth 5.3
+ * This overlay configures the MediaTek MT7922 Wi-Fi 6E + Bluetooth 5.4
  * combo module on the GhostBlade board. The MT7922 is connected via
- * PCIe (Wi-Fi) and UART (Bluetooth HCI) to the RK3576.
+ * SDIO (Wi-Fi) and UART (Bluetooth HCI) to the RK3576.
  *
  * Apply this overlay when the MT7922 module is populated (it is a default
  * on-board component, but this overlay can be used to change configuration
@@ -198,41 +198,28 @@
 	};
 
 	/*
-	 * Fragment 3: PCIe lane 0 configuration for Wi-Fi
+	 * Fragment 3: SDIO bus configuration for Wi-Fi
 	 *
-	 * The RK3576's PCIe 2.1 controller connects to the MT7922.
-	 * This fragment enables the PCIe controller and configures
-	 * the link parameters.
+	 * The RK3576's SDIO controller connects to the MT7922.
+	 * This fragment adjusts the SDIO bus parameters.
 	 */
 	fragment@3 {
-		target = <&pcie0>;
+		target = <&sdio>;
 
 		__overlay__ {
-			status = "okay";
+			/*
+			 * SDIO bus speed and width.
+			 * The MT7922 supports SDR104 at up to 200 MHz, 4-bit bus.
+			 */
+			max-frequency = <200000000>;  /* 200 MHz SDR104 */
+			bus-width = <4>;
 
 			/*
-			 * PCIe link speed and width.
-			 * The MT7922 supports PCIe Gen 2 (5 GT/s) x1.
-			 * The RK3576 can negotiate down to Gen 1 (2.5 GT/s)
-			 * for power savings.
+			 * Wi-Fi module power sequencing.
+			 * The MT7922 firmware is loaded via SDIO after power-on.
 			 */
-			max-link-speed = <2>;  /* PCIe Gen 2 */
-			num-lanes = <1>;
-
-			/*
-			 * PCIe reset GPIO.
-			 * Active-low PERST# signal for the MT7922.
-			 */
-			reset-gpios = <&gpio1 26 GPIO_ACTIVE_LOW>;
-			                  /* GPIO1_D2 mapped to WIFI_PERST# */
-
-			/*
-			 * PCIe link power management.
-			 * ASPM L1.2 is supported for maximum power savings
-			 * during idle periods.
-			 */
-			aspm-no-l0s = <1>;
-			aspm-l1-substates = <1>;
+			keep-power-in-suspend;
+			non-removable;
 		};
 	};
 

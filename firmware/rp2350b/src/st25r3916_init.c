@@ -117,6 +117,23 @@ void st25r3916_clear_interrupts(uint8_t *irq1, uint8_t *irq2,
  * ST25R3916 Initialization Sequence
  * ======================================================================== */
 
+/* Module-local ready flag — set to true after a successful st25r3916_init().
+ * Other modules (e.g., spi_protocol.c) query this via st25r3916_is_ready()
+ * before issuing NFC transactions to avoid touching an unresponsive chip. */
+static bool g_nfc_ready = false;
+
+/**
+ * st25r3916_is_ready — Check whether the ST25R3916 was initialized OK
+ *
+ * Returns: true after a successful st25r3916_init(), false otherwise.
+ *          Other modules should check this before issuing NFC transactions
+ *          so they can report SPI_NFC_STATUS_NOT_READY to the host instead
+ *          of stalling the SPI bridge waiting for a dead chip.
+ */
+bool st25r3916_is_ready(void) {
+    return g_nfc_ready;
+}
+
 /**
  * st25r3916_init — Initialize the ST25R3916 NFC controller
  *
@@ -152,6 +169,7 @@ int st25r3916_init(void) {
     ic_id = st25r3916_read_reg(ST25R3916_REG_IC_IDENTITY);
     if (ic_id != 0x39 && ic_id != 0x89) {
         /* Chip not detected or wrong part — return error */
+        g_nfc_ready = false;
         return -1;
     }
 

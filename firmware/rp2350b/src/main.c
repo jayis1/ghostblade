@@ -299,6 +299,7 @@ int main(void)
          * recognized as intentional on the next boot. */
         watchdog_reboot(true);
         /* Does not return */
+    }
     printf("[MAIN] Peripherals initialized\r\n");
 
     /* Check for brownout reset (detected via watchdog scratch register) */

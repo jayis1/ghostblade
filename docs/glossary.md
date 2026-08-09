@@ -27,8 +27,8 @@ throughout the GhostBlade documentation.
 | Term | Definition |
 |------|-----------|
 | **SPI0** | The primary SPI bus between RK3576 (master) and RP2350B (slave) — carries the bridge protocol |
-| **SPI1** | The RP2350B master SPI bus shared by LMS7002M and CC1101 |
-| **SPI2** | The RP2350B master SPI bus for ST25R3916 NFC controller |
+| **SPI1** | The RP2350B master SPI bus for LMS7002M SDR |
+| **SPI2** | The RP2350B master SPI bus for CC1101 sub-GHz and ST25R3916 NFC |
 | **I2C0** | RP2350B I2C bus for ST25R3916 secondary control (slave address 0x42 when viewed from RK3576) |
 | **I2C1** | RK3576 I2C bus for RP2350B telemetry (slave address 0x42) |
 | **MIPI-CSI-2** | MIPI Camera Serial Interface v2 — repurposed for SDR IQ data from LMS7002M to RK3576 |

@@ -165,7 +165,6 @@
 			st25r3916: nfc-controller@0 {
 				compatible = "st,st25r3916";
 				reg = <0>; /* SPI chip select 0 */
-				spi-max-frequency = <10000000>; /* 10 MHz SPI2 */
 
 				/*
 				 * ST25R3916 SPI protocol:
@@ -179,13 +178,12 @@
 				st,spi-mode = <0>; /* SPI Mode 0 (CPOL=0, CPHA=0) */
 
 				/*
-				 * ST25R3916 interrupt line.
-				 * The RP2350B receives this on GPIO44 (edge-sensitive, falling).
-				 * The firmware ISR reads ST25R3916 interrupt status registers
-				 * to determine the event type.
+				 * ST25R3916 interrupt — routed to RP2350B GPIO44 (PIN_NFC_IRQ).
+				 * The RP2350B firmware receives the falling-edge interrupt and
+				 * reads ST25R3916 interrupt status registers to determine the
+				 * event type. This is NOT an RK3576 GPIO; the ST25R3916 is
+				 * controlled entirely by the RP2350B coprocessor.
 				 */
-				interrupt-parent = <&gpio1>;
-				interrupts = <44 IRQ_TYPE_EDGE_FALLING>;
 
 				/*
 				 * Reference to the NFC configuration parameters from Fragment 0.
@@ -216,8 +214,9 @@
 				 * RP2350B GPIO22 controls the NFC 5V supply.
 				 * The firmware enables this before activating
 				 * the NFC field and disables it in sleep mode.
+				 * This is a RP2350B-controlled GPIO, not an RK3576 GPIO.
 				 */
-				gpio = <&gpio1 22 GPIO_ACTIVE_HIGH>;
+				gpio = <0>; /* placeholder — RP2350B GPIO22, managed by firmware */
 				enable-active-high;
 				startup-delay-us = <5000>;  /* 5 ms for regulator ramp */
 				off-on-delay-us = <10000>;  /* 10 ms minimum off time */

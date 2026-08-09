@@ -267,7 +267,7 @@ static void sdr_dma_start_block(uint8_t block_idx) {
     REG32(DMA_CH0_CTRL) = DMA_CTRL_EN                    |
                            DMA_CTRL_DATA_SIZE_8            |
                            DMA_CTRL_INCR_WRITE             |
-                           DMA_TREQ_SPI1_RX << 15;
+                           DMA_CTRL_TREQ_SEL(DMA_TREQ_SPI1_RX);
 
     /* Enable DMA channel 0 interrupt */
     REG32(DMA_INTE0) |= (1 << 0);

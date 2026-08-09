@@ -201,10 +201,16 @@ make test_battery_monitor
 make test_cc1101_config
 make test_watchdog
 make test_power_states
+make test_sleep_wake
 make test_sdr_dma
 make test_spi0_isr
 make test_libapex
+make test_libapex_framing
 make test_st25r3916_init
+make test_adc_calibration
+make test_peripheral_power
+make test_cc1101_lms7002m
+make test_crc_validation
 ```
 
 You can also build from the project root:
@@ -236,7 +242,7 @@ make all
 make DTS_INCLUDE_PATHS="-I/path/to/linux/include/dt-bindings -I/path/to/linux/arch/arm64/boot/dts/rockchip"
 ```
 
-Output: `ghostblade-rk3576.dtb`, `ghostblade-options.dtbo`, `ghostblade-sdr-overlay.dtbo`, `ghostblade-nfc-overlay.dtbo`, `ghostblade-wifi-overlay.dtbo`
+Output: `ghostblade-rk3576.dtb`, `ghostblade-options.dtbo`, `ghostblade-sdr-overlay.dtbo`, `ghostblade-cc1101-overlay.dtbo`, `ghostblade-nfc-overlay.dtbo`, `ghostblade-wifi-overlay.dtbo`, `ghostblade-sleep-overlay.dtbo`, `ghostblade-gps-overlay.dtbo`
 
 ### 7.3 Applying Overlays on Target
 
@@ -248,12 +254,15 @@ cp ghostblade-rk3576.dtb /boot/dtbs/rockchip/rk3576-ghostblade.dtb
 # Copy overlays
 cp ghostblade-options.dtbo /boot/overlays/
 cp ghostblade-sdr-overlay.dtbo /boot/overlays/
+cp ghostblade-cc1101-overlay.dtbo /boot/overlays/
 cp ghostblade-nfc-overlay.dtbo /boot/overlays/
 cp ghostblade-wifi-overlay.dtbo /boot/overlays/
+cp ghostblade-sleep-overlay.dtbo /boot/overlays/
+cp ghostblade-gps-overlay.dtbo /boot/overlays/
 
 # Add to /boot/extlinux.conf or /boot/armbianEnv.txt:
 # overlay_prefix=ghostblade-
-# overlays=options sdr-overlay nfc-overlay wifi-overlay
+# overlays=options sdr-overlay cc1101-overlay nfc-overlay wifi-overlay sleep-overlay gps-overlay
 ```
 
 ---

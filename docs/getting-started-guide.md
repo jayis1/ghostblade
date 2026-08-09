@@ -39,7 +39,7 @@ GhostBlade is a dual-processor pentesting device featuring:
 | **LMS7002M**     | SDR (100 kHz – 3.8 GHz)   |
 | **CC1101**       | Sub-GHz radio (433/868/915 MHz)|
 | **ST25R3916**    | NFC reader/writer (13.56 MHz)|
-| **MT7922**       | Wi-Fi 6E + Bluetooth 5.3  |
+| **MT7922**       | Wi-Fi 6E + Bluetooth 5.4  |
 
 The RK3576 runs Linux and communicates with the RP2350B over SPI. The RP2350B
 manages all radio peripherals and streams IQ data back to the host via a

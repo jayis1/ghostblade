@@ -63,7 +63,7 @@ When modifying any pin assignment, update **all three** sources to maintain cons
 
 ## 3. Sub-GHz Radio (CC1101)
 
-### SPI1 (shared bus) — CC1101 Control (10 MHz, Mode 0)
+### SPI2 — CC1101 Control (10 MHz, Mode 0)
 
 | Signal | RP2350B Pin | Net Name | Firmware Macro |
 |--------|-------------|-----------|----------------|

@@ -106,7 +106,7 @@ graph TB
     %% RP2350B ↔ Peripherals
     RP2350B_MCU -- "SPI1 (control + config)" --> LMS
     RP2350B_MCU -- "GPIO (LNA_EN, RESET)" --> LMS
-    RP2350B_MCU -- "SPI1 shared (CC1101)" --> CC
+    RP2350B_MCU -- "SPI2 (CC1101)" --> CC
     RP2350B_MCU -- "GPIO (GDO0, GDO2)" --> CC
     RP2350B_MCU -- "SPI2 (control)" --> NFC
     RP2350B_MCU -- "I2C1 (aux)" --> NFC
@@ -444,7 +444,7 @@ graph LR
 graph LR
     ANT2["SMA Antenna<br/>(J4 Sub-GHz)"]
     CC["CC1101<br/>300–928 MHz"]
-    MCU2["RP2350B<br/>SPI1 shared"]
+    MCU2["RP2350B<br/>SPI2"]
     BRIDGE2["SPI0 Bridge"]
     KDRV2["apex_bridge"]
     USER2["apex-ctl"]

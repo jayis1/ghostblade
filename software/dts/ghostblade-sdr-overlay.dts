@@ -202,66 +202,21 @@
 	};
 
 	/*
-	 * Fragment 3: CC1101 sub-GHz radio runtime configuration
+	 * Fragment 3: CC1101 sub-GHz radio default configuration reference
 	 *
-	 * Default configuration parameters for the CC1101 433/868/915 MHz
-	 * sub-GHz radio. The RP2350B firmware reads these at boot and applies
-	 * them to the CC1101 configuration registers via SPI1.
+	 * The CC1101 has a dedicated overlay (ghostblade-cc1101-overlay.dts)
+	 * with full configuration parameters. This fragment is intentionally
+	 * minimal — it only provides a cross-reference node so the RP2350B
+	 * firmware can discover the CC1101 config at boot. For detailed
+	 * CC1101 configuration, apply the cc1101 overlay.
 	 */
 	fragment@3 {
 		target-path = "/";
 
 		__overlay__ {
-			cc1101_config: cc1101-config {
-				compatible = "apex,cc1101-config";
-
-				/*
-				 * CC1101 frequency band selection.
-				 * 0 = 433 MHz (EU/ASIA ISM)
-				 * 1 = 868 MHz (EU SRD)
-				 * 2 = 915 MHz (US/AU ISM)
-				 */
-				apex,freq-band = <1>; /* 868 MHz default */
-
-				/*
-				 * Channel number (0-255).
-				 * Actual frequency = base_freq + channel × channel_spacing.
-				 * Configured via MDMCFG1.CHANSPC_E and MDMCFG0.CHANSPC_M.
-				 */
-				apex,channel = <0>;
-
-				/*
-				 * Modulation format.
-				 * 0 = 2-FSK (default, best sensitivity)
-				 * 1 = GFSK
-				 * 2 = ASK/OOK
-				 * 3 = 4-FSK
-				 * 4 = MSK
-				 */
-				apex,modulation = <1>; /* GFSK default */
-
-				/*
-				 * Data rate in Baud × 1000.
-				 * Common values:
-				 *   1200  = 1.2 kBaud
-				 *   4800  = 4.8 kBaud
-				 *   38400 = 38.4 kBaud
-				 *   250000 = 250 kBaud
-				 */
-				apex,data-rate = <38400>; /* 38.4 kBaud default */
-
-				/*
-				 * TX output power level.
-				 * 0 = -30 dBm (minimum)
-				 * 1 = -20 dBm
-				 * 2 = -15 dBm
-				 * 3 = -10 dBm
-				 * 4 = 0 dBm
-				 * 5 = +5 dBm
-				 * 6 = +7 dBm
-				 * 7 = +10 dBm (maximum)
-				 */
-				apex,tx-power = <4>; /* 0 dBm default */
+			cc1101_ref: cc1101-ref {
+				compatible = "apex,cc1101-config-ref";
+				cc1101-overlay = "ghostblade-cc1101-overlay.dts";
 			};
 		};
 	};

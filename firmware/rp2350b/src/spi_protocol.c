@@ -70,7 +70,15 @@ static void secure_wipe(void *ptr, size_t len) {
 
 /* Command opcodes — MCU to Host */
 #define CMD_TELEMETRY           0x81
-#define CMD_SDR_IQ_CHUNK        0x82
+#define CMD_SDR_IQ_CHUNK         0x82
+#define CMD_NFC_RESPONSE        0x83
+
+/* NFC transaction response status codes (must match spi_protocol.h) */
+#define NFC_STATUS_OK            0
+#define NFC_STATUS_TIMEOUT       1
+#define NFC_STATUS_CRC_ERR       2
+#define NFC_STATUS_BAD_PARAMS    3
+#define NFC_STATUS_NOT_READY     4
 
 /* ========================================================================
  * SDR Tune Command Payload (8 bytes)
@@ -362,6 +370,16 @@ extern void apex_cc1101_read_burst(uint8_t addr, uint8_t *data, uint8_t len);
 extern int cc1101_set_band(int band);
 extern void apex_nfc_write_register(uint8_t addr, uint8_t val);
 extern uint8_t apex_nfc_read_register(uint8_t addr);
+/* ST25R3916 NFC controller transaction — defined in st25r3916_init.c.
+ * Used by handle_cmd_nfc_transact() to forward host NFC commands to
+ * the NFC chip and capture the response. Returns 0 on success, -1 on
+ * timeout, -2 on CRC error, -3 on invalid params. */
+extern int st25r3916_transact(uint8_t cmd,
+                              const uint8_t *tx_data, uint16_t tx_len,
+                              uint8_t *rx_data, uint16_t *rx_len,
+                              uint32_t timeout_ms);
+/* ST25R3916 ready flag — true after a successful st25r3916_init(). */
+extern bool st25r3916_is_ready(void);
 extern void apex_sdr_reset_assert(void);
 extern void apex_sdr_reset_release(void);
 extern void apex_sdr_tx_enable(bool enable);
@@ -727,17 +745,20 @@ static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
  * Returns: 0 on success, -1 on CRC error, -2 on sync error
  */
 static int validate_frame_header(void) {
-    const struct spi_frame_header *hdr = (const struct spi_frame_header *)rx_ctx.hdr_buf;
+    /* Use byte-level access to avoid potential unaligned access
+     * issues on ARM Cortex-M33. The hdr_buf is uint8_t[] and may
+     * not be aligned to struct spi_frame_header boundaries. */
 
     /* Check sync byte */
-    if (hdr->sync != SPI_SYNC_BYTE) {
+    if (rx_ctx.hdr_buf[0] != SPI_SYNC_BYTE) {
         rx_ctx.frames_sync_error++;
         return -2;
     }
 
     /* Check reserved field is zero — non-zero indicates protocol version
      * mismatch or corrupted frame. */
-    if (hdr->reserved != 0) {
+    if (rx_ctx.hdr_buf[4] != 0 || rx_ctx.hdr_buf[5] != 0 ||
+        rx_ctx.hdr_buf[6] != 0 || rx_ctx.hdr_buf[7] != 0) {
         rx_ctx.frames_crc_error++;
         return -3;
     }
@@ -759,9 +780,10 @@ static int validate_frame_header(void) {
  * Returns: 0 on success, -1 on CRC error
  */
 static int validate_frame_payload(void) {
-    if (rx_ctx.expected_payload_len == 0)
-        return 0;  /* No payload to validate */
-
+    /* CRC-32 is computed over the payload bytes. For zero-length
+     * payload, CRC-32 is computed over empty data (which produces
+     * a well-known constant). We must still validate the trailer
+     * to ensure frame integrity. */
     uint32_t expected_crc = read_le32(rx_ctx.crc32_buf);
     uint32_t actual_crc = crc32_compute(rx_ctx.payload_buf,
                                           rx_ctx.expected_payload_len);
@@ -778,8 +800,9 @@ static int validate_frame_payload(void) {
  * ======================================================================== */
 
 static void dispatch_frame(void) {
-    const struct spi_frame_header *hdr = (const struct spi_frame_header *)rx_ctx.hdr_buf;
-    uint8_t cmd = hdr->cmd;
+    /* Use byte-level access for cmd and len to avoid unaligned
+     * struct cast on ARM Cortex-M33. */
+    uint8_t cmd = rx_ctx.hdr_buf[1];
     uint16_t len = rx_ctx.expected_payload_len;
 
     rx_ctx.frames_dispatched++;
@@ -923,7 +946,6 @@ void spi_protocol_send_iq_chunk(const uint8_t *data, uint16_t len) {
  */
 int spi_protocol_process(void) {
     int frames_processed = 0;
-    struct spi_frame_header *hdr;
 
     /* Drain available bytes from the SPI0 RX ring buffer.
      * Insert a data memory barrier before reading to ensure we
@@ -947,14 +969,23 @@ int spi_protocol_process(void) {
             break;
 
         case RX_STATE_HEADER:
+            /* Bounds check: prevent buffer overflow if hdr_idx somehow
+             * exceeds the header buffer size. This should never happen
+             * in normal operation (the >= check below catches it), but
+             * a corrupted state could cause an overrun. */
+            if (rx_ctx.hdr_idx >= SPI_HDR_SIZE) {
+                rx_ctx.state = RX_STATE_IDLE;
+                break;
+            }
             rx_ctx.hdr_buf[rx_ctx.hdr_idx++] = byte;
 
             if (rx_ctx.hdr_idx >= SPI_HDR_SIZE) {
                 /* Header complete — validate it */
                 int ret = validate_frame_header();
                 if (ret == 0) {
-                    hdr = (struct spi_frame_header *)rx_ctx.hdr_buf;
-                    rx_ctx.expected_payload_len = read_le16((uint8_t *)&hdr->len);
+                    /* Extract payload length using byte-level access
+                     * to avoid unaligned struct cast. */
+                    rx_ctx.expected_payload_len = read_le16(&rx_ctx.hdr_buf[2]);
 
                     if (rx_ctx.expected_payload_len > SPI_MAX_PAYLOAD) {
                         /* Invalid payload length — discard frame */
@@ -979,6 +1010,15 @@ int spi_protocol_process(void) {
             break;
 
         case RX_STATE_PAYLOAD:
+            /* Bounds check: prevent payload buffer overflow. The
+             * expected_payload_len was validated against SPI_MAX_PAYLOAD
+             * in the header validation step, but a corrupted state or
+             * race could cause payload_idx to exceed the buffer. */
+            if (rx_ctx.payload_idx >= SPI_MAX_PAYLOAD) {
+                rx_ctx.state = RX_STATE_IDLE;
+                rx_ctx.frames_crc_error++;
+                break;
+            }
             rx_ctx.payload_buf[rx_ctx.payload_idx++] = byte;
 
             if (rx_ctx.payload_idx >= rx_ctx.expected_payload_len) {
@@ -988,6 +1028,11 @@ int spi_protocol_process(void) {
             break;
 
         case RX_STATE_CRC32:
+            /* Bounds check: prevent crc32_buf overflow */
+            if (rx_ctx.crc32_idx >= SPI_CRC32_SIZE) {
+                rx_ctx.state = RX_STATE_IDLE;
+                break;
+            }
             rx_ctx.crc32_buf[rx_ctx.crc32_idx++] = byte;
 
             if (rx_ctx.crc32_idx >= SPI_CRC32_SIZE) {

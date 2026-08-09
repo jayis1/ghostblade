@@ -55,11 +55,11 @@
 #define PIN_SDR_LNA_EN    34   /* LMS7002M LNA enable (active-high) */
 
 /* ========================================================================
- * CC1101 Sub-GHz Radio — via shared SPI1 bus
+ * CC1101 Sub-GHz Radio — via SPI2 bus
  * SPI Mode 0, up to 10 MHz
  * ======================================================================== */
 
-#define PIN_CC_SPI_SCK     8   /* CC1101 SPI clock (shared SPI1 bus) */
+#define PIN_CC_SPI_SCK     8   /* CC1101 SPI clock (SPI2 bus) */
 #define PIN_CC_SPI_TX      9   /* CC1101 SPI data in (MOSI) */
 #define PIN_CC_SPI_RX     12   /* CC1101 SPI data out (MISO) */
 #define PIN_CC_SPI_CSN    10   /* CC1101 SPI chip select (active-low) */

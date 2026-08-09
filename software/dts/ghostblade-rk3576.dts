@@ -24,6 +24,8 @@
 
 /dts-v1/;
 #include "rk3576.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/linux-event-codes.h>
 
 / {
 	model = "GhostBlade NullSpectre";
@@ -65,6 +67,16 @@
 		regulator-boot-on;
 		regulator-always-on;
 		startup-delay-us = <500>;
+	};
+
+	vdd_ddr: vdd-ddr-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "vdd_ddr";
+		regulator-min-microvolt = <1100000>;
+		regulator-max-microvolt = <1100000>;
+		regulator-boot-on;
+		regulator-always-on;
+		startup-delay-us = <300>;
 	};
 
 	vdd_3v3: vdd-3v3-regulator {
@@ -238,7 +250,7 @@
 		compatible = "apex,apex-bridge";
 		status = "okay";
 
-		pinctrl-0 = <&spi0_pins &bridge_gpio_pins>;
+		pinctrl-0 = <&spi0_pins &bridge_gpio_pins &ant_sel_pins>;
 		pinctrl-names = "default";
 
 		/* GPIO assignments (GPIO1 bank) */
@@ -467,7 +479,7 @@
 	max-link-speed = <3>; /* Gen3 */
 	num-lanes = <2>;
 
-	pinctrl-0 = <&pcie_pins>;
+	pinctrl-0 = <&pcie_pins &pcie_clk_pins>;
 	pinctrl-names = "default";
 
 	vpcie3v3-supply = <&vdd_3v3>;
@@ -488,6 +500,8 @@
 	status = "okay";
 	dr_mode = "otg";
 	maximum-speed = "super-speed";
+	pinctrl-0 = <&usb_pins>;
+	pinctrl-names = "default";
 };
 
 /* ================================================================

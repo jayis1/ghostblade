@@ -408,7 +408,7 @@ and `PIN_ANT_SEL1` (PIN_3).
 | `APEX_GPIO_HOST_READY` | `bridge_gpio_pins` | `PIN_HOST_RDY` | `apex_bridge_regs.h`, `board_pins.h` |
 | `APEX_GPIO_MCU_RESET` | `bridge_gpio_pins` | `PIN_MCU_RUN` | `apex_bridge_regs.h`, `board_pins.h` |
 | SDR SPI1 pins | `spi1_pins` | `PIN_SDR_SPI_*` | `ghostblade-rk3576.dts`, `board_pins.h` |
-| CC1101 SPI pins | (shared SPI1) | `PIN_CC_SPI_*` | `ghostblade-sdr-overlay.dts`, `board_pins.h` |
+| CC1101 SPI pins | (SPI2) | `PIN_CC_SPI_*` | `ghostblade-cc1101-overlay.dts`, `board_pins.h` |
 | NFC SPI2 pins | `spi2_pins` | `PIN_NFC_SPI_*` | `ghostblade-nfc-overlay.dts`, `board_pins.h` |
 | Antenna select | `ant_sel_pins` | `PIN_ANT_SEL0/1` | `ghostblade-rk3576.dts`, `board_pins.h` |
 | Wi-Fi SDIO IRQ | `sdio_irq_pin` | — | `ghostblade-rk3576.dts`, `ghostblade-wifi-overlay.dts` |

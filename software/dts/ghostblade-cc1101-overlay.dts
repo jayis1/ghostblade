@@ -4,9 +4,9 @@
  * Project NullSpectre
  *
  * This overlay configures the CC1101 sub-GHz radio peripheral parameters.
- * The CC1101 is connected to the RP2350B via the shared SPI1 bus (along
- * with the LMS7002M SDR). The RP2350B firmware manages SPI1 bus arbitration
- * and CC1101 register configuration.
+ * The CC1101 is connected to the RP2350B via the SPI2 bus (dedicated
+ * bus, separate from the LMS7002M SDR SPI1). The RP2350B firmware manages
+ * SPI2 bus access and CC1101 register configuration.
  *
  * Apply when CC1101 frequency plan, modulation, or power settings need
  * to be changed without reflashing the base DTB or RP2350B firmware.

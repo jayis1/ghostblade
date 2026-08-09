@@ -104,6 +104,32 @@
 /** MCU → Host: SDR IQ data chunk */
 #define SPI_CMD_SDR_IQ_CHUNK    0x82
 
+/** MCU → Host: NFC transaction response (RX data + status) */
+#define SPI_CMD_NFC_RESPONSE    0x83
+
+/* ── NFC transaction response payload ──────────────────────────────────────
+ *
+ * Returned by the MCU after processing a CMD_NFC_TRANSACT command.
+ * The response carries the NFC chip's RX FIFO contents (if any) plus a
+ * status byte indicating success/timeout/CRC-error so the host can react.
+ *
+ * Wire layout (5 + data_len bytes):
+ *   [0]    status      — 0 = OK, 1 = timeout (no tag response),
+ *                         2 = CRC error in response, 3 = invalid params,
+ *                         4 = NFC chip not initialized
+ *   [1]    cmd_echo    — echoes the NFC command byte from the request
+ *   [2..3] rx_len      — number of RX bytes that follow (little-endian)
+ *   [4+]   rx_data[]   — RX data from the ST25R3916 FIFO (rx_len bytes)
+ */
+#define SPI_NFC_STATUS_OK          0
+#define SPI_NFC_STATUS_TIMEOUT     1
+#define SPI_NFC_STATUS_CRC_ERR     2
+#define SPI_NFC_STATUS_BAD_PARAMS  3
+#define SPI_NFC_STATUS_NOT_READY   4
+
+/** Maximum RX bytes returned in a single NFC response (ST25R3916 FIFO = 512 B) */
+#define SPI_NFC_MAX_RX_DATA        256
+
 /* ── SPI frame header structure (16 bytes) ──────────────────────────────── */
 
 struct __attribute__((packed)) spi_frame_header {

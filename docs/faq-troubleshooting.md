@@ -355,3 +355,26 @@ The KiCad netlist (`hardware/kicad/ghostblade.net`) must include a
 `(node (ref "..."))` net entry. Missing component definitions cause
 ERC "unresolved reference" warnings. The `validate_netlist.py` tool
 cross-checks the manifest, netlist, DTS, and firmware pin definitions.
+
+### Which SPI bus is the CC1101 on?
+
+The CC1101 sub-GHz radio is on the RP2350B's **SPI2** bus — a dedicated
+bus separate from the LMS7002M SDR (which is on SPI1). The manifest
+(`GhostBlade.mf`), `board_pins.h`, and KiCad netlist all agree on this.
+Earlier versions of the documentation incorrectly described the CC1101
+as sharing SPI1 with the LMS7002M; these references have been corrected.
+
+### Which bus connects the MT7922 Wi-Fi to the RK3576?
+
+The MT7922 Wi-Fi 6E module is connected via **SDIO** (4-bit, SDR104 at
+up to 200 MHz) to the RK3576, not PCIe. Bluetooth on the MT7922 is
+connected via UART1 at 3 Mbps with hardware flow control. The base DTS
+(`ghostblade-rk3576.dts`) defines the MT7922 under the `&sdio` node.
+
+### Why does the ST25R3916 NFC node not have an interrupt-parent?
+
+The ST25R3916 is controlled entirely by the RP2350B coprocessor, not the
+RK3576. Its interrupt line connects to RP2350B GPIO44 (PIN_NFC_IRQ).
+The RK3576 never directly interfaces with the ST25R3916 — all NFC
+operations are proxied through the SPI bridge protocol. Therefore the
+DTS overlay does not reference any RK3576 GPIO interrupt-parent.

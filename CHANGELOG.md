@@ -15,7 +15,31 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Added
 
-- `battery_monitor_init()`, `battery_monitor_update()`, `battery_monitor_get_vbat_mv()`, `battery_monitor_get_temp_c_x10()`, and `battery_voltage_to_percent()` implementations in `battery_monitor.c` — these functions were declared in `battery_monitor.h` and called from `main.c` but were never defined, which would cause link errors in the firmware build
+- `vdd_ddr` fixed regulator node (1.1V) added to base DTS — the manifest references `VDD_DDR 1.1V (BUCK3)` but the DTS was missing this regulator definition
+- `#include <dt-bindings/gpio/gpio.h>` and `#include <dt-bindings/input/linux-event-codes.h>` added to base DTS — required for `GPIO_ACTIVE_LOW`, `IRQ_TYPE_*`, `KEY_RESTART`, `KEY_F24` macros used in `gpio_keys` and pinctrl nodes
+- `&pcie_clk_pins` pinctrl reference added to `&pcie` node — the `pcie_clk_pins` group was defined but never referenced
+- `&usb_pins` pinctrl reference added to `&usb3_otg` node — the `usb_pins` group was defined but never referenced
+- `&ant_sel_pins` pinctrl reference added to `apex_bridge` node — the `ant_sel_pins` group was defined but never referenced
+- FAQ entries added: CC1101 SPI bus topology (SPI2, not shared SPI1), MT7922 Wi-Fi bus type (SDIO, not PCIe), ST25R3916 NFC interrupt routing (RP2350B, not RK3576)
+- Missing SPDX license headers added to `docs/getting-started.md` and `docs/power-tree.md`
+- All 7 DTS overlay DTBO outputs listed in build instructions (previously missing cc1101, sleep, and GPS overlays)
+- All 15 test targets listed in build instructions (previously missing 6 test targets)
+
+### Fixed
+
+- **Critical: Missing closing brace in `main.c`** — the `if (init_peripherals() != 0)` block was missing its `}` after `watchdog_reboot(true)`, causing the "Peripherals initialized" message and all subsequent initialization code to be unreachable inside the fatal-error branch. This would have caused a compile error or silent boot failure
+- Wi-Fi overlay: "Bluetooth 5.3" corrected to "Bluetooth 5.4" to match manifest, BOM, and all other documentation
+- Wi-Fi overlay: Fragment 3 corrected from `&pcie0` (nonexistent node) to `&sdio` — the MT7922 is on SDIO in the base DTS, not PCIe
+- Wi-Fi overlay: Bus description corrected from "PCIe" to "SDIO" throughout
+- NFC overlay: Removed `interrupt-parent = <&gpio1>` and `interrupts = <44 IRQ_TYPE_EDGE_FALLING>` from ST25R3916 node — the ST25R3916 interrupt goes to RP2350B GPIO44, not RK3576 GPIO1_44. The RK3576 cannot receive this interrupt
+- NFC overlay: Removed `spi-max-frequency` property from ST25R3916 node (not an RK3576 SPI device)
+- NFC overlay: NFC field regulator GPIO changed from `<&gpio1 22>` (RK3576) to `<0>` placeholder — this is an RP2350B-controlled GPIO
+- SDR overlay: Removed duplicate CC1101 configuration fragment — the SDR overlay had a full CC1101 config fragment that duplicated the dedicated `ghostblade-cc1101-overlay.dts`. Replaced with a cross-reference node
+- CC1101 overlay: Comment corrected from "shared SPI1 bus" to "SPI2 bus (dedicated, separate from LMS7002M SDR SPI1)"
+- `board_pins.h`: CC1101 SPI bus comments corrected from "shared SPI1 bus" to "SPI2 bus" to match manifest and KiCad netlist
+- `getting-started-guide.md`: Bluetooth version corrected from "5.3" to "5.4"
+- Documentation: All "shared SPI1" references for CC1101 corrected to "SPI2" across `glossary.md`, `gpio-cross-reference.md`, `pin-assignments.md`, `memory-map.md`, `architecture.md`
+- Glossary: Removed duplicate SPI2 entry
 - `sdr_dma_get_underrun_count()` function and header declaration for API completeness, complementing the existing `sdr_dma_get_overrun_count()`
 - 15 missing KiCad footprint definitions added to `ghostblade-footprints.kicad_mod`: BGA-153 (eMMC), SOT-23-5 (LDOs/supervisor), SOT-23-6 (DC-DC), SOP-8 (SPI flash), VQFN-14 (buck-boost), USB-C 24-pin, MicroSD push-push, SOT-23 (TVS diodes), R_0402, C_0402, C_1206, LED_0402, Crystal_HC49_SMD, Pin_Header_2x05_1.27mm (JTAG), Switch_Tactile_6x3.5mm — all BOM-referenced footprints now have definitions
 - 3D model references added to new footprints: `eMMC.step`, `W25Q128JVS.step`, `TPS63020.step`, `USB-C_24pin.step`

@@ -237,7 +237,7 @@ static int apex_spi_xfer(struct apex_bridge_dev *dev,
         return ret;
     }
 
-    return (xfer.len > rx_buf_size) ? rx_buf_size : xfer.len;
+    return (int)min_t(size_t, xfer.len, rx_buf_size);
 }
 
 /*
@@ -603,6 +603,9 @@ static int apex_bridge_release(struct inode *inode, struct file *filp)
 {
     struct apex_bridge_dev *dev = filp->private_data;
 
+    if (!dev || !dev->spi)
+        return 0;
+
     /* Allow device to runtime suspend */
     pm_runtime_put_autosuspend(&dev->spi->dev);
 
@@ -653,7 +656,7 @@ static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
         spin_unlock(&dev->rx_lock);
         return 0;
     }
-    kbuf = kmalloc(to_copy, GFP_ATOMIC);
+    kbuf = kmalloc(to_copy, GFP_KERNEL);
     if (!kbuf) {
         spin_unlock(&dev->rx_lock);
         return -ENOMEM;
@@ -1047,16 +1050,16 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
                                          sizeof(reset_payload),
                                          frame,
                                          APEX_SPI_FRAME_SIZE_MAX);
-            if (frame_len > 0) {
+            if (frame_len < 0) {
+                dev_err(&dev->spi->dev,
+                        "SOFT_RESET: failed to build reset frame\n");
+                ret = -EIO;
+            } else {
                 apex_spi_xfer(dev, frame, frame_len, rx_buf,
                               APEX_SPI_FRAME_SIZE_MAX);
                 dev_info(&dev->spi->dev,
                          "SOFT_RESET: MCU soft reset command sent\n");
                 ret = 0;
-            } else {
-                dev_err(&dev->spi->dev,
-                        "SOFT_RESET: failed to build reset frame\n");
-                ret = -EIO;
             }
         }
         break;
@@ -1715,6 +1718,12 @@ static void apex_sg_dma_callback(void *context)
      * the buffer state written by the work handler before scheduling. */
     uint32_t idx = smp_load_acquire(&eng->current_idx);
     uint32_t buf_size = READ_ONCE(eng->buf_size);
+    uint32_t buf_count = READ_ONCE(eng->buf_count);
+
+    /* Guard against division by zero if engine was stopped between
+     * the SPI submission and this callback firing. */
+    if (buf_count == 0)
+        return;
 
     /* Mark current buffer as ready */
     eng->bufs[idx].desc.data_len = buf_size;
@@ -1730,7 +1739,7 @@ static void apex_sg_dma_callback(void *context)
     /* Advance to next buffer (round-robin) with release semantics
      * so the work handler sees our writes before observing the
      * updated index. */
-    smp_store_release(&eng->current_idx, (idx + 1) % eng->buf_count);
+    smp_store_release(&eng->current_idx, (idx + 1) % buf_count);
 
     /* Signal completion so the work function schedules the next transfer */
     complete(&eng->sg_buf_complete);
@@ -1752,19 +1761,26 @@ static void apex_sg_work_handler(struct work_struct *work)
         container_of(eng, struct apex_bridge_dev, sg_engine);
 
     while (eng->state == APEX_SG_STATE_RUNNING) {
+        uint32_t buf_count = READ_ONCE(eng->buf_count);
         /* Read current_idx with acquire semantics to see the value
          * written by the DMA callback before we access the buffer. */
         uint32_t idx = smp_load_acquire(&eng->current_idx);
-        struct apex_sg_buf *buf = &eng->bufs[idx];
+        struct apex_sg_buf *buf;
         struct spi_transfer xfer;
         struct spi_message msg;
         int ret;
+
+        /* Guard against zero buf_count (engine stopped between iterations) */
+        if (buf_count == 0)
+            break;
+
+        buf = &eng->bufs[idx];
 
         /* Skip buffers still in use by userspace */
         if (buf->desc.state == APEX_SG_BUF_USERSPACE) {
             eng->overruns++;
             /* Try next buffer */
-            eng->current_idx = (idx + 1) % eng->buf_count;
+            eng->current_idx = (idx + 1) % buf_count;
             continue;
         }
 
@@ -1827,7 +1843,7 @@ static void apex_sg_work_handler(struct work_struct *work)
         reinit_completion(&eng->sg_buf_complete);
 
         /* In single-batch mode, stop after filling all buffers once */
-        if (!eng->continuous && eng->sequence >= eng->buf_count) {
+        if (!eng->continuous && eng->sequence >= buf_count) {
             eng->state = APEX_SG_STATE_IDLE;
             break;
         }
@@ -2041,7 +2057,7 @@ static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
      * compiler can prove the memory is about to be freed and remove the
      * memset, leaving sensitive data in DMA-coherent memory that may be
      * reallocated to another driver. */
-    if (eng->bufs) {
+    if (eng->bufs && eng->buf_count > 0) {
         for (i = 0; i < eng->buf_count; i++) {
             if (eng->bufs[i].dma_virt) {
                 memzero_explicit(eng->bufs[i].dma_virt, eng->buf_size);
