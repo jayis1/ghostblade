@@ -9,6 +9,11 @@
  * controlling the GhostBlade pentesting hardware.
  */
 
+/* Define _GNU_SOURCE to get O_CLOEXEC from fcntl.h */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "libapex.h"
 
 #include <stdio.h>
@@ -72,6 +77,7 @@ struct kernel_nfc_transact {
 #define IOC_GET_TELEMETRY _IOR(APEX_IOC_MAGIC, 6, struct kernel_telemetry)
 #define IOC_MCU_RESET     _IOW(APEX_IOC_MAGIC, 7, uint8_t)
 #define IOC_GET_STATUS    _IOR(APEX_IOC_MAGIC, 8, uint32_t)
+#define IOC_SOFT_RESET    _IOW(APEX_IOC_MAGIC, 12, uint32_t)
 
 /* ========================================================================
  * Device Handle Structure
@@ -114,8 +120,9 @@ apex_handle_t apex_open(const char *device_path) {
     if (!dev)
         return NULL;
 
-    dev->fd = open(path, O_RDWR);
+    dev->fd = open(path, O_RDWR | O_CLOEXEC);
     if (dev->fd < 0) {
+        secure_wipe(dev, sizeof(*dev));
         free(dev);
         return NULL;
     }
@@ -622,7 +629,7 @@ int apex_soft_reset(apex_handle_t handle) {
      * triggering a watchdog reset. This two-stage validation prevents
      * accidental resets from corrupted SPI frames. */
     uint32_t magic = APEX_RESET_MAGIC;
-    if (ioctl(handle->fd, APEX_IOC_SOFT_RESET, &magic) < 0) {
+    if (ioctl(handle->fd, IOC_SOFT_RESET, &magic) < 0) {
         handle->last_error = APEX_ERR_IOCTL_FAILED;
         return APEX_ERR_IOCTL_FAILED;
     }

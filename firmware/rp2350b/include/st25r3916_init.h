@@ -278,6 +278,15 @@ extern uint8_t apex_nfc_read_register(uint8_t addr);
 int st25r3916_init(void);
 
 /**
+ * st25r3916_is_ready — Check whether the ST25R3916 was initialized OK
+ *
+ * Returns: true after a successful st25r3916_init(), false otherwise.
+ *          Callers should check this before issuing NFC transactions to
+ *          avoid touching an unresponsive chip.
+ */
+bool st25r3916_is_ready(void);
+
+/**
  * st25r3916_start_polling — Start NFC tag detection polling
  *
  * Activates the 13.56 MHz carrier field and begins polling for

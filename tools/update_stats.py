@@ -48,7 +48,7 @@ def main():
                 total_lines += n
 
     stats = {**counts, 'bom_components': 67, 'total_files': total_files,
-             'total_lines': total_lines, 'last_updated': '2026-07-26'}
+             'total_lines': total_lines, 'last_updated': '2026-08-09'}
     with open('stats.json', 'w') as fh:
         json.dump(stats, fh, indent=2)
         fh.write('\n')

@@ -205,8 +205,13 @@ void sdr_dma_irq_handler(void) {
         /* Check for overrun: next write block equals read block */
         if (next_write == proto_read_block) {
             dma_stats.overruns++;
-            /* Overrun: discard oldest block (advance read pointer) */
-            proto_read_block = (proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1);
+            /* Overrun: discard oldest block (advance read pointer).
+             * Use atomic store to prevent race with main-loop reader.
+             * On Cortex-M33, 8-bit writes are atomic, but we use
+             * __atomic to ensure proper memory ordering. */
+            __atomic_store_n(&proto_read_block,
+                             (uint8_t)((proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1)),
+                             __ATOMIC_RELAXED);
         }
 
         dma_write_block = next_write;
@@ -389,7 +394,7 @@ const uint8_t *sdr_dma_get_block(uint8_t *block_idx, uint16_t *size) {
         return NULL;
     }
 
-    uint8_t idx = proto_read_block;
+    uint8_t idx = __atomic_load_n(&proto_read_block, __ATOMIC_RELAXED);
     if (idx >= SDR_RING_NUM_BLOCKS) {
         /* Defensive: should never happen, but prevent out-of-bounds access */
         dma_stats.underruns++;
@@ -410,7 +415,9 @@ const uint8_t *sdr_dma_get_block(uint8_t *block_idx, uint16_t *size) {
  */
 void sdr_dma_release_block(void) {
     if (__atomic_load_n(&blocks_filled, __ATOMIC_RELAXED) > 0) {
-        proto_read_block = (proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1);
+        __atomic_store_n(&proto_read_block,
+                         (uint8_t)((proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1)),
+                         __ATOMIC_RELAXED);
         __atomic_sub_fetch(&blocks_filled, 1, __ATOMIC_RELAXED);
         dma_stats.total_blocks_sent++;
     }

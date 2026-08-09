@@ -15,6 +15,12 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Added
 
+- **NFC transaction response path**: The `CMD_NFC_TRANSACT` (0x05) handler in `spi_protocol.c` now actually calls `st25r3916_transact()` instead of a TODO stub, forwarding the host's NFC command and TX payload to the ST25R3916 and returning the RX response. A new `CMD_NFC_RESPONSE` (0x83) MCU→Host opcode carries the response (status byte + echoed command + RX length + RX data) back to the host. The kernel driver (`apex_bridge.c`) now recognizes `APEX_CMD_NFC_RESPONSE` and pushes it to the RX FIFO for userspace `read()` / `apex_nfc_transact()`.
+- `st25r3916_is_ready()` function and `g_nfc_ready` flag in `st25r3916_init.c` — the SPI protocol handler checks this before issuing NFC transactions and reports `SPI_NFC_STATUS_NOT_READY` to the host instead of touching an unresponsive chip. Set on successful `st25r3916_init()`, cleared on failure.
+- `SPI_NFC_STATUS_*` constants (`OK`, `TIMEOUT`, `CRC_ERR`, `BAD_PARAMS`, `NOT_READY`) defined in `spi_protocol.h` and mirrored in `apex_bridge_regs.h` for the NFC response wire format.
+- New `CMD_NFC_RESPONSE` opcode added to the SPI protocol unit tests, kernel test harness (`test_apex_bridge.c`), and `test_libapex_framing.c` — round-trip framing and opcode distinctness checks now cover the new opcode.
+- `NFC_RESPONSE` payload format documented in `docs/memory-map.md` with the full status byte table and wire layout.
+
 - `vdd_ddr` fixed regulator node (1.1V) added to base DTS — the manifest references `VDD_DDR 1.1V (BUCK3)` but the DTS was missing this regulator definition
 - `#include <dt-bindings/gpio/gpio.h>` and `#include <dt-bindings/input/linux-event-codes.h>` added to base DTS — required for `GPIO_ACTIVE_LOW`, `IRQ_TYPE_*`, `KEY_RESTART`, `KEY_F24` macros used in `gpio_keys` and pinctrl nodes
 - `&pcie_clk_pins` pinctrl reference added to `&pcie` node — the `pcie_clk_pins` group was defined but never referenced

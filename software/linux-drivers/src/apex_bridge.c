@@ -530,6 +530,15 @@ static void apex_rx_work_handler(struct work_struct *work)
         wake_up_interruptible(&dev->rx_waitq);
         break;
 
+    case APEX_CMD_NFC_RESPONSE:
+        /* NFC transaction response — push to RX FIFO so userspace
+         * (libapex / pyapex) can read the status byte and RX data. */
+        spin_lock(&dev->rx_lock);
+        kfifo_in(&dev->rx_fifo, payload, payload_len);
+        spin_unlock(&dev->rx_lock);
+        wake_up_interruptible(&dev->rx_waitq);
+        break;
+
     default:
         /* Generic response — push entire payload to RX FIFO */
         spin_lock(&dev->rx_lock);
@@ -634,7 +643,14 @@ static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
     size_t to_copy;
     void *kbuf;
 
+    if (!dev || !dev->spi)
+        return -ENODEV;
+
+    /* Use the spinlock-protected check for safety. kfifo_is_empty()
+     * without a lock is racy if another thread is concurrently writing. */
+    spin_lock(&dev->rx_lock);
     if (kfifo_is_empty(&dev->rx_fifo)) {
+        spin_unlock(&dev->rx_lock);
         if (filp->f_flags & O_NONBLOCK)
             return -EAGAIN;
 
@@ -643,13 +659,8 @@ static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
                                         !kfifo_is_empty(&dev->rx_fifo));
         if (ret)
             return ret;
+        spin_lock(&dev->rx_lock);
     }
-
-    /* Determine how much data is available, then copy to a kernel buffer
-     * under the lock, and copy to userspace outside the lock.
-     * kfifo_to_user() can sleep (copy_to_user), so we must NOT hold
-     * a spinlock while calling it. */
-    spin_lock(&dev->rx_lock);
     avail = kfifo_len(&dev->rx_fifo);
     to_copy = min_t(size_t, count, avail);
     if (to_copy == 0) {
@@ -684,6 +695,9 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
     uint8_t *rx_buf;
     int frame_len;
     int ret;
+
+    if (!dev || !dev->spi)
+        return -ENODEV;
 
     /* Reject zero-length and oversized writes */
     if (count < 1)
@@ -765,10 +779,13 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
     uint8_t *rx_buf;
     int frame_len, ret;
 
+    if (!dev || !dev->spi)
+        return -ENODEV;
+
     /* Validate ioctl command: must use our magic number and valid direction */
     if (_IOC_TYPE(cmd) != APEX_IOC_MAGIC)
         return -ENOTTY;
-    if (_IOC_NR(cmd) < 1 || _IOC_NR(cmd) > 11)
+    if (_IOC_NR(cmd) < 1 || _IOC_NR(cmd) > 12)
         return -ENOTTY;
 
     /* Validate ioctl size to prevent integer overflow in subsequent
@@ -1144,7 +1161,7 @@ static __poll_t apex_bridge_poll(struct file *filp,
     struct apex_bridge_dev *dev = filp->private_data;
     __poll_t mask = 0;
 
-    if (!dev)
+    if (!dev || !dev->spi)
         return EPOLLERR;
 
     poll_wait(filp, &dev->rx_waitq, wait);
@@ -2102,12 +2119,17 @@ static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
 static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma)
 {
     struct apex_bridge_dev *dev = filp->private_data;
-    struct apex_sg_engine *eng = &dev->sg_engine;
+    struct apex_sg_engine *eng;
     unsigned long vsize = vma->vm_end - vma->vm_start;
     unsigned long psize;
     void *dma_virt;
     dma_addr_t dma_phys;
     int ret;
+
+    if (!dev || !dev->spi)
+        return -ENODEV;
+
+    eng = &dev->sg_engine;
 
     mutex_lock(&eng->sg_lock);
     if (eng->state == APEX_SG_STATE_IDLE) {
@@ -2328,6 +2350,13 @@ static void apex_bridge_remove(struct spi_device *spi)
 
     /* Securely wipe telemetry data before freeing device struct */
     memzero_explicit(&dev->last_telem, sizeof(dev->last_telem));
+
+    /* Set spi to NULL to prevent any file operations from
+     * accessing the freed SPI device. File operations check
+     * dev->spi for NULL and return -ENODEV.
+     * Must be done before device_destroy() to close the race
+     * window between file ops and device removal. */
+    dev->spi = NULL;
 
     /* Destroy device node */
     device_destroy(dev->class, dev->devt);

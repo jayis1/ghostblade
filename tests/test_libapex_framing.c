@@ -114,6 +114,7 @@ static uint32_t crc32_compute(const uint8_t *data, size_t len) {
 #define CMD_RESET_MCU     0x07
 #define CMD_TELEMETRY     0x81
 #define CMD_SDR_IQ_CHUNK  0x82
+#define CMD_NFC_RESPONSE  0x83
 
 /* Telemetry flags */
 #define TELEM_FLAG_SDR_RX_ACTIVE    (1 << 0)

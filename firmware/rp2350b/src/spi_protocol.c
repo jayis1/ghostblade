@@ -360,6 +360,14 @@ static struct {
     uint16_t last_nfc_field_mv;    /* Last NFC field strength */
 } device_state;
 
+/* Scratch RX buffer for NFC transaction responses. Sized to the maximum
+ * RX bytes we ever return to the host (SPI_NFC_MAX_RX_DATA). This is a
+ * module-static buffer rather than a stack allocation because the SPI
+ * protocol handler runs in the main loop and we want a predictable memory
+ * footprint (the handler is not reentrant). It is securely wiped after
+ * each transaction (see handle_cmd_nfc_transact). */
+static uint8_t nfc_rx_scratch[SPI_NFC_MAX_RX_DATA];
+
 /* ========================================================================
  * Forward Declarations (implemented in rp2350b_init.c or other modules)
  * ======================================================================== */
@@ -724,15 +732,87 @@ static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
      * currently supported. REQA=0x26, WUPA=0x52, ANTICOL=0x93,
      * SELECT=0x93, HLTA=0x50, RATS=0xE0. Also accept raw
      * transmit commands (0x00-0xFF) for future protocol extensions. */
-    (void)nfc_cmd_byte;
-    (void)nfc_flags;
 
-    /* TODO: When NFC driver is fully integrated, pass the TX data
-     * to st25r3916_transact():
-     *   st25r3916_transact(nfc_cmd_byte, &payload[4], nfc_data_len,
-     *                      rx_buf, &rx_len, timeout_ms);
-     * For now, just mark NFC as active. */
+    /* Build a CMD_NFC_RESPONSE frame so the host can collect the result.
+     * Response wire layout (see spi_protocol.h):
+     *   [0]    status
+     *   [1]    cmd_echo
+     *   [2..3] rx_len (little-endian)
+     *   [4+]   rx_data[]
+     */
+    uint8_t resp[4 + SPI_NFC_MAX_RX_DATA];
+    uint16_t rx_len = SPI_NFC_MAX_RX_DATA;
+    int rc;
+
+    /* Default response: status=NOT_READY, zero RX bytes */
+    resp[0] = NFC_STATUS_NOT_READY;
+    resp[1] = nfc_cmd_byte;
+    resp[2] = 0;
+    resp[3] = 0;
+
+    if (!st25r3916_is_ready()) {
+        /* NFC chip not initialized — report the condition to the host
+         * instead of touching unresponsive hardware. */
+        build_response_frame(CMD_NFC_RESPONSE, resp, 4);
+        return;
+    }
+
+    /* Forward the command + TX payload to the ST25R3916.
+     * The flags byte currently carries a timeout override in the
+     * low nibble (×10 ms). 0 means "use the firmware default (100 ms)". */
+    uint32_t timeout_ms = 0;
+    if (nfc_flags & 0x0F)
+        timeout_ms = (uint32_t)(nfc_flags & 0x0F) * 10U;
+
+    rc = st25r3916_transact(nfc_cmd_byte,
+                           nfc_data_len ? &payload[4] : NULL,
+                           nfc_data_len,
+                           nfc_rx_scratch, &rx_len, timeout_ms);
+
+    /* Map the driver return code to the wire status byte. */
+    switch (rc) {
+    case 0:
+        resp[0] = NFC_STATUS_OK;
+        break;
+    case -1:
+        resp[0] = NFC_STATUS_TIMEOUT;
+        rx_len = 0;
+        break;
+    case -2:
+        resp[0] = NFC_STATUS_CRC_ERR;
+        rx_len = 0;
+        break;
+    case -3:
+        resp[0] = NFC_STATUS_BAD_PARAMS;
+        rx_len = 0;
+        break;
+    default:
+        resp[0] = NFC_STATUS_BAD_PARAMS;
+        rx_len = 0;
+        break;
+    }
+
+    /* Clamp RX length to the response buffer we declared. */
+    if (rx_len > SPI_NFC_MAX_RX_DATA)
+        rx_len = SPI_NFC_MAX_RX_DATA;
+
+    write_le16(&resp[2], rx_len);
+
+    /* Append RX data after the 4-byte header. */
+    if (rx_len > 0)
+        memcpy(&resp[4], nfc_rx_scratch, rx_len);
+
+    /* Mark NFC active in the telemetry bitmap so the host sees that
+     * an NFC transaction is in progress. */
     device_state.nfc_active = true;
+
+    /* Send the response back to the host. */
+    build_response_frame(CMD_NFC_RESPONSE, resp, (uint16_t)(4 + rx_len));
+
+    /* Wipe the RX buffer so sensitive NFC tag data (e.g. UID, keys)
+     * does not persist in SRAM between transactions. */
+    if (rx_len > 0)
+        secure_wipe(nfc_rx_scratch, rx_len);
 }
 
 /* ========================================================================
@@ -922,6 +1002,9 @@ void spi_protocol_send_telemetry(void) {
  */
 void spi_protocol_send_iq_chunk(const uint8_t *data, uint16_t len) {
     if (!device_state.sdr_streaming)
+        return;
+
+    if (!data || len == 0)
         return;
 
     if (len > SPI_MAX_PAYLOAD)

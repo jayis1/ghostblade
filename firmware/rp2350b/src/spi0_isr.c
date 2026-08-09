@@ -204,15 +204,10 @@ static bool validate_header_crc64(const uint8_t *buf) {
  * Returns: true if CRC-32 is valid
  */
 static bool validate_payload_crc32(const uint8_t *buf, uint16_t payload_len) {
-    /* CRC-32 covers payload bytes only (not header) */
-    uint32_t computed;
-
-    if (payload_len == 0) {
-        /* Zero-length payload: CRC-32 is computed over empty data */
-        computed = crc32_compute(buf, 0);
-    } else {
-        computed = crc32_compute(&buf[SPI_HDR_SIZE], payload_len);
-    }
+    /* CRC-32 covers payload bytes only (not header).
+     * For zero-length payload, CRC-32 is computed over empty data
+     * (returns the CRC-32 init/finalize constant). */
+    uint32_t computed = crc32_compute(&buf[SPI_HDR_SIZE], payload_len);
 
     /* Extract expected CRC-32 from last 4 bytes (little-endian) */
     uint32_t offset = SPI_HDR_SIZE + payload_len;

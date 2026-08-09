@@ -138,8 +138,9 @@ static uint32_t crc32_compute(const uint8_t *data, size_t len) {
 #define CMD_RESET_MCU         0x07
 
 /* Command opcodes (MCU -> Host) */
-#define CMD_TELEMETRY         0x81
-#define CMD_SDR_IQ_CHUNK      0x82
+#define CMD_TELEMETRY           0x81
+#define CMD_SDR_IQ_CHUNK         0x82
+#define CMD_NFC_RESPONSE        0x83
 
 /* Antenna constants */
 #define ANT_MIMO_TX           0
@@ -924,7 +925,7 @@ static void test_command_opcodes(void) {
     uint8_t cmds[] = {
         CMD_NOP, CMD_SDR_TUNE, CMD_SDR_STREAM, CMD_ANT_SELECT,
         CMD_CC1101_CFG, CMD_NFC_TRANSACT, CMD_TELEMETRY_REQ,
-        CMD_TELEMETRY, CMD_SDR_IQ_CHUNK
+        CMD_TELEMETRY, CMD_SDR_IQ_CHUNK, CMD_NFC_RESPONSE
     };
     int n_cmds = sizeof(cmds) / sizeof(cmds[0]);
     bool all_distinct = true;
@@ -943,6 +944,7 @@ static void test_command_opcodes(void) {
     /* MCU→Host commands should have bit 7 set */
     ASSERT_TRUE((CMD_TELEMETRY & 0x80) != 0, "CMD_TELEMETRY has bit 7 set");
     ASSERT_TRUE((CMD_SDR_IQ_CHUNK & 0x80) != 0, "CMD_SDR_IQ_CHUNK has bit 7 set");
+    ASSERT_TRUE((CMD_NFC_RESPONSE & 0x80) != 0, "CMD_NFC_RESPONSE has bit 7 set");
 
     /* Host→MCU commands should have bit 7 clear (except NOP=0xFF) */
     ASSERT_TRUE((CMD_SDR_TUNE & 0x80) == 0, "CMD_SDR_TUNE has bit 7 clear");
@@ -1022,6 +1024,7 @@ static void test_round_trip_all_commands(void) {
         { CMD_TELEMETRY_REQ,  0 },
         { CMD_TELEMETRY,     16 },
         { CMD_SDR_IQ_CHUNK, 32 },
+        { CMD_NFC_RESPONSE,  8 },
     };
 
     int n_cases = sizeof(test_cases) / sizeof(test_cases[0]);

@@ -57,6 +57,7 @@
 #define APEX_CMD_RESET_MCU        0x07
 #define APEX_CMD_TELEMETRY        0x81
 #define APEX_CMD_SDR_IQ_CHUNK     0x82
+#define APEX_CMD_NFC_RESPONSE     0x83
 
 /* Antenna IDs */
 #define APEX_ANT_MIMO_TX          0
@@ -602,6 +603,7 @@ static void test_round_trip(void)
         { APEX_CMD_TELEMETRY_REQ, 0 },
         { APEX_CMD_TELEMETRY,    16 },
         { APEX_CMD_SDR_IQ_CHUNK, 32 },
+        { APEX_CMD_NFC_RESPONSE,  8 },
     };
 
     frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
@@ -686,6 +688,7 @@ static void test_command_opcodes(void)
         uint8_t mcu_cmds[] = {
             APEX_CMD_TELEMETRY,
             APEX_CMD_SDR_IQ_CHUNK,
+            APEX_CMD_NFC_RESPONSE,
         };
         int i;
 

@@ -110,6 +110,14 @@ void core1_entry(void)
 
 /* ── Watchdog bark interrupt handler ────────────────────────────────────────── */
 
+/* Track bark handler invocations to limit the number of times
+ * the watchdog is fed during shutdown, preventing an infinite
+ * loop where the bark handler keeps feeding the watchdog without
+ * the main loop ever recovering. After MAX_BARK_FEEDS feeds,
+ * the handler stops feeding, allowing the watchdog to reset. */
+#define MAX_BARK_FEEDS 3
+static volatile uint32_t bark_feed_count = 0;
+
 /**
  * watchdog_bark_handler — Called when watchdog is about to expire
  *
@@ -131,16 +139,20 @@ static void watchdog_bark_handler(void)
     /* Put CC1101 in idle */
     cc1101_enter_idle();
 
-    /* Feed the watchdog FIRST to give us time for a clean shutdown.
+    /* Feed the watchdog to give us time for a clean shutdown.
      * The bark fires 1 tick before reset, so we must feed immediately
      * to get a full timeout window for the remaining operations.
      * Without this feed, the peripheral shutdown code below may not
-     * complete before the hardware reset occurs. */
-    watchdog_kick();
-
-    /* Log diagnostic info: bark handler was invoked.
-     * The main loop will detect the stuck condition and the watchdog
-     * will eventually reset if it remains stuck. */
+     * complete before the hardware reset occurs.
+     * Limit the number of feeds to MAX_BARK_FEEDS to ensure the
+     * system eventually resets if the main loop is truly stuck. */
+    if (bark_feed_count < MAX_BARK_FEEDS) {
+        bark_feed_count++;
+        watchdog_kick();
+    }
+    /* After MAX_BARK_FEEDS, stop feeding so the watchdog fires and
+     * resets the system. This prevents a hang where the bark handler
+     * keeps feeding indefinitely. */
 }
 
 /* ── Initialization sequence ───────────────────────────────────────────────── */
@@ -163,6 +175,12 @@ static int init_peripherals(void)
     /* Step 2: SPI protocol handler */
     spi_protocol_init();
     g_state.spi_ready = true;
+
+    /* Step 2b: Enable peripheral power rails early, before initializing
+     * the peripherals that depend on them. The SDR, NFC, and sub-GHz
+     * modules need their power rails stable before SPI communication. */
+    peripheral_power_init();
+    peripheral_power_on_sequence();
 
     /* Step 3: Battery monitor (ADC) */
     ret = battery_monitor_init();
@@ -208,8 +226,7 @@ static int init_peripherals(void)
     /* Step 8: Sleep/wake state machine for power management */
     sleep_wake_init();
 
-    /* Step 9: Peripheral power rails (enables SDR, NFC, sub-GHz rails) */
-    peripheral_power_init();
+    /* Note: Peripheral power rails were enabled in Step 2b above. */
 
     return 0;
 }

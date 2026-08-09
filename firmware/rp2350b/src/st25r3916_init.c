@@ -330,6 +330,7 @@ int st25r3916_init(void) {
         if (!(irq1 & ST25R3916_IRQ1_OSC)) {
             /* Oscillator still not ready — this is a hardware fault.
              * Return error so caller can handle appropriately. */
+            g_nfc_ready = false;
             return -2;
         }
     }
@@ -337,6 +338,7 @@ int st25r3916_init(void) {
     /* Step 24: Send INITIALIZE command for DPO (Dynamic Power Output) */
     st25r3916_send_command(ST25R3916_CMD_INITIALIZE_DPO);
 
+    g_nfc_ready = true;
     return 0;
 }
 

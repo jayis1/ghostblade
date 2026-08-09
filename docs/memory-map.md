@@ -264,9 +264,23 @@ Offset  Size  Field
 |--------|------|-------------|-------------|
 | 0x81 | TELEMETRY | 16 | Telemetry response (RSSI, temp, battery, flags) |
 | 0x82 | SDR_IQ_CHUNK | variable | IQ sample data chunk |
+| 0x83 | NFC_RESPONSE | 4+ | NFC transaction response (status + RX data) |
 
 MCU → Host commands have bit 7 set (`0x80`). Host → MCU commands have bit 7
 clear (except NOP = `0xFF`).
+
+### NFC_RESPONSE Payload (0x83)
+
+Returned by the MCU after processing a `NFC_TRANSACT` (0x05) command. The
+kernel driver pushes the payload to the RX FIFO; userspace reads it via
+`read()` or `apex_nfc_transact()`.
+
+| Offset | Size | Field | Description |
+|--------|------|-------|-------------|
+| 0x00 | 1 | status | 0=OK, 1=timeout, 2=CRC err, 3=bad params, 4=NFC not ready |
+| 0x01 | 1 | cmd_echo | Echoes the NFC command byte from the request |
+| 0x02 | 2 | rx_len | Number of RX bytes that follow (little-endian) |
+| 0x04 | rx_len | rx_data | RX data from the ST25R3916 FIFO |
 
 ---
 

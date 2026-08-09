@@ -212,7 +212,21 @@
 
 /* Command opcodes — MCU to Host */
 #define APEX_CMD_TELEMETRY        0x81
-#define APEX_CMD_SDR_IQ_CHUNK     0x82
+#define APEX_CMD_SDR_IQ_CHUNK      0x82
+#define APEX_CMD_NFC_RESPONSE      0x83
+
+/* NFC transaction response payload (returned by MCU after APEX_CMD_NFC_TRANSACT)
+ *   [0]    status      — 0=OK, 1=timeout, 2=CRC err, 3=bad params, 4=not ready
+ *   [1]    cmd_echo    — echoes the NFC command byte from the request
+ *   [2..3] rx_len      — number of RX bytes that follow (little-endian)
+ *   [4+]   rx_data[]   — RX data from the ST25R3916 FIFO
+ */
+#define APEX_NFC_STATUS_OK          0
+#define APEX_NFC_STATUS_TIMEOUT     1
+#define APEX_NFC_STATUS_CRC_ERR      2
+#define APEX_NFC_STATUS_BAD_PARAMS  3
+#define APEX_NFC_STATUS_NOT_READY   4
+#define APEX_NFC_MAX_RX_DATA        256
 
 /* SPI frame header structure (16 bytes) */
 struct apex_spi_header {
