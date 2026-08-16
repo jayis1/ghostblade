@@ -656,12 +656,14 @@ uint16_t st25r3916_get_field_strength_mv(void) {
     st25r3916_send_command(ST25R3916_CMD_MEASURE_AMPLITUDE);
 
     /* Wait for measurement to complete (typically 50-100 μs).
-     * Poll the IRQ register for completion rather than using a fixed
-     * delay, with a timeout to avoid hanging if the chip is unresponsive. */
-    for (int timeout = 0; timeout < 5000; timeout++) {
-        uint8_t irq1 = st25r3916_read_reg(ST25R3916_REG_IRQ_STATUS1);
-        if (irq1 & 0x01)  /* MEASURE_AMPLITUDE_DONE bit */
-            break;
+     * The ST25R3916 does not signal measurement completion via a
+     * dedicated IRQ bit — the result appears in the RSSI register
+     * after a fixed conversion time. Use a bounded delay loop with
+     * timeout to avoid hanging if the chip is unresponsive.
+     * The previous code incorrectly polled IRQ_STATUS1 bit 0 (OSC),
+     * which indicates oscillator status, not measurement completion. */
+    for (uint32_t timeout = 0; timeout < 5000; timeout++) {
+        __asm__ volatile ("nop");
     }
 
     /* Read the RSSI register which contains the amplitude measurement result.

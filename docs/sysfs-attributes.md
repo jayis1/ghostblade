@@ -172,6 +172,32 @@ Current overtemperature status.
   this is set.
 - **Example:** `0` means temperature is within safe range
 
+### `overtemp_count`
+
+Cumulative count of overtemperature events since driver load.
+
+- **Type:** Read-only integer
+- **Range:** 0 to 2³² − 1
+- **Details:** Each rising-edge transition of the OVERTEMP telemetry flag
+  (0→1) increments this counter. Unlike the `overtemp` attribute which
+  shows the current state, this provides a historical count for
+  diagnostics and health monitoring. A non-zero value indicates the
+  device has experienced thermal stress.
+- **Example:** `3` means 3 overtemperature events since boot
+
+### `irq_count`
+
+Cumulative count of INT_REQ interrupt events since driver load.
+
+- **Type:** Read-only integer
+- **Range:** 0 to 2³² − 1
+- **Details:** Each time the RP2350B asserts the INT_REQ GPIO to signal
+  pending data, this counter increments. A high `irq_count` with a low
+  `sg_frames_rx` or `rx_fifo_count` indicates the MCU is asserting
+  interrupts but SPI transfers are failing — check `spi_errors` for
+  communication issues.
+- **Example:** `15420` means 15,420 interrupt events since boot
+
 ## Scatter-Gather DMA Attributes
 
 These attributes report the state and statistics of the DMA scatter-gather
@@ -237,6 +263,17 @@ Size of each scatter-gather buffer in bytes.
 - **Range:** 4096 to 262144 (4 KiB to 256 KiB)
 - **Unit:** bytes
 - **Example:** `32768` means each buffer is 32 KiB
+
+### `sg_frames_crc_err`
+
+Number of SPI protocol frames that failed CRC validation during SG streaming.
+
+- **Type:** Read-only integer
+- **Range:** 0 to 2³² − 1
+- **Details:** CRC errors indicate SPI bus signal integrity problems or
+  clock speed being too high. If this counter is increasing, try reducing
+  `spi_speed_hz` via the module parameter or SG config.
+- **Example:** `0` means no CRC errors
 
 ## Usage Examples
 
@@ -342,8 +379,10 @@ dev.close()
 | All telemetry reads return 0 | MCU not responding | `driver_status` bit 0 should be set |
 | `rssi_dbm_x10` always 0 | SDR not initialized | Send SDR_TUNE command via ioctl |
 | `vbat_mv` returns 3000 | Low battery / ADC error | Check battery connection |
-| `mcu_flags` bit 6 set | Overtemperature (>85°C) | Reduce workload, check cooling |
-| `mcu_flags` bit 7 set | Low battery (<3.3V) | Charge battery immediately |
-| `mcu_flags` bit 8 set | SPI error | Check `spi_errors` count |
+| `mcu_flags` bit 6 set | Overtemperature (>85°C) | Check `overtemp_count` for event history, reduce workload, check cooling |
+| `mcu_flags` bit 7 set | Low battery (<3.3V) | Check `brownout_count`, charge battery immediately |
+| `mcu_flags` bit 8 set | SPI error | Check `spi_errors` and `irq_count` counts |
+| `overtemp_count` increasing | Recurring thermal events | Improve cooling, reduce SDR sample rate |
+| `irq_count` high but low `rx_fifo_count` | SPI transfers failing | Check `spi_errors`, verify SPI wiring, reduce clock speed |
 | `sg_state` is `error` | DMA transfer failure | Check `sg_errors` and `sg_overruns` |
 | `spi_errors` increasing | Bad SPI connection | Check SPI0 wiring, reduce clock speed |

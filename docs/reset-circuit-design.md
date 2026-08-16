@@ -223,20 +223,27 @@ than a hardware reset pin:
 
 ## 6. ST25R3916 NFC Controller Reset
 
+The ST25R3916 uses power-on reset (VDD_NFC ramp) combined with the
+SPI `SET_DEFAULT` command for soft reset. There is no dedicated reset
+GPIO from the RP2350B — the NFC power rail (POWER_RAIL_NFC, GPIO 11)
+controls the power cycle.
+
 ```
-  VDD_3V3 (3.3V)
+  VDD_NFC (5V, switched via POWER_RAIL_NFC GPIO 11)
        │
     [10kΩ] R25
        │
-       ├──── ST25R3916 RSTn pin
+       ├──── ST25R3916 RSTn pin (tied high via pull-up)
        │
-  RP2350B GPIO25 (NFC_RESET) ────── ST25R3916 RSTn
-                                        │
-                                    [100nF C35] to GND (debounce)
+  [100nF C35] to GND (debounce)
 
-  Active: LOW (asserted = ST25R3916 in reset)
-  Minimum pulse width: 10 µs
-  Reset release: VDD_NFC must be stable before RSTn is deasserted
+  Power-on reset: VDD_NFC ramp triggers internal POR
+  Soft reset:     SPI SET_DEFAULT command (0x18) clears all registers
+  Power cycle:    RP2350B toggles POWER_RAIL_NFC (GPIO 11) off/on
+                  with 50ms ramp delay (POWER_DELAY_NFC_MS)
+
+  Reset release: VDD_NFC must be stable before SPI communication
+  Minimum power-off time for full reset: 10 ms
 ```
 
 **ST25R3916 reset sequence (RP2350B firmware):**

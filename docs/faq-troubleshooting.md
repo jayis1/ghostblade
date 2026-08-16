@@ -111,7 +111,7 @@ asserting MCU_READY. The kernel driver waits up to 500ms. If you see
 timeouts:
 
 1. Verify RP2350B firmware is running (check UART output)
-2. Check GPIO25 (INT_REQ) and GPIO24 (HOST_RDY) connections
+2. Check RP2350B pin 20 (INT_REQ) and pin 21 (HOST_RDY) connections — these map to RK3576 GPIO1_B0 and GPIO1_B1 respectively
 3. Probe the MCU_READY signal with an oscilloscope
 4. Increase the driver timeout in `apex_bridge_regs.h`:
    ```c

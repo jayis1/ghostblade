@@ -841,10 +841,16 @@ static void handle_cmd_nfc_transact(const uint8_t *payload, uint16_t len) {
     /* Send the response back to the host. */
     build_response_frame(CMD_NFC_RESPONSE, resp, (uint16_t)(4 + rx_len));
 
-    /* Wipe the RX buffer so sensitive NFC tag data (e.g. UID, keys)
-     * does not persist in SRAM between transactions. */
-    if (rx_len > 0)
-        secure_wipe(nfc_rx_scratch, rx_len);
+    /* Wipe the entire RX scratch buffer so sensitive NFC tag data
+     * (e.g. UID, cryptographic keys) does not persist in SRAM between
+     * transactions. Previously only rx_len bytes were wiped, leaving
+     * residual data from longer transactions in the tail of the buffer.
+     * Always wipe the full SPI_NFC_MAX_RX_DATA bytes regardless of how
+     * many were actually used. */
+    secure_wipe(nfc_rx_scratch, SPI_NFC_MAX_RX_DATA);
+
+    /* Wipe the response buffer which also contains NFC tag data. */
+    secure_wipe(resp, sizeof(resp));
 }
 
 /* ========================================================================
@@ -1017,6 +1023,11 @@ void spi_protocol_send_telemetry(void) {
     build_response_frame(CMD_TELEMETRY, (const uint8_t *)&telem,
                          sizeof(telem));
     proto_stats.telemetry_sent++;
+
+    /* Securely wipe telemetry struct from stack — it may contain
+     * sensitive operational data (battery voltage, temperature)
+     * that shouldn't persist in stack residuals. */
+    secure_wipe(&telem, sizeof(telem));
 }
 
 /* ========================================================================

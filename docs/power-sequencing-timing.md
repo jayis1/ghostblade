@@ -188,19 +188,19 @@ expires without being kicked.
 ```
 Time (ms)  Event                              Notes
 ─────────  ──────────────────────────────     ──────────────────────
-   0       Brownout detected (VBAT < 3.0V)   ADC GPIO26 threshold
+   0       Brownout detected (VBAT < 3.0V)   ADC channel 0 threshold
    0       OR watchdog timeout (5s)           Hardware watchdog
    1       RP2350B: watchdog scratch magic    0xDEADBEEF → scratch reg
-   2       RP2350B: HOST_RDY deassert        GPIO1_B1 → LOW
+   2       RP2350B: HOST_RDY deassert        Pin 21 → LOW
    3       RP2350B: LMS7002M TX disable        Prevent TX on low V
    5       RP2350B: CC1101 SPWD strobe         Sleep mode
    8       RP2350B: ST25R3916 GOTO_SLEEP        Sleep mode
-  10       RP2350B: GPIO30 → LOW (SDR 3V3 off)  —
-  15       RP2350B: GPIO29 → LOW (SDR 1V1 off)   —
-  20       RP2350B: GPIO28 → LOW (SDR 1V8 off)   —
-  25       RP2350B: GPIO23 → LOW (Sub-GHz off)   —
-  30       RP2350B: GPIO22 → LOW (NFC off)        —
-  35       RP2350B: GPIO24 → LOW (SDIO off)        —
+  10       RP2350B: GPIO 9 → LOW (SDR 3V3 off)  PWR_GPIO_SDR_3V3
+  15       RP2350B: GPIO 7 → LOW (SDR 1V1 off)  PWR_GPIO_SDR_1V1
+  20       RP2350B: GPIO 6 → LOW (SDR 1V8 off)  PWR_GPIO_SDR_1V8
+  25       RP2350B: GPIO 22 → LOW (Sub-GHz off) PWR_GPIO_SUBGHZ
+  30       RP2350B: GPIO 11 → LOW (NFC off)     PWR_GPIO_NFC
+  35       RP2350B: GPIO 25 → LOW (SDIO off)    PWR_GPIO_SDIO
   40       RK3576: receives INT_REQ (MCU state)    —
   50       RP2350B: watchdog_system_reset()        Full MCU reset
             ┌──────────────────────────────────────────────────────┐

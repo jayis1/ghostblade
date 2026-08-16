@@ -343,8 +343,14 @@ static int lms7002m_calc_pll_params(uint32_t freq_hz,
     /* Calculate PLL parameters:
      * f_VCO = f_REF * (N_INT + N_FRAC / 2^23) / 2
      * N_TOTAL = N_INT + N_FRAC / 2^23 = 2 * f_VCO / f_REF
+     *
+     * Cast vco_freq to uint64_t BEFORE multiplying by 2 to prevent
+     * uint32_t overflow: at f_VCO = 3.8 GHz, vco_freq * 2 = 7.6 GHz
+     * which exceeds UINT32_MAX (4.29 GHz). The previous code performed
+     * the multiply in 32-bit before the 64-bit cast, causing silent
+     * overflow and incorrect PLL programming at high VCO frequencies.
      */
-    n_total = ((uint64_t)vco_freq * 2 * LMS7002M_FRAC_MODULO) / LMS7002M_REF_FREQ_HZ;
+    n_total = ((uint64_t)vco_freq * 2ULL * LMS7002M_FRAC_MODULO) / LMS7002M_REF_FREQ_HZ;
 
     *n_int = (uint16_t)(n_total / LMS7002M_FRAC_MODULO);
     *n_frac = (uint32_t)(n_total % LMS7002M_FRAC_MODULO);
@@ -490,6 +496,10 @@ void lms7002m_set_rx_bandwidth(uint16_t bw_khz) {
      * and is typically done via LimeSuite calibration. */
     uint16_t bb_val;
 
+    /* Reject zero/negative bandwidth to prevent invalid filter config */
+    if (bw_khz == 0)
+        return;
+
     if (bw_khz <= 1500)
         bb_val = 0x0C00;  /* ~1.5 MHz */
     else if (bw_khz <= 2500)
@@ -524,9 +534,16 @@ void lms7002m_set_rx_gain(uint16_t gain_db_x10) {
      *   0-15 dB: LNA lowest gain + TIA lowest
      *   15-30 dB: LNA medium gain
      *   30-45 dB: LNA high gain
-     *   45-73 dB: LNA maximum gain + TIA maximum */
+     *   45-73 dB: LNA maximum gain + TIA maximum
+     *
+     * Clamp gain to valid range [0, 730] (0-73 dB) to prevent
+     * out-of-range values from programming invalid register settings. */
     uint16_t lna_gain;
     uint16_t tia_gain;
+
+    /* Clamp to maximum supported gain */
+    if (gain_db_x10 > 730)
+        gain_db_x10 = 730;
 
     if (gain_db_x10 < 150) {
         lna_gain = 0x00;  /* LNA minimum gain */
@@ -567,7 +584,10 @@ void lms7002m_set_rx_gain(uint16_t gain_db_x10) {
 void lms7002m_set_rx_decimation(uint16_t decimation) {
     /* Map decimation factor to register value.
      * REG_RX_DECIMATION format: bits[2:0] encode the factor.
-     * 0=div1, 1=div2, 2=div4, 3=div8, 4=div16, 5=div32, 6=div64 */
+     * 0=div1, 1=div2, 2=div4, 3=div8, 4=div16, 5=div32, 6=div64
+     *
+     * Only power-of-2 values (1, 2, 4, 8, 16, 32, 64) are supported.
+     * Unsupported values fall back to div16 (default, ~1.92 MSPS). */
     uint16_t dec_val;
 
     switch (decimation) {

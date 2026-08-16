@@ -404,7 +404,8 @@ int main(void)
             last_telem_time = now;
         }
 
-        /* Periodic: Brownout detection via battery monitor */
+        /* Periodic: Brownout detection via battery monitor.
+         * Also handle critical battery voltage for graceful shutdown. */
         if (g_state.battery_monitor_ready) {
             uint16_t vbat = battery_monitor_get_vbat_mv();
             /* If ADC has not been read yet, vbat will be 0. Skip
@@ -429,6 +430,32 @@ int main(void)
                     /* Deassert INT_REQ once brownout condition clears
                      * (drive HIGH = inactive, since INT_REQ is active-low) */
                     rp2350b_gpio_set(PIN_INT_REQ, true);
+                }
+
+                /* Critical battery: initiate graceful shutdown.
+                 * If VBAT drops below 3000 mV, power off all peripheral
+                 * rails to preserve the remaining battery for the
+                 * watchdog and brownout detection circuitry. The host
+                 * will see the LOW_BATTERY flag and can initiate a
+                 * full system shutdown via the kernel driver. */
+                if (vbat < 3000) {
+                    static bool shutdown_initiated = false;
+                    if (!shutdown_initiated) {
+                        shutdown_initiated = true;
+                        /* Stop SDR DMA to reduce current draw */
+                        sdr_dma_stop();
+                        /* Put CC1101 in sleep mode */
+                        cc1101_enter_sleep();
+                        /* Stop NFC polling and put ST25R3916 to sleep */
+                        st25r3916_stop_polling();
+                        st25r3916_sleep();
+                        /* Power off non-essential rails */
+                        peripheral_power_off(POWER_RAIL_SDR_3V3);
+                        peripheral_power_off(POWER_RAIL_NFC);
+                        peripheral_power_off(POWER_RAIL_SUBGHZ);
+                        printf("[MAIN] CRITICAL: Battery at %u mV, "
+                               "initiating graceful shutdown\\r\\n", vbat);
+                    }
                 }
             }
         }

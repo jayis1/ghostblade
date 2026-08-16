@@ -1,8 +1,8 @@
 {
-  "C": 24725,
+  "C": 24843,
   "headers": 3229,
   "dts": 2109,
-  "docs": 11632,
+  "docs": 11721,
   "python": 815,
   "shell": 2229,
   "makefiles": 519,
@@ -10,6 +10,6 @@
   "linker": 251,
   "bom_components": 67,
   "total_files": 112,
-  "total_lines": 45557,
+  "total_lines": 45764,
   "last_updated": "2026-08-16"
 }

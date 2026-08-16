@@ -256,7 +256,7 @@ sudo cp ghostblade-options.dtbo /sys/kernel/config/device-tree/overlays/options/
 - Check SPI0 physical connections (CLK, MOSI, MISO, CS, INT_REQ, HOST_RDY)
 - Verify RP2350B firmware is running (check serial output)
 - The MCU may need up to 200ms after reset release to assert MCU_READY
-- Check GPIO25 (INT_REQ) and GPIO24 (HOST_RDY) are correctly mapped in DTS
+- Check RP2350B pin 20 (INT_REQ, → RK3576 GPIO1_B0) and pin 21 (HOST_RDY, → RK3576 GPIO1_B1) are correctly mapped in DTS
 
 ### SPI communication errors
 

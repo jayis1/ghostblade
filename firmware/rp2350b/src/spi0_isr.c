@@ -270,15 +270,6 @@ static void spi0_process_byte(uint8_t byte) {
         if (spi0_rx.pos < SPI_HDR_SIZE) {
             spi0_rx.buf[spi0_rx.pos++] = byte;
 
-            /* Safety: if pos somehow exceeds header size without
-             * entering the validation branch, reset state machine.
-             * This can't happen in normal operation since pos
-             * increments by 1 per byte and we check == SPI_HDR_SIZE. */
-            if (spi0_rx.pos > SPI_HDR_SIZE) {
-                spi0_rx.state = FRAME_STATE_ERROR;
-                break;
-            }
-
             if (spi0_rx.pos == SPI_HDR_SIZE) {
                 /* Header complete — validate CRC-64 */
                 if (!validate_header_crc64(spi0_rx.buf)) {

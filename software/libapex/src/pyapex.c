@@ -306,7 +306,6 @@ static PyObject *ApexBridge_cc1101_write(ApexBridgeObject *self, PyObject *args)
 static PyObject *ApexBridge_nfc_transact(ApexBridgeObject *self, PyObject *args) {
     uint8_t cmd, flags;
     Py_buffer tx_buf;
-    uint16_t rx_len = 256;
 
     if (!PyArg_ParseTuple(args, "BBy*", &cmd, &flags, &tx_buf))
         return NULL;
@@ -335,7 +334,25 @@ static PyObject *ApexBridge_nfc_transact(ApexBridgeObject *self, PyObject *args)
     if (response_len > 256)
         response_len = 256;
 
-    return Py_BuildValue("y#", txn.data, (Py_ssize_t)response_len);
+    PyObject *result = Py_BuildValue("y#", txn.data, (Py_ssize_t)response_len);
+
+    /* Securely wipe the transaction struct to prevent sensitive NFC
+     * tag data (UID, keys) from persisting on the stack. Use
+     * explicit_bzero() which cannot be optimized away by the compiler,
+     * unlike memset() which may be elided for stack-local variables. */
+#if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
+#if __GLIBC_PREREQ(2, 25)
+    explicit_bzero(&txn, sizeof(txn));
+#else
+    memset(&txn, 0, sizeof(txn));
+    __asm__ volatile ("" ::: "memory");
+#endif
+#else
+    memset(&txn, 0, sizeof(txn));
+    __asm__ volatile ("" ::: "memory");
+#endif
+
+    return result;
 }
 
 /* ========================================================================

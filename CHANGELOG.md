@@ -13,6 +13,36 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
+### Fixed
+
+- **LMS7002M PLL calculation uint32 overflow**: `lms7002m_calc_pll_params()` multiplied `vco_freq` (up to 3.8 GHz) by 2 before casting to `uint64_t`, causing silent overflow when VCO frequency exceeded 2.15 GHz (UINT32_MAX/2). Fixed by casting to `uint64_t` before the multiply, ensuring correct PLL programming at all supported frequencies.
+- **NFC RX scratch buffer incomplete wipe**: `handle_cmd_nfc_transact()` in `spi_protocol.c` only wiped `rx_len` bytes of the `nfc_rx_scratch` buffer after each transaction, leaving residual tag data (UID, keys) from longer transactions in the tail. Fixed to wipe the full `SPI_NFC_MAX_RX_DATA` (256) bytes. Also added secure wipe of the response buffer and telemetry struct.
+- **ST25R3916 field strength measurement polled wrong IRQ bit**: `st25r3916_get_field_strength_mv()` polled IRQ_STATUS1 bit 0 (OSC — oscillator on) to detect measurement completion, but this bit indicates oscillator status, not measurement completion. Replaced with a bounded delay loop since the ST25R3916 does not provide a dedicated measurement-complete IRQ.
+- **Dead code in SPI0 ISR frame assembly**: Removed impossible `pos > SPI_HDR_SIZE` check in `spi0_process_byte()` FRAME_STATE_HEADER case — the condition could never be true since `pos` increments by 1 and the `== SPI_HDR_SIZE` check catches the transition.
+- **pyapex unused variable**: Removed unused `rx_len` variable in `ApexBridge_nfc_transact()` that triggered cppcheck unreadVariable warning.
+
+### Added
+
+- **Critical battery graceful shutdown**: Main loop now detects VBAT < 3000 mV and initiates graceful shutdown — stops SDR DMA, puts CC1101 to sleep, stops NFC polling, powers off non-essential rails (SDR 3V3, NFC, Sub-GHz), and logs a critical message. This preserves remaining battery for watchdog and brownout detection circuitry.
+- **Overtemperature event counter sysfs attribute**: Added `overtemp_count` sysfs attribute to the kernel driver, counting rising-edge transitions of the OVERTEMP telemetry flag. Complements the existing `overtemp` (current state) attribute with a historical count for diagnostics.
+- **Interrupt event counter sysfs attribute**: Added `irq_count` sysfs attribute counting INT_REQ GPIO interrupt events since driver load. Useful for diagnosing communication issues — a high IRQ count with low frame count indicates SPI transfer failures.
+- **Secure memory wipe in pyapex NFC transaction**: Added `explicit_bzero()` (with `memset` fallback) to wipe the NFC transaction struct after building the Python response object, preventing sensitive tag data from persisting on the C stack.
+- **LMS7002M gain clamping**: `lms7002m_set_rx_gain()` now clamps `gain_db_x10` to the valid range [0, 730] (0–73 dB) to prevent out-of-range values from programming invalid LNA/TIA register settings.
+- **LMS7002M bandwidth validation**: `lms7002m_set_rx_bandwidth()` now rejects zero bandwidth to prevent invalid baseband filter configuration.
+- **sysfs documentation for new attributes**: Documented `overtemp_count`, `irq_count`, and `sg_frames_crc_err` attributes in `docs/sysfs-attributes.md`. Updated troubleshooting table with diagnostic guidance for the new counters.
+
+### Added
+
+- **6 missing KiCad footprints**: `Crystal_3.2x1.5mm`, `Crystal_3.2x2.5mm`, `Inductor_2x1.6mm`, `Inductor_4x4mm`, `FPC_30pin_0.4mm`, `FPC_40pin_0.4mm` — all referenced in the BOM but previously absent from the footprint library. Added with complete pad definitions, silkscreen outlines, and courtyard boundaries.
+- **7 missing KiCad symbol definitions**: `TPS63020`, `TLV75533`, `TLV75518`, `NCP303`, `W25Q128JVS`, `SY8120B`, `THGBMJG6C1LBAB7` — all present in the BOM and netlist components section but previously missing from the symbol library. Added with correct pin definitions, power pin types, and footprint references.
+- **13 missing 3D model references** in `hardware/kicad/3dmodels/README.md` for TLV75533, TLV75518, NCP303, SY8120B, crystals, inductors, FPC connectors, tactile switch, LED 0402, and TVS diode.
+
+### Fixed
+
+- **Documentation GPIO reference errors**: FAQ troubleshooting and flashing guide incorrectly referenced "GPIO25 (INT_REQ)" and "GPIO24 (HOST_RDY)" — these are RK3576 GPIO bank numbers that don't match the actual RP2350B pin assignments. Corrected to reference RP2350B pin 20 (INT_REQ → RK3576 GPIO1_B0) and pin 21 (HOST_RDY → RK3576 GPIO1_B1).
+- **Reset circuit design doc**: Incorrectly described a dedicated "GPIO25 (NFC_RESET)" line to the ST25R3916. The ST25R3916 actually uses power-on reset via the NFC power rail (POWER_RAIL_NFC, GPIO 11) and SPI SET_DEFAULT command for soft reset. Rewrote the section to accurately describe the power-cycle reset mechanism.
+- **Power sequencing timing doc**: Brownout shutdown sequence referenced incorrect GPIO numbers (GPIO28-30 for SDR rails, GPIO22-24 for peripherals). Corrected to match the actual `PWR_GPIO_*` definitions in `peripheral_power.c`: GPIO 6/7/9 for SDR 1V8/1V1/3V3, GPIO 11 for NFC, GPIO 22 for Sub-GHz, GPIO 25 for SDIO. Also fixed "ADC GPIO26" to "ADC channel 0" and "GPIO1_B1" to "Pin 21" for the HOST_RDY deassert.
+
 ### Added
 
 - **SDR DMA engine integration in SPI protocol handler**: `handle_cmd_sdr_stream()` in `spi_protocol.c` now calls `sdr_dma_start()` / `sdr_dma_stop()` when the host sends `CMD_SDR_STREAM` with enable=1/0. Previously, the handler only toggled GPIO enables (`apex_sdr_rx_enable`, `apex_sdr_lna_enable`) but never started the DMA ring buffer engine, so no IQ data would ever be captured or sent to the host. The fix also calls `sdr_dma_set_frequency()` from `handle_cmd_sdr_tune()` to keep the DMA engine's frequency tracking in sync with tuning commands.

@@ -119,6 +119,9 @@ struct apex_bridge_dev {
     atomic_t           spi_err_count; /* Cumulative SPI error count */
     atomic_t           brownout_count; /* Cumulative brownout event count */
     atomic_t           brownout_prev_flag; /* Previous LOW_BATTERY flag state for edge detection */
+    atomic_t           overtemp_count;  /* Cumulative overtemp event count */
+    atomic_t           overtemp_prev_flag; /* Previous OVERTEMP flag state for edge detection */
+    atomic_t           irq_count;       /* Cumulative INT_REQ interrupt count */
     u8                 saved_spi_mode;       /* Saved SPI mode for PM resume */
     u32                saved_spi_max_speed_hz; /* Saved SPI speed for PM resume */
     struct apex_sg_engine sg_engine;  /* Scatter-gather DMA engine */
@@ -515,6 +518,14 @@ static void apex_rx_work_handler(struct work_struct *work)
                 clear_bit(APEX_STATE_LOW_BATTERY, &dev->flags);
                 atomic_set(&dev->brownout_prev_flag, 0);
             }
+            /* Overtemperature edge detection: count transitions (0→1).
+             * APEX_FLAG_OVERTEMP (BIT(6)) is the wire-protocol flag. */
+            if (new_flags & APEX_FLAG_OVERTEMP) {
+                if (atomic_xchg(&dev->overtemp_prev_flag, 1) == 0)
+                    atomic_inc(&dev->overtemp_count);
+            } else {
+                atomic_set(&dev->overtemp_prev_flag, 0);
+            }
             /* Also push to RX FIFO for user-space read() */
             kfifo_in(&dev->rx_fifo, payload, payload_len);
             spin_unlock(&dev->rx_lock);
@@ -562,6 +573,9 @@ static int apex_bridge_mmap(struct file *filp, struct vm_area_struct *vma);
 static irqreturn_t apex_irq_handler(int irq, void *dev_id)
 {
     struct apex_bridge_dev *dev = dev_id;
+
+    /* Count interrupt events for diagnostics and sysfs telemetry */
+    atomic_inc(&dev->irq_count);
 
     /* Schedule work item to process the interrupt */
     schedule_work(&dev->rx_work);
@@ -1451,6 +1465,37 @@ static ssize_t low_battery_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(low_battery);
 
+static ssize_t overtemp_count_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+
+    if (!adev)
+        return -ENODEV;
+
+    /* Return cumulative overtemperature event count (rising-edge
+     * transitions of the OVERTEMP flag). Each time the MCU reports
+     * overtemperature (temp > 85°C), this counter increments. */
+    return sprintf(buf, "%u\n", atomic_read(&adev->overtemp_count));
+}
+static DEVICE_ATTR_RO(overtemp_count);
+
+static ssize_t irq_count_show(struct device *dev,
+                                struct device_attribute *attr, char *buf)
+{
+    struct apex_bridge_dev *adev = dev_get_drvdata(dev);
+
+    if (!adev)
+        return -ENODEV;
+
+    /* Return cumulative INT_REQ interrupt count since driver load.
+     * Useful for diagnosing communication issues — a high IRQ count
+     * with low frames_rx indicates the MCU is asserting INT_REQ but
+     * the SPI transfers are failing. */
+    return sprintf(buf, "%u\n", atomic_read(&adev->irq_count));
+}
+static DEVICE_ATTR_RO(irq_count);
+
 static ssize_t overtemp_show(struct device *dev,
                                struct device_attribute *attr, char *buf)
 {
@@ -1644,6 +1689,8 @@ static struct attribute *apex_bridge_attrs[] = {
     &dev_attr_brownout_count.attr,
     &dev_attr_low_battery.attr,
     &dev_attr_overtemp.attr,
+    &dev_attr_overtemp_count.attr,
+    &dev_attr_irq_count.attr,
     &dev_attr_firmware_version.attr,
     /* Scatter-gather DMA attributes */
     &dev_attr_sg_state.attr,
@@ -2201,6 +2248,9 @@ static int apex_bridge_probe(struct spi_device *spi)
     atomic_set(&dev->spi_err_count, 0);
     atomic_set(&dev->brownout_count, 0);
     atomic_set(&dev->brownout_prev_flag, 0);
+    atomic_set(&dev->overtemp_count, 0);
+    atomic_set(&dev->overtemp_prev_flag, 0);
+    atomic_set(&dev->irq_count, 0);
     mutex_init(&dev->lock);
     spin_lock_init(&dev->rx_lock);
     spin_lock_init(&dev->tx_lock);

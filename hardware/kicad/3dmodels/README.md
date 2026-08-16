@@ -23,6 +23,19 @@ parametric STEP generators.
 | USB-C 24-pin | USB-C | KiCad library | `USB-C_24pin.step` |
 | TPS63020 | VQFN-14 | [TI 3D Models](https://www.ti.com/packaging/ref/3dmodels/) | `TPS63020.step` |
 | W25Q128JVS | SOP-8 | [Winbond 3D Models](https://www.winbond.com/) | `W25Q128JVS.step` |
+| TLV75533 | SOT-23-5 | [TI 3D Models](https://www.ti.com/packaging/ref/3dmodels/) | `TLV75533.step` |
+| TLV75518 | SOT-23-5 | [TI 3D Models](https://www.ti.com/packaging/ref/3dmodels/) | `TLV75518.step` |
+| NCP303 | SOT-23-5 | [ON Semi 3D Models](https://www.onsemi.com/) | `NCP303.step` |
+| SY8120B | SOT-23-6 | [Silergy CAD](https://www.silergy.com/) | `SY8120B.step` |
+| 32.768kHz Crystal | 3.2x1.5mm | [Epson CAD](https://www.epson.com/) | `Crystal_3215.step` |
+| 27.12MHz Crystal | 3.2x2.5mm | [NXP CAD](https://www.nxp.com/) | `Crystal_3225.step` |
+| Power Inductor 2x1.6mm | 2x1.6mm | [Murata CAD](https://www.murata.com/) | `Inductor_2016.step` |
+| Power Inductor 4x4mm | 4x4mm | [Wurth CAD](https://www.we-online.com/) | `Inductor_4040.step` |
+| FPC 30-pin 0.4mm | DF40C-30 | [Hirose 3D](https://www.hirose.com/) | `FPC_30pin.step` |
+| FPC 40-pin 0.4mm | DF40C-40 | [Hirose 3D](https://www.hirose.com/) | `FPC_40pin.step` |
+| Tactile Switch | 6x3.5mm | [Alps CAD](https://www.alps.com/) | `Switch_Tactile.step` |
+| LED 0402 | 0402 | [Kingbright CAD](https://www.kingbright.com/) | `LED_0402.step` |
+| TVS Diode | SOT-23 | [Littelfuse 3D](https://www.littelfuse.com/) | `TVS_SOT23.step` |
 
 ## Parametric STEP Generation
 
