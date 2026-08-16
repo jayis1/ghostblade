@@ -621,6 +621,109 @@ static void test_partial_consume_pattern(void) {
                    "9 total blocks sent (3 + 6)");
 }
 
+/* Test 16: Continuous streaming with overrun recovery
+ *
+ * Simulates a long-running SDR capture where the producer (DMA ISR)
+ * runs faster than the consumer (protocol handler). Overruns should
+ * be detected and recovered from automatically, with data continuity
+ * maintained after the consumer catches up. */
+static void test_continuous_streaming_overrun_recovery(void) {
+    sim_reset();
+
+    /* Phase 1: Producer runs ahead, causing overruns.
+     * Fill 20 blocks without any consumption — with 8 blocks in the
+     * ring, this will cause 20 - 7 = 13 overruns (after the first 7
+     * fills the buffer is full, each subsequent fill causes an overrun). */
+    for (int i = 0; i < 20; i++)
+        sim_dma_isr_handler();
+
+    /* After 20 fills: 7 blocks remain (the oldest is discarded on each
+     * overrun after the buffer is full). Overruns = 20 - 7 = 13. */
+    ASSERT_EQ_INT(7, (int)sim_blocks_filled,
+                   "7 blocks in buffer after overrun phase");
+    ASSERT_EQ_UINT(13, sim_dma_stats.overruns,
+                   "13 overruns during overrun phase");
+    ASSERT_EQ_UINT(20, sim_dma_stats.total_blocks_captured,
+                   "20 blocks captured total");
+
+    /* Phase 2: Consumer catches up and drains all remaining blocks */
+    int consumed = 0;
+    while (sim_blocks_filled > 0) {
+        uint8_t idx;
+        uint16_t size;
+        const uint8_t *data = sim_proto_get_block(&idx, &size);
+        ASSERT_TRUE(data != NULL, "Block available during recovery drain");
+        sim_proto_release_block();
+        consumed++;
+    }
+    ASSERT_EQ_INT(7, consumed, "7 blocks consumed during recovery");
+
+    /* Phase 3: Resume normal streaming with balanced produce/consume */
+    for (int i = 0; i < 50; i++) {
+        sim_dma_isr_handler();
+
+        uint8_t idx;
+        uint16_t size;
+        const uint8_t *data = sim_proto_get_block(&idx, &size);
+        ASSERT_TRUE(data != NULL, "Block available during balanced phase");
+        sim_proto_release_block();
+    }
+
+    /* Verify no additional overruns during balanced phase */
+    ASSERT_EQ_UINT(13, sim_dma_stats.overruns,
+                   "No new overruns during balanced phase");
+    ASSERT_EQ_UINT(70, sim_dma_stats.total_blocks_captured,
+                   "70 total blocks captured (20 + 50)");
+    ASSERT_EQ_UINT(57, sim_dma_stats.total_blocks_sent,
+                   "57 total blocks sent (7 + 50)");
+    ASSERT_EQ_INT(0, (int)sim_blocks_filled,
+                  "Buffer empty after balanced phase");
+}
+
+/* Test 17: Ring buffer pointer alignment after multiple wrap cycles */
+static void test_pointer_alignment_multiple_cycles(void) {
+    sim_reset();
+
+    /* Run 3 complete fill-drain cycles, each time filling 7 blocks
+     * (max without overrun) and draining all. This verifies pointer
+     * alignment is maintained across multiple wrap-around events. */
+    for (int cycle = 0; cycle < 3; cycle++) {
+        /* Fill 7 blocks */
+        for (int i = 0; i < 7; i++)
+            sim_dma_isr_handler();
+
+        ASSERT_EQ_INT(7, (int)sim_blocks_filled,
+                       "7 blocks filled in each cycle");
+
+        /* Drain all 7 */
+        for (int i = 0; i < 7; i++) {
+            uint8_t idx;
+            uint16_t size;
+            const uint8_t *data = sim_proto_get_block(&idx, &size);
+            ASSERT_TRUE(data != NULL, "Block available in multi-cycle test");
+            sim_proto_release_block();
+        }
+
+        ASSERT_EQ_INT(0, (int)sim_blocks_filled,
+                       "Buffer empty at end of each cycle");
+    }
+
+    /* After 3 cycles: 21 blocks produced, 21 consumed, 0 overruns */
+    ASSERT_EQ_UINT(21, sim_dma_stats.total_blocks_captured,
+                   "21 blocks captured in 3 cycles");
+    ASSERT_EQ_UINT(21, sim_dma_stats.total_blocks_sent,
+                   "21 blocks sent in 3 cycles");
+    ASSERT_EQ_UINT(0, sim_dma_stats.overruns,
+                   "No overruns in 3 complete cycles");
+
+    /* Verify pointers are back to starting position (block 0).
+     * After 21 produces from block 0: write pointer = 21 % 8 = 5
+     * After 21 consumes from block 0: read pointer = 21 % 8 = 5
+     * Both should be equal, and blocks_filled should be 0. */
+    ASSERT_EQ_INT(sim_dma_write_block, sim_proto_read_block,
+                   "Write and read pointers equal after balanced cycles");
+}
+
 /* ========================================================================
  * Main Test Runner
  * ======================================================================== */
@@ -643,6 +746,8 @@ int main(void) {
     RUN_TEST(test_rapid_produce_consume);
     RUN_TEST(test_multiple_underruns);
     RUN_TEST(test_partial_consume_pattern);
+    RUN_TEST(test_continuous_streaming_overrun_recovery);
+    RUN_TEST(test_pointer_alignment_multiple_cycles);
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

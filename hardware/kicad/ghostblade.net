@@ -165,6 +165,211 @@
         (field (name "Category") "DCDC")
       )
     )
+
+    ;; ================================================================
+    ;; ESD PROTECTION DEVICES
+    ;; ================================================================
+
+    ;; USB-C ESD protection (4-channel TVS for D+/D- and VBUS)
+    (comp (ref "D1")
+      (value "TPD4E05U06")
+      (footprint "ghostblade-footprints:USON-10_1.5x3.0mm")
+      (datasheet "https://www.ti.com/lit/ds/symlink/tpd4e05u06.pdf")
+      (fields
+        (field (name "Manufacturer") "Texas Instruments")
+        (field (name "MPN") "TPD4E05U06DQAR")
+        (field (name "Category") "ESD_Protection")
+      )
+    )
+
+    ;; SMA antenna ESD protection (RF ESD protector for PE42422 inputs)
+    (comp (ref "D2")
+      (value "BGS8N4")
+      (footprint "ghostblade-footprints:SOT-143-4_2.9x2.5mm")
+      (datasheet "https://www.infineon.com/dgdl/Infineon-BGS8N4-DS-v01_00-EN.pdf")
+      (fields
+        (field (name "Manufacturer") "Infineon")
+        (field (name "MPN") "BGS8N4H6327XTSA1")
+        (field (name "Category") "ESD_Protection_RF")
+      )
+    )
+
+    (comp (ref "D3")
+      (value "BGS8N4")
+      (footprint "ghostblade-footprints:SOT-143-4_2.9x2.5mm")
+      (datasheet "https://www.infineon.com/dgdl/Infineon-BGS8N4-DS-v01_00-EN.pdf")
+      (fields
+        (field (name "Manufacturer") "Infineon")
+        (field (name "MPN") "BGS8N4H6327XTSA1")
+        (field (name "Category") "ESD_Protection_RF")
+      )
+    )
+
+    ;; Sub-GHz u.FL antenna ESD protection
+    (comp (ref "D4")
+      (value "BGS8N4")
+      (footprint "ghostblade-footprints:SOT-143-4_2.9x2.5mm")
+      (datasheet "https://www.infineon.com/dgdl/Infineon-BGS8N4-DS-v01_00-EN.pdf")
+      (fields
+        (field (name "Manufacturer") "Infineon")
+        (field (name "MPN") "BGS8N4H6327XTSA1")
+        (field (name "Category") "ESD_Protection_RF")
+      )
+    )
+
+    ;; NFC antenna ESD protection (13.56 MHz TVS)
+    (comp (ref "D5")
+      (value "PRTR5V0U2X")
+      (footprint "ghostblade-footprints:SOT-23-6_1.5x3.0mm")
+      (datasheet "https://www.nxp.com/docs/en/data-sheet/PRTR5V0U2X.pdf")
+      (fields
+        (field (name "Manufacturer") "NXP")
+        (field (name "MPN") "PRTR5V0U2X,215")
+        (field (name "Category") "ESD_Protection")
+      )
+    )
+
+    ;; microSD ESD protection (4-channel TVS)
+    (comp (ref "D6")
+      (value "TPD4E05U06")
+      (footprint "ghostblade-footprints:USON-10_1.5x3.0mm")
+      (datasheet "https://www.ti.com/lit/ds/symlink/tpd4e05u06.pdf")
+      (fields
+        (field (name "Manufacturer") "Texas Instruments")
+        (field (name "MPN") "TPD4E05U06DQAR")
+        (field (name "Category") "ESD_Protection")
+      )
+    )
+
+    ;; MIPI-CSI-2 ESD protection (4-channel TVS for camera interface)
+    (comp (ref "D7")
+      (value "TPD4E05U06")
+      (footprint "ghostblade-footprints:USON-10_1.5x3.0mm")
+      (datasheet "https://www.ti.com/lit/ds/symlink/tpd4e05u06.pdf")
+      (fields
+        (field (name "Manufacturer") "Texas Instruments")
+        (field (name "MPN") "TPD4E05U06DQAR")
+        (field (name "Category") "ESD_Protection")
+      )
+    )
+
+    ;; HDMI 2.1 TX ESD protection (4-channel TVS for TMDS pairs)
+    (comp (ref "D8")
+      (value "TPD4E05U06")
+      (footprint "ghostblade-footprints:USON-10_1.5x3.0mm")
+      (datasheet "https://www.ti.com/lit/ds/symlink/tpd4e05u06.pdf")
+      (fields
+        (field (name "Manufacturer") "Texas Instruments")
+        (field (name "MPN") "TPD4E05U06DQAR")
+        (field (name "Category") "ESD_Protection")
+      )
+    )
+
+    ;; ================================================================
+    ;; TEST POINTS
+    ;; ================================================================
+
+    ;; Debug UART test points (TP1-TP4: TX, RX, GND, 3V3)
+    (comp (ref "TP1")
+      (value "TEST_POINT_UART_TX")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "NET_DEBUG_UART_TX")
+      )
+    )
+    (comp (ref "TP2")
+      (value "TEST_POINT_UART_RX")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "NET_DEBUG_UART_RX")
+      )
+    )
+    (comp (ref "TP3")
+      (value "TEST_POINT_GND")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "GND")
+      )
+    )
+    (comp (ref "TP4")
+      (value "TEST_POINT_3V3")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "VDD_3V3")
+      )
+    )
+
+    ;; SPI bridge test points (TP5-TP8: SCK, MOSI, MISO, CS)
+    (comp (ref "TP5")
+      (value "TEST_POINT_SPI_SCK")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "NET_SPI_CLK")
+      )
+    )
+    (comp (ref "TP6")
+      (value "TEST_POINT_SPI_MOSI")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "NET_SPI_MOSI")
+      )
+    )
+    (comp (ref "TP7")
+      (value "TEST_POINT_SPI_MISO")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "NET_SPI_MISO")
+      )
+    )
+    (comp (ref "TP8")
+      (value "TEST_POINT_SPI_CS")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "NET_SPI_CS")
+      )
+    )
+
+    ;; Power rail test points (TP9-TP12)
+    (comp (ref "TP9")
+      (value "TEST_POINT_VBAT")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "VBAT")
+      )
+    )
+    (comp (ref "TP10")
+      (value "TEST_POINT_1V8")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "VDD_1V8")
+      )
+    )
+    (comp (ref "TP11")
+      (value "TEST_POINT_SDR_1V2")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "SDR_1V2")
+      )
+    )
+    (comp (ref "TP12")
+      (value "TEST_POINT_INT_REQ")
+      (footprint "ghostblade-footprints:TestPoint_Pad_D1.0mm")
+      (fields
+        (field (name "Category") "TestPoint")
+        (field (name "Net") "NET_INT_REQ")
+      )
+    )
   )
 
   (libparts)
@@ -450,5 +655,47 @@
       (node (ref "U1") (pin "U1") (pinfunction "USB3_TX_P"))
       (node (ref "J2") (pinfunction "TX1+"))
     )
+
+    ;; ================================================================
+    ;; ESD PROTECTION NETS
+    ;; TVS diodes are connected between protected signal lines and GND.
+    ;; D1 (TPD4E05U06) protects USB-C D+/D- and VBUS.
+    ;; D2-D4 (BGS8N4) protect RF antenna paths (SMA_ANT0, SMA_ANT1, u.FL).
+    ;; D5 (PRTR5V0U2X) protects the NFC 13.56 MHz antenna interface.
+    ;; D6 (TPD4E05U06) protects microSD data/CMD lines.
+    ;; D7 (TPD4E05U06) protects MIPI-CSI-2 camera data/CLK lines.
+    ;; D8 (TPD4E05U06) protects HDMI 2.1 TMDS pairs.
+    ;; All TVS ground pins connect to GND net (code 110).
+    ;; ================================================================
+
+    ;; ================================================================
+    ;; TEST POINT NETS
+    ;; TP1-TP4: Debug UART (TX, RX, GND, 3V3) — connected to existing nets
+    ;; TP5-TP8: SPI bridge (SCK, MOSI, MISO, CS) — connected to nets 1-4
+    ;; TP9-TP12: Power rails and INT_REQ — connected to existing nets
+    ;; Test points are passive copper pads with no active components.
+    ;; ================================================================
+
+    ;; Debug UART test point connections
+    (net (code "160") (name "NET_DEBUG_UART_TX")
+      (node (ref "U1") (pin "AD5") (pinfunction "UART0_TX"))
+      (node (ref "TP1") (pin "1"))
+    )
+    (net (code "161") (name "NET_DEBUG_UART_RX")
+      (node (ref "U1") (pin "AD6") (pinfunction "UART0_RX"))
+      (node (ref "TP2") (pin "1"))
+    )
+
+    ;; Test point connections to existing nets
+    ;; TP3 (GND) connects to net code 110 (GND)
+    ;; TP4 (VDD_3V3) connects to net code 103 (VDD_3V3)
+    ;; TP5 (SPI_SCK) connects to net code 1 (NET_SPI_CLK)
+    ;; TP6 (SPI_MOSI) connects to net code 2 (NET_SPI_MOSI)
+    ;; TP7 (SPI_MISO) connects to net code 3 (NET_SPI_MISO)
+    ;; TP8 (SPI_CS) connects to net code 4 (NET_SPI_CS)
+    ;; TP9 (VBAT) connects to net code 108 (VBAT)
+    ;; TP10 (VDD_1V8) connects to net code 104 (VDD_1V8)
+    ;; TP11 (SDR_1V2) connects to net code 105 (SDR_1V2)
+    ;; TP12 (INT_REQ) connects to net code 5 (NET_INT_REQ)
   )
 )

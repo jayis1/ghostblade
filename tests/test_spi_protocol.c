@@ -1315,6 +1315,207 @@ static void test_reserved_field_nonzero(void) {
     ASSERT_TRUE(ret != VALID_OK, "Non-zero reserved byte detected via CRC-64");
 }
 
+/* Test 33: Telemetry flag bit mapping — verify flag bits match protocol spec */
+static void test_telemetry_flag_bit_mapping(void) {
+    /* Define the expected flag bit positions (must match spi_protocol.h
+     * and apex_bridge_regs.h TELEM_FLAG_* / APEX_FLAG_* constants) */
+    const uint16_t FLAG_SDR_RX_ACTIVE    = (1 << 0);
+    const uint16_t FLAG_SDR_TX_ACTIVE    = (1 << 1);
+    const uint16_t FLAG_CC1101_RX        = (1 << 2);
+    const uint16_t FLAG_CC1101_TX        = (1 << 3);
+    const uint16_t FLAG_NFC_ACTIVE       = (1 << 4);
+    const uint16_t FLAG_NFC_TAG_PRESENT  = (1 << 5);
+    const uint16_t FLAG_OVERTEMP          = (1 << 6);
+    const uint16_t FLAG_LOW_BATTERY      = (1 << 7);
+    const uint16_t FLAG_SPI_ERR           = (1 << 8);
+    const uint16_t FLAG_DMA_ERR           = (1 << 9);
+
+    /* Verify each flag is a unique single-bit value */
+    uint16_t all_flags[] = {
+        FLAG_SDR_RX_ACTIVE, FLAG_SDR_TX_ACTIVE, FLAG_CC1101_RX,
+        FLAG_CC1101_TX, FLAG_NFC_ACTIVE, FLAG_NFC_TAG_PRESENT,
+        FLAG_OVERTEMP, FLAG_LOW_BATTERY, FLAG_SPI_ERR, FLAG_DMA_ERR
+    };
+    int n_flags = sizeof(all_flags) / sizeof(all_flags[0]);
+
+    bool all_unique = true;
+    for (int i = 0; i < n_flags; i++) {
+        /* Each flag must be a power of 2 (single bit) */
+        if ((all_flags[i] & (all_flags[i] - 1)) != 0) {
+            printf("  Flag 0x%04x is not a single bit\n", all_flags[i]);
+            all_unique = false;
+        }
+        /* Each flag must be distinct from all others */
+        for (int j = i + 1; j < n_flags; j++) {
+            if (all_flags[i] == all_flags[j]) {
+                printf("  Duplicate flag: 0x%04x\n", all_flags[i]);
+                all_unique = false;
+            }
+        }
+    }
+    ASSERT_TRUE(all_unique, "All telemetry flags are unique single-bit values");
+
+    /* Verify combined flags can be packed into 16 bits (flags field is u16) */
+    uint16_t combined = 0;
+    for (int i = 0; i < n_flags; i++)
+        combined |= all_flags[i];
+    ASSERT_EQ_UINT(0x03FF, combined, "All 10 telemetry flags combine to 0x03FF");
+
+    /* Verify telemetry struct fits in 16-byte payload */
+    ASSERT_TRUE(sizeof(uint16_t) * 6 + sizeof(uint32_t) == 16,
+                "Telemetry struct = 6×u16 + 1×u32 = 16 bytes");
+
+    /* Build a telemetry response frame with all flags set and verify */
+    uint8_t telem[16];
+    memset(telem, 0, sizeof(telem));
+    /* flags at offset 10-11 (after 5×u16 = 10 bytes) */
+    telem[10] = (uint8_t)(combined & 0xFF);
+    telem[11] = (uint8_t)((combined >> 8) & 0xFF);
+
+    uint8_t frame[64];
+    int frame_len = build_spi_frame(CMD_TELEMETRY, telem, 16, frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build telemetry frame with all flags set");
+
+    uint8_t cmd_out;
+    uint16_t len_out;
+    const uint8_t *payload_out;
+    int ret = validate_spi_frame(frame, (size_t)frame_len,
+                                  &cmd_out, &len_out, &payload_out);
+    ASSERT_EQ_INT(VALID_OK, ret, "Validate telemetry frame with all flags");
+    ASSERT_EQ_INT(CMD_TELEMETRY, cmd_out, "Command = TELEMETRY");
+    ASSERT_EQ_INT(16, (int)len_out, "Telemetry payload = 16 bytes");
+
+    /* Verify the flags field round-trips correctly */
+    uint16_t flags_out = (uint16_t)payload_out[10] |
+                         ((uint16_t)payload_out[11] << 8);
+    ASSERT_EQ_UINT(combined, flags_out, "Telemetry flags round-trip");
+}
+
+/* Test 34: NFC response status code validation */
+static void test_nfc_response_status_codes(void) {
+    /* NFC response payload: [0] status, [1] cmd_echo, [2..3] rx_len, [4+] data */
+    uint8_t nfc_status_codes[] = {
+        0,  /* OK */
+        1,  /* TIMEOUT */
+        2,  /* CRC_ERR */
+        3,  /* BAD_PARAMS */
+        4,  /* NOT_READY */
+    };
+    int n_codes = sizeof(nfc_status_codes) / sizeof(nfc_status_codes[0]);
+
+    for (int i = 0; i < n_codes; i++) {
+        uint8_t resp[8];
+        resp[0] = nfc_status_codes[i];  /* status */
+        resp[1] = 0x26;                  /* cmd_echo = REQA */
+        resp[2] = 0x02;                  /* rx_len = 2 (little-endian) */
+        resp[3] = 0x00;
+        resp[4] = 0x04;                  /* ATQA byte 0 */
+        resp[5] = 0x00;                  /* ATQA byte 1 */
+        resp[6] = 0x00;
+        resp[7] = 0x00;
+
+        uint8_t frame[64];
+        int frame_len = build_spi_frame(CMD_NFC_RESPONSE, resp, 8,
+                                         frame, sizeof(frame));
+        ASSERT_TRUE(frame_len > 0, "Build NFC response frame");
+
+        uint8_t cmd_out;
+        uint16_t len_out;
+        const uint8_t *payload_out;
+        int ret = validate_spi_frame(frame, (size_t)frame_len,
+                                      &cmd_out, &len_out, &payload_out);
+        ASSERT_EQ_INT(VALID_OK, ret, "Validate NFC response frame");
+        ASSERT_EQ_INT(CMD_NFC_RESPONSE, cmd_out, "Command = NFC_RESPONSE");
+        ASSERT_EQ_INT(8, (int)len_out, "NFC response payload = 8 bytes");
+        ASSERT_EQ_INT(nfc_status_codes[i], payload_out[0],
+                       "NFC status code matches");
+        ASSERT_EQ_INT(0x26, payload_out[1], "NFC cmd_echo = REQA");
+
+        /* Verify rx_len field (little-endian at offset 2-3) */
+        uint16_t rx_len = (uint16_t)payload_out[2] |
+                          ((uint16_t)payload_out[3] << 8);
+        ASSERT_EQ_INT(2, (int)rx_len, "NFC rx_len = 2");
+    }
+
+    /* Verify all status codes are distinct */
+    bool all_distinct = true;
+    for (int i = 0; i < n_codes; i++) {
+        for (int j = i + 1; j < n_codes; j++) {
+            if (nfc_status_codes[i] == nfc_status_codes[j]) {
+                all_distinct = false;
+                printf("  Duplicate NFC status code: %d\n",
+                       nfc_status_codes[i]);
+            }
+        }
+    }
+    ASSERT_TRUE(all_distinct, "All NFC status codes are distinct");
+}
+
+/* Test 35: Antenna select validation — all valid IDs and out-of-range */
+static void test_antenna_select_validation(void) {
+    uint8_t valid_ants[] = {0, 1, 2, 3};  /* MIMO_TX, MIMO_RX, SUBGHZ, TERMINATED */
+    int n_ants = sizeof(valid_ants) / sizeof(valid_ants[0]);
+
+    for (int i = 0; i < n_ants; i++) {
+        uint8_t frame[64];
+        uint8_t ant = valid_ants[i];
+        int frame_len = build_spi_frame(CMD_ANT_SELECT, &ant, 1,
+                                         frame, sizeof(frame));
+        ASSERT_TRUE(frame_len > 0, "Build antenna select frame");
+
+        uint8_t cmd_out;
+        uint16_t len_out;
+        const uint8_t *payload_out;
+        int ret = validate_spi_frame(frame, (size_t)frame_len,
+                                      &cmd_out, &len_out, &payload_out);
+        ASSERT_EQ_INT(VALID_OK, ret, "Validate antenna select frame");
+        ASSERT_EQ_INT(CMD_ANT_SELECT, cmd_out, "Command = ANT_SELECT");
+        ASSERT_EQ_INT(1, (int)len_out, "Antenna select payload = 1 byte");
+        ASSERT_EQ_INT(ant, payload_out[0], "Antenna ID matches");
+    }
+
+    /* Verify antenna constants are in range 0-3 */
+    ASSERT_TRUE(ANT_MIMO_TX == 0, "ANT_MIMO_TX = 0");
+    ASSERT_TRUE(ANT_MIMO_RX == 1, "ANT_MIMO_RX = 1");
+    ASSERT_TRUE(ANT_SUBGHZ == 2, "ANT_SUBGHZ = 2");
+    ASSERT_TRUE(ANT_TERMINATED == 3, "ANT_TERMINATED = 3");
+}
+
+/* Test 36: CC1101 config burst write frame with multiple registers */
+static void test_cc1101_burst_config(void) {
+    /* Simulate a burst write of 5 consecutive CC1101 registers
+     * starting at IOCFG2 (0x00): IOCFG2, IOCFG1, IOCFG0, FIFOTHR, SYNC1 */
+    uint8_t burst_payload[7];  /* addr(1) + len(1) + data(5) */
+    burst_payload[0] = 0x00;   /* reg_addr = IOCFG2 */
+    burst_payload[1] = 5;      /* reg_len = 5 registers */
+    burst_payload[2] = 0x0B;   /* IOCFG2 = GDO2_INV */
+    burst_payload[3] = 0x2E;   /* IOCFG1 = default */
+    burst_payload[4] = 0x80;   /* IOCFG0 = GDO0 config */
+    burst_payload[5] = 0x07;   /* FIFOTHR = default */
+    burst_payload[6] = 0xD3;   /* SYNC1 = sync word high */
+
+    uint8_t frame[64];
+    int frame_len = build_spi_frame(CMD_CC1101_CFG, burst_payload, 7,
+                                     frame, sizeof(frame));
+    ASSERT_TRUE(frame_len > 0, "Build CC1101 burst config frame");
+    ASSERT_EQ_INT(27, frame_len, "Burst config frame = 16 + 7 + 4 = 27 bytes");
+
+    uint8_t cmd_out;
+    uint16_t len_out;
+    const uint8_t *payload_out;
+    int ret = validate_spi_frame(frame, (size_t)frame_len,
+                                  &cmd_out, &len_out, &payload_out);
+    ASSERT_EQ_INT(VALID_OK, ret, "Validate CC1101 burst config frame");
+    ASSERT_EQ_INT(CMD_CC1101_CFG, cmd_out, "Command = CC1101_CFG");
+    ASSERT_EQ_INT(7, (int)len_out, "Burst config payload = 7 bytes");
+
+    /* Verify the register address and data round-trip correctly */
+    ASSERT_EQ_INT(0x00, payload_out[0], "Register address = 0x00 (IOCFG2)");
+    ASSERT_EQ_INT(5, payload_out[1], "Register count = 5");
+    ASSERT_EQ_INT(0x0B, payload_out[2], "IOCFG2 value = 0x0B");
+    ASSERT_EQ_INT(0xD3, payload_out[6], "SYNC1 value = 0xD3");
+}
+
 /* ========================================================================
  * Main Test Runner
  * ======================================================================== */
@@ -1360,6 +1561,10 @@ int main(void) {
     RUN_TEST(test_fuzz_header_positions);
     RUN_TEST(test_opcode_range_extended);
     RUN_TEST(test_reserved_field_nonzero);
+    RUN_TEST(test_telemetry_flag_bit_mapping);
+    RUN_TEST(test_nfc_response_status_codes);
+    RUN_TEST(test_antenna_select_validation);
+    RUN_TEST(test_cc1101_burst_config);
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

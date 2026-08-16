@@ -29,6 +29,19 @@
 /* Forward declarations from other modules */
 extern void watchdog_kick(void);
 
+/* SDR DMA engine — defined in sdr_dma.c. The SDR stream command handler
+ * must start/stop the DMA engine to actually begin IQ data flow from the
+ * LMS7002M through the ring buffer and into the SPI protocol TX path.
+ * Without these calls, CMD_SDR_STREAM would only toggle GPIO enables
+ * but never produce any IQ data chunks. */
+extern int sdr_dma_start(void);
+extern void sdr_dma_stop(void);
+
+/* SDR DMA frequency tracking — updates the LMS7002M tuning parameters
+ * used by the DMA capture path. Called from handle_cmd_sdr_tune(). */
+extern void sdr_dma_set_frequency(uint32_t freq_hz, uint16_t bw_khz,
+                                   uint16_t gain_db_x10);
+
 /* ── Memory barriers for lock-free ring buffer ────────────────────────────
  *
  * The SPI0 RX and TX ring buffers are accessed from both ISR context
@@ -597,6 +610,10 @@ static void handle_cmd_sdr_tune(const uint8_t *payload, uint16_t len) {
      * selection, and baseband filter configuration. */
     lms7002m_tune_rx(freq_hz, bw_khz, gain_db_x10);
 
+    /* Also update the SDR DMA engine's frequency tracking so that
+     * any DMA-based capture uses the new tuning parameters. */
+    sdr_dma_set_frequency(freq_hz, bw_khz, gain_db_x10);
+
     /* Update SDR streaming state flags for telemetry */
     device_state.sdr_rx_enabled = true;
 }
@@ -620,12 +637,27 @@ static void handle_cmd_sdr_stream(const uint8_t *payload, uint16_t len) {
         device_state.sdr_rx_enabled = true;
         apex_sdr_rx_enable(true);
         apex_sdr_lna_enable(true);
+
+        /* Start the DMA ring buffer engine to capture IQ samples from
+         * the LMS7002M via SPI1 and feed them into the SPI protocol TX
+         * path. Core 1's sdr_dma_process() loop will pick up filled
+         * blocks and call spi_protocol_send_iq_chunk() to push them
+         * to the RK3576 host.
+         *
+         * BUG FIX: Previously this function only toggled GPIO enables
+         * but never started the DMA engine, so no IQ data would ever
+         * be captured or sent to the host. */
+        sdr_dma_start();
     } else if (!enable && device_state.sdr_streaming) {
         /* Stop SDR IQ streaming */
         device_state.sdr_streaming = false;
         device_state.sdr_rx_enabled = false;
         apex_sdr_rx_enable(false);
         apex_sdr_lna_enable(false);
+
+        /* Stop the DMA ring buffer engine and securely wipe any
+         * remaining IQ samples from the ring buffer. */
+        sdr_dma_stop();
     }
 }
 

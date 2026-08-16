@@ -161,8 +161,22 @@ CSn  ┘                                                            └
   RK3576 (Host)                          RP2350B (MCU)
        │                                      │
        │──── SDR_STREAM_START (0x02) ────────→│
-       │                                      │── Enable DMA ring buffer
-       │                                      │── Start LMS7002M RX
+       │     payload=[0x01]                   │
+       │                                      │── apex_sdr_rx_enable(true)
+       │                                      │── apex_sdr_lna_enable(true)
+       │                                      │── sdr_dma_start()
+       │                                      │   ├── Reset ring buffer pointers
+       │                                      │   ├── Clear blocks_filled=0
+       │                                      │   ├── Set dma_running=true
+       │                                      │   └── Start DMA Ch0 (SPI1 RX → ring)
+       │                                      │
+       │                                      │ Core 1: sdr_dma_process() loop
+       │                                      │   ├── Check blocks_filled > 0
+       │                                      │   ├── sdr_dma_get_block()
+       │                                      │   ├── spi_protocol_send_iq_chunk()
+       │                                      │   │   └── build_response_frame()
+       │                                      │   │       └── Assert INT_REQ
+       │                                      │   └── sdr_dma_release_block()
        │                                      │
        │←──── IQ_CHUNK (0x82) ────────────────│  ← DMA block 0 filled
        │      [512 bytes IQ data]             │
@@ -173,13 +187,47 @@ CSn  ┘                                                            └
        │      ... (continuous stream) ...     │
        │                                      │
        │──── SDR_STREAM_STOP (0x02) ─────────→│
-       │                                      │── Stop DMA
-       │                                      │── Disable LMS7002M RX
+       │     payload=[0x00]                   │
+       │                                      │── apex_sdr_rx_enable(false)
+       │                                      │── apex_sdr_lna_enable(false)
+       │                                      │── sdr_dma_stop()
+       │                                      │   ├── Set dma_running=false
+       │                                      │   ├── Disable DMA Ch0
+       │                                      │   ├── Abort in-progress transfer
+       │                                      │   └── Secure wipe ring buffer
        │                                      │
        │  Timing per chunk:                   │
        │  │←── DMA fill ~2ms ──→│←── SPI TX ~0.3ms →│
        │  (at 256 ksps complex int16)          │
 ```
+
+**SDR Stream Start/Stop Command Payload Format:**
+
+| Byte | Field   | Value | Description                     |
+|------|---------|-------|---------------------------------|
+| 0    | enable  | 0x01  | Start streaming (enable=1)      |
+| 0    | enable  | 0x00  | Stop streaming (enable=0)       |
+
+The SDR streaming path uses a dual-core architecture on the RP2350B:
+
+- **Core 0** (main loop): Runs `spi_protocol_process()` to receive and dispatch
+  commands. When `CMD_SDR_STREAM` with enable=1 is received, it calls
+  `sdr_dma_start()` which begins DMA transfers from SPI1 (LMS7002M RX FIFO)
+  into the 8-block ring buffer (8 × 512 bytes = 4096 bytes total).
+
+- **Core 1** (DMA engine): Runs `sdr_dma_process()` in a tight loop. It checks
+  for completed DMA blocks, calls `spi_protocol_send_iq_chunk()` to queue each
+  block as a `CMD_SDR_IQ_CHUNK` response frame, and releases the block back to
+  the ring buffer.
+
+- **DMA Channel 0**: Configured for SPI1 RX FIFO → ring buffer with 8-bit
+  transfers, write-address increment, and completion IRQ. The ISR advances
+  the write pointer and chains to the next block automatically.
+
+If the DMA producer overruns the consumer (host doesn't read fast enough),
+the oldest block is discarded and the overrun counter is incremented. The
+host can monitor overruns via the telemetry `flags` field (`DMA_ERR` bit)
+and the sysfs `sg_overruns` attribute.
 
 ### 3.3 Telemetry Polling
 
