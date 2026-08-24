@@ -34,6 +34,7 @@ setup(
     license='GPL-2.0-or-later',
     url='https://github.com/jayis1/ghostblade',
     ext_modules=[pyapext_module],
+    py_modules=['apex'],
     python_requires='>=3.8',
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -42,6 +43,7 @@ setup(
         'Operating System :: POSIX :: Linux',
         'Programming Language :: C',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: Implementation :: CPython',
         'Topic :: System :: Hardware :: Hardware Drivers',
     ],
 )

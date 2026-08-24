@@ -17,10 +17,14 @@ sudo make install
 
 ```bash
 cd software/libapex
-pip3 install .
+python3 -m pip install .
 # Or for development:
 python3 setup.py build_ext --inplace
 ```
+
+The compiled extension module is named `pyapex`. For compatibility with older
+scripts, the package also installs a small `apex` shim that re-exports the same
+API.
 
 ## C API Usage
 
@@ -51,7 +55,7 @@ apex_close(dev);
 ```python
 import pyapex
 
-dev = pyapex.open()  # Opens /dev/apex_bridge0
+dev = pyapex.ApexBridge()  # Opens /dev/apex_bridge0
 
 # Tune SDR
 dev.sdr_tune(868_000_000, 20000, 30.0)
@@ -74,6 +78,16 @@ dev.nfc_transact(cmd=0x26, flags=0x00, data=b'')
 # Antenna selection
 dev.ant_select(pyapex.ANT_SUBGHZ)
 
+dev.close()
+```
+
+Compatibility import style:
+
+```python
+import apex
+
+dev = apex.open()
+print(dev.get_status())
 dev.close()
 ```
 

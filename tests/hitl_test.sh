@@ -204,9 +204,12 @@ fd = os.open('$DEVICE', os.O_RDWR)
 magic = struct.pack('I', 0x52534554)
 # This requires the libapex Python bindings
 try:
-    import apex
-    dev = apex.ApexBridge('$DEVICE')
-    dev.soft_reset(0x52534554)
+    import apex as gb
+except Exception:
+    import pyapex as gb
+try:
+    dev = gb.ApexBridge('$DEVICE')
+    dev.soft_reset()
     print('RESET_SENT')
 except Exception as e:
     # Fallback: use raw ioctl
@@ -347,11 +350,14 @@ log_section "Test 8: DMA Scatter-Gather"
 log_info "Checking SG engine status..."
 
 # This test requires the libapex Python bindings
-if python3 -c "import apex" 2>/dev/null; then
+if python3 -c "import apex" 2>/dev/null || python3 -c "import pyapex" 2>/dev/null; then
     log_info "libapex Python bindings available, testing SG engine..."
     if python3 -c "
-import apex
-dev = apex.ApexBridge('$DEVICE')
+try:
+    import apex as gb
+except Exception:
+    import pyapex as gb
+dev = gb.ApexBridge('$DEVICE')
 # Get SG engine status (should be IDLE)
 status = dev.sg_get_status()
 if status['state'] == 0:  # APEX_SG_STATE_IDLE

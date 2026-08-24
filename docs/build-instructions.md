@@ -169,7 +169,7 @@ gcc -o my_app my_app.c -lapex
 
 ```bash
 cd software/libapex
-pip3 install .          # Install system-wide
+python3 -m pip install .          # Install system-wide
 # Or for development:
 pip3 install -e .       # Editable mode
 python3 setup.py build_ext --inplace   # In-place build
@@ -179,7 +179,7 @@ python3 setup.py build_ext --inplace   # In-place build
 
 ```python
 import pyapex
-dev = pyapex.open()
+dev = pyapex.ApexBridge()
 telem = dev.get_telemetry()
 print(f"Battery: {telem['vbat_mv']} mV")
 dev.close()

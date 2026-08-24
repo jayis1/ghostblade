@@ -13,6 +13,16 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
+### Added
+
+- **Python packaging metadata for pyapex**: Added `software/libapex/pyproject.toml` and an `apex.py` compatibility shim so modern `python3 -m pip install .` builds work cleanly and both `import pyapex` and legacy `import apex` scripts are supported.
+- **Backward-compatible `ApexDevice` alias in pyapex**: The Python extension now exports `ApexDevice` as an alias of `ApexBridge`, preserving older HIL scripts and examples while standardizing new documentation on `ApexBridge`.
+
+### Fixed
+
+- **libapex/pyapex build and usage docs drift**: Corrected contributor and quickstart docs that still referenced a nonexistent CMake-based libapex flow, `cd ../python`, `pyapex.open()`, `ApexDevice`-only examples, and stale helper methods.
+- **HIL soft-reset test binding mismatch**: `tests/hitl_test.sh` now prefers `apex` but falls back to `pyapex`, and calls `soft_reset()` with the real no-argument API instead of passing a magic value directly.
+
 ### Fixed
 
 - **LMS7002M PLL calculation uint32 overflow**: `lms7002m_calc_pll_params()` multiplied `vco_freq` (up to 3.8 GHz) by 2 before casting to `uint64_t`, causing silent overflow when VCO frequency exceeded 2.15 GHz (UINT32_MAX/2). Fixed by casting to `uint64_t` before the multiply, ensuring correct PLL programming at all supported frequencies.

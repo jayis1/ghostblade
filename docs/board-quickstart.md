@@ -62,9 +62,8 @@ make
 
 # libapex + Python bindings
 cd ../libapex
-mkdir -p build && cd build
-cmake -G Ninja .. && ninja
-cd ../python && pip3 install --user .
+make
+python3 -m pip install --user .
 ```
 
 ---
@@ -129,15 +128,14 @@ cat /sys/class/apex/apex_bridge0/driver_status  # Should show: "online"
 
 ```bash
 # Install pyapex
-pip3 install --user .
+python3 -m pip install --user software/libapex
 
 # Quick verification script
 python3 -c "
 import pyapex
-dev = pyapex.ApexDevice()
-print(f'Firmware: {dev.get_version()}')
-print(f'VBat: {dev.get_vbat_mv()} mV')
-print(f'Temp: {dev.get_temp_c()} °C')
+dev = pyapex.ApexBridge()
+print(dev.get_status())
+print(dev.get_telemetry())
 dev.close()
 print('All subsystems operational!')
 "
@@ -145,9 +143,8 @@ print('All subsystems operational!')
 
 Expected output:
 ```
-Firmware: 1.0.0
-VBat: 3700 mV
-Temp: 25.0 °C
+{'raw_flags': 1, 'mcu_ready': 1, 'mcu_reset': 0, 'spi_error': 0}
+{'rssi_dbm_x10': -900, 'temp_c_x10': 250, 'vbat_mv': 3700, ...}
 All subsystems operational!
 ```
 

@@ -361,7 +361,7 @@ int main(void) {
 ```python
 import pyapex
 
-dev = pyapex.open()
+dev = pyapex.ApexBridge()
 telem = dev.get_telemetry()
 
 print(f"Battery: {telem['vbat_mv']} mV")

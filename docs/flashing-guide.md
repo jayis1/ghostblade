@@ -174,7 +174,7 @@ cd software/libapex
 # CC1101 RSSI: -87.5 dBm
 
 # Run the Python bindings test
-python3 -c "import pyapex; d=pyapex.open(); print(d.get_telemetry())"
+python3 -c "import pyapex; d=pyapex.ApexBridge(); print(d.get_telemetry())"
 ```
 
 ### SPI Debug

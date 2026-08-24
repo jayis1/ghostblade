@@ -219,19 +219,22 @@ dtc -I dts -O dtb -@ -o ghostblade-nfc-overlay.dtbo ghostblade-nfc-overlay.dts
 ```bash
 cd software/libapex
 
-# Build shared library
-mkdir -p build && cd build
-cmake -G Ninja ..
-ninja
+# Build static + shared C library
+make
 
 # Install system-wide (optional)
-sudo ninja install
+sudo make install
 sudo ldconfig
 
-# Build Python bindings
-cd ../python
-pip3 install --user .
+# Build/install Python bindings from the same directory
+python3 -m pip install --user .
 ```
+
+Notes:
+- `setup.py` builds the `pyapex` extension directly from `src/pyapex.c` and
+  `src/libapex.c`.
+- The package also installs an `apex` compatibility shim so older scripts using
+  `import apex` continue to work.
 
 ### Using pyapex
 
@@ -239,7 +242,7 @@ pip3 install --user .
 import pyapex
 
 # Open the device
-dev = pyapex.ApexDevice()
+dev = pyapex.ApexBridge()
 
 # Read telemetry
 telem = dev.get_telemetry()
@@ -248,21 +251,24 @@ print(f"Temp: {telem['temp_c_x10'] / 10.0:.1f} °C")
 print(f"VBat: {telem['vbat_mv']} mV")
 
 # Configure SDR
-dev.sdr_tune(freq_hz=868000000, bw_hz=2000000, gain_db_x10=300)
+dev.sdr_tune(868000000, 2000, 30.0)
 
 # Start streaming IQ data
 dev.sdr_stream_start()
-iq_data = dev.sdr_read_iq(32768)
+iq_data = dev.read_iq(32768)
 dev.sdr_stream_stop()
 
 # Select antenna
-dev.ant_select(pyapex.ANT_MIMO_RX)
+dev.ant_select(pyapex.APEX_ANT_MIMO_RX)
 
 # Configure CC1101
-dev.cc1101_configure(freq_band=1, modulation=1, data_rate=38400)
+dev.cc1101_write(0x0A, b'\x01')  # Set CHANNR = 1
 
 # NFC transaction
-response = dev.nfc_transact(b'\x26\x00')  # REQA
+response = dev.nfc_transact(pyapex.NFC_CMD_REQA, 0x00, b'')
+
+# Optional: query SG DMA status
+print(dev.sg_get_status())
 
 dev.close()
 ```

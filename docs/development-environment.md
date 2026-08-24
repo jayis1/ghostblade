@@ -62,7 +62,7 @@ cp firmware/rp2350b/build/ghostblade_rp2350b.uf2 /media/$USER/RPI-RP2/
 sudo insmod software/linux-drivers/apex_bridge.ko
 
 # Quick smoke test
-python3 -c "import pyapex; d=pyapex.ApexDevice(); print(d.get_telemetry()); d.close()"
+python3 -c "import pyapex; d=pyapex.ApexBridge(); print(d.get_telemetry()); d.close()"
 ```
 
 ## Verify DTS Cross-References

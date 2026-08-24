@@ -10,7 +10,7 @@ and inline documentation for GhostBlade hardware control.
 
 Usage:
     import pyapex
-    dev = pyapex.ApexDevice('/dev/apex_bridge0')
+    dev = pyapex.ApexBridge('/dev/apex_bridge0')
     dev.sdr_tune(868e6, 20000, 30.0)
     telem = dev.get_telemetry()
     dev.close()
@@ -29,7 +29,7 @@ class ApexError(Exception):
     msg: str
     def __init__(self, errno: int, msg: str = "") -> None: ...
 
-class ApexDevice:
+class ApexBridge:
     """GhostBlade hardware interface device.
 
     Opens a connection to the GhostBlade SPI bridge device and provides
@@ -39,7 +39,7 @@ class ApexDevice:
     it at a time. Use close() to release the device when done.
 
     Example:
-        dev = pyapex.ApexDevice('/dev/apex_bridge0')
+        dev = pyapex.ApexBridge('/dev/apex_bridge0')
         dev.sdr_tune(868e6, 20000, 30.0)
         dev.sdr_stream_start()
         iq_data = dev.sdr_read_iq(8192)
@@ -375,6 +375,9 @@ class ApexDevice:
             ApexError: If munmap fails
         """
         ...
+
+
+ApexDevice = ApexBridge
 
 
 class ApexDeviceContext:

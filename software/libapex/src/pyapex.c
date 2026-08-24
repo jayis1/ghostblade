@@ -669,6 +669,14 @@ PyMODINIT_FUNC PyInit_pyapex(void) {
         return NULL;
     }
 
+    /* Backward-compatible alias used by older examples and HIL scripts. */
+    Py_INCREF(&ApexBridgeType);
+    if (PyModule_AddObject(m, "ApexDevice", (PyObject *)&ApexBridgeType) < 0) {
+        Py_DECREF(&ApexBridgeType);
+        Py_DECREF(m);
+        return NULL;
+    }
+
     /* Add module-level constants */
     PyModule_AddIntMacro(m, APEX_ANT_MIMO_TX);
     PyModule_AddIntMacro(m, APEX_ANT_MIMO_RX);
