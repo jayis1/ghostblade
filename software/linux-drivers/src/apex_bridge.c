@@ -193,6 +193,32 @@ static uint32_t apex_crc32(const uint8_t *data, size_t len)
     return crc ^ 0xFFFFFFFFUL;
 }
 
+static bool apex_rx_fifo_push(struct apex_bridge_dev *dev,
+                              const uint8_t *payload, uint16_t payload_len)
+{
+    unsigned int written;
+
+    if (!payload_len)
+        return false;
+
+    spin_lock(&dev->rx_lock);
+    written = kfifo_in(&dev->rx_fifo, payload, payload_len);
+    spin_unlock(&dev->rx_lock);
+
+    if (written != payload_len) {
+        dev_warn_ratelimited(&dev->spi->dev,
+                             "RX FIFO overflow: dropped %u bytes\n",
+                             payload_len - written);
+        set_bit(APEX_STATE_SPI_ERROR, &dev->flags);
+        atomic_inc(&dev->spi_err_count);
+    }
+
+    if (written)
+        wake_up_interruptible(&dev->rx_waitq);
+
+    return written == payload_len;
+}
+
 /* ========================================================================
  * SPI Transfer Functions
  * ======================================================================== */
@@ -455,7 +481,13 @@ static void apex_rx_work_handler(struct work_struct *work)
      * This is critical because the IRQ handler schedules this work
      * and the device may have entered runtime suspend between the
      * interrupt and the work handler execution. */
-    pm_runtime_get_sync(&dev->spi->dev);
+    ret = pm_runtime_get_sync(&dev->spi->dev);
+    if (ret < 0) {
+        pm_runtime_put_noidle(&dev->spi->dev);
+        dev_err(&dev->spi->dev,
+                "Failed to resume device for RX work: %d\n", ret);
+        return;
+    }
 
     rx_frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
     if (!rx_frame)
@@ -527,35 +559,25 @@ static void apex_rx_work_handler(struct work_struct *work)
                 atomic_set(&dev->overtemp_prev_flag, 0);
             }
             /* Also push to RX FIFO for user-space read() */
-            kfifo_in(&dev->rx_fifo, payload, payload_len);
             spin_unlock(&dev->rx_lock);
-            wake_up_interruptible(&dev->rx_waitq);
+            apex_rx_fifo_push(dev, payload, payload_len);
         }
         break;
 
     case APEX_CMD_SDR_IQ_CHUNK:
         /* SDR IQ data — push to RX FIFO */
-        spin_lock(&dev->rx_lock);
-        kfifo_in(&dev->rx_fifo, payload, payload_len);
-        spin_unlock(&dev->rx_lock);
-        wake_up_interruptible(&dev->rx_waitq);
+        apex_rx_fifo_push(dev, payload, payload_len);
         break;
 
     case APEX_CMD_NFC_RESPONSE:
         /* NFC transaction response — push to RX FIFO so userspace
          * (libapex / pyapex) can read the status byte and RX data. */
-        spin_lock(&dev->rx_lock);
-        kfifo_in(&dev->rx_fifo, payload, payload_len);
-        spin_unlock(&dev->rx_lock);
-        wake_up_interruptible(&dev->rx_waitq);
+        apex_rx_fifo_push(dev, payload, payload_len);
         break;
 
     default:
         /* Generic response — push entire payload to RX FIFO */
-        spin_lock(&dev->rx_lock);
-        kfifo_in(&dev->rx_fifo, payload, payload_len);
-        spin_unlock(&dev->rx_lock);
-        wake_up_interruptible(&dev->rx_waitq);
+        apex_rx_fifo_push(dev, payload, payload_len);
         break;
     }
 
@@ -767,12 +789,8 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
 
         validate_ret = apex_validate_frame(rx_buf, ret, &resp_cmd,
                                             &resp_len, &resp_payload);
-        if (validate_ret == 0 && resp_len > 0) {
-            spin_lock(&dev->rx_lock);
-            kfifo_in(&dev->rx_fifo, resp_payload, resp_len);
-            spin_unlock(&dev->rx_lock);
-            wake_up_interruptible(&dev->rx_waitq);
-        }
+        if (validate_ret == 0 && resp_len > 0)
+            apex_rx_fifo_push(dev, resp_payload, resp_len);
     }
 
     ret = count;  /* Report full write as consumed */
@@ -2349,7 +2367,13 @@ static int apex_bridge_probe(struct spi_device *spi)
     pm_runtime_set_autosuspend_delay(&spi->dev, 5000);  /* 5 second autosuspend */
     pm_runtime_use_autosuspend(&spi->dev);
     pm_runtime_enable(&spi->dev);
-    pm_runtime_get_sync(&spi->dev);  /* Hold active during probe */
+    ret = pm_runtime_get_sync(&spi->dev);
+    if (ret < 0) {
+        pm_runtime_put_noidle(&spi->dev);
+        dev_err(&spi->dev, "Failed to resume device during probe: %d\n",
+                ret);
+        goto err_destroy_class;
+    }
 
     /* Initialize scatter-gather DMA engine */
     apex_sg_engine_init(dev);
@@ -2465,14 +2489,16 @@ static int apex_bridge_runtime_suspend(struct device *dev)
      * interrupts, but the low speed ensures minimal power consumption
      * on the SPI bus lines. */
     spi->max_speed_hz = 1000000;  /* 1 MHz — low power mode */
-    spi_setup(spi);
+    if (spi_setup(spi)) {
+        spi->max_speed_hz = adev->saved_spi_max_speed_hz;
+        dev_warn(dev, "Failed to lower SPI speed for runtime suspend\n");
+    }
 
     /* Free the SPI IRQ during suspend to avoid spurious wakeups
      * from the MCU INT_REQ line while the host is idle. The IRQ
      * will be re-requested in runtime_resume. */
-    if (adev->irq >= 0) {
+    if (adev->irq >= 0)
         disable_irq(adev->irq);
-    }
 
     return 0;
 }
@@ -2487,12 +2513,12 @@ static int apex_bridge_runtime_resume(struct device *dev)
     /* Restore original SPI configuration */
     spi->mode = adev->saved_spi_mode;
     spi->max_speed_hz = adev->saved_spi_max_speed_hz;
-    spi_setup(spi);
+    if (spi_setup(spi))
+        dev_warn(dev, "Failed to restore SPI configuration on resume\n");
 
     /* Re-enable the SPI IRQ */
-    if (adev->irq >= 0) {
+    if (adev->irq >= 0)
         enable_irq(adev->irq);
-    }
 
     return 0;
 }

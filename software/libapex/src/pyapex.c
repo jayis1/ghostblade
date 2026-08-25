@@ -115,6 +115,14 @@ typedef struct {
     char *device_path;  /* Device path string */
 } ApexBridgeObject;
 
+static void secure_wipe(void *ptr, size_t len)
+{
+    volatile unsigned char *p = (volatile unsigned char *)ptr;
+
+    while (len--)
+        *p++ = 0;
+}
+
 /* Forward declarations */
 static PyTypeObject ApexBridgeType;
 
@@ -135,7 +143,7 @@ static int ApexBridge_init(ApexBridgeObject *self, PyObject *args, PyObject *kwd
         return -1;
     }
 
-    self->fd = open(device_path, O_RDWR);
+    self->fd = open(device_path, O_RDWR | O_CLOEXEC);
     if (self->fd < 0) {
         PyErr_Format(PyExc_OSError,
                      "Failed to open %s: %s", device_path, strerror(errno));
@@ -156,6 +164,8 @@ static void ApexBridge_dealloc(ApexBridgeObject *self) {
         close(self->fd);
         self->fd = -1;
     }
+    if (self->device_path)
+        secure_wipe(self->device_path, strlen(self->device_path));
     free(self->device_path);
     self->device_path = NULL;
     Py_TYPE(self)->tp_free((PyObject *)self);
@@ -178,11 +188,12 @@ static PyObject *ApexBridge_sdr_tune(ApexBridgeObject *self, PyObject *args) {
         return NULL;
     }
 
-    struct apex_sdr_tune_cmd cmd = {
-        .freq_hz = (uint32_t)freq_hz,
-        .bw_khz = (uint16_t)bw_khz,
-        .gain_db_x10 = (uint16_t)(gain_db * 10),
-    };
+    struct apex_sdr_tune_cmd cmd;
+
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.freq_hz = (uint32_t)freq_hz;
+    cmd.bw_khz = (uint16_t)bw_khz;
+    cmd.gain_db_x10 = (uint16_t)(gain_db * 10);
 
     if (ioctl(self->fd, APEX_IOC_SDR_TUNE, &cmd) < 0) {
         PyErr_Format(PyExc_OSError, "SDR tune failed: %s", strerror(errno));
@@ -284,10 +295,11 @@ static PyObject *ApexBridge_cc1101_write(ApexBridgeObject *self, PyObject *args)
         return NULL;
     }
 
-    struct apex_cc1101_cfg cfg = {
-        .reg_addr = reg_addr,
-        .reg_len = (uint8_t)data_buf.len,
-    };
+    struct apex_cc1101_cfg cfg;
+
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.reg_addr = reg_addr;
+    cfg.reg_len = (uint8_t)data_buf.len;
     memcpy(cfg.data, data_buf.buf, data_buf.len);
     PyBuffer_Release(&data_buf);
 
@@ -316,15 +328,17 @@ static PyObject *ApexBridge_nfc_transact(ApexBridgeObject *self, PyObject *args)
         return NULL;
     }
 
-    struct apex_nfc_transact txn = {
-        .cmd = cmd,
-        .flags = flags,
-        .data_len = (uint16_t)tx_buf.len,
-    };
+    struct apex_nfc_transact txn;
+
+    memset(&txn, 0, sizeof(txn));
+    txn.cmd = cmd;
+    txn.flags = flags;
+    txn.data_len = (uint16_t)tx_buf.len;
     memcpy(txn.data, tx_buf.buf, tx_buf.len);
     PyBuffer_Release(&tx_buf);
 
     if (ioctl(self->fd, APEX_IOC_NFC_TRANSACT, &txn) < 0) {
+        secure_wipe(&txn, sizeof(txn));
         PyErr_Format(PyExc_OSError, "NFC transaction failed: %s", strerror(errno));
         return NULL;
     }
@@ -429,14 +443,14 @@ static PyObject *ApexBridge_sg_start(ApexBridgeObject *self, PyObject *args) {
         return NULL;
     }
 
-    struct apex_sg_config config = {
-        .buf_count = buf_count,
-        .buf_size = buf_size,
-        .timeout_ms = timeout_ms,
-        .spi_speed_hz = 0,  /* Use default */
-        .continuous = continuous ? 1 : 0,
-        .reserved = {0},
-    };
+    struct apex_sg_config config;
+
+    memset(&config, 0, sizeof(config));
+    config.buf_count = buf_count;
+    config.buf_size = buf_size;
+    config.timeout_ms = timeout_ms;
+    config.spi_speed_hz = 0;  /* Use default */
+    config.continuous = continuous ? 1 : 0;
 
     if (ioctl(self->fd, APEX_IOC_SG_START, &config) < 0) {
         PyErr_Format(PyExc_OSError, "SG start failed: %s", strerror(errno));

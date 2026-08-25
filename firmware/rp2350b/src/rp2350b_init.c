@@ -247,9 +247,7 @@ volatile uint32_t spi_rx_tail = 0;  /* Protocol handler reads here */
  */
 void spi0_isr_handler(void) {
     volatile uint32_t const *sr = (volatile uint32_t const *)(RP2350B_SPI0_BASE + SPI0_SSPSR);
-    /* dr is the SSP data register — reading from it pops the RX FIFO,
-     * so it must NOT be const (read has side effect). */
-    volatile uint32_t *dr = (volatile uint32_t *)(RP2350B_SPI0_BASE + SPI0_SSPDR);
+    volatile uint32_t const *dr = (volatile uint32_t const *)(RP2350B_SPI0_BASE + SPI0_SSPDR);
     uint32_t max_iterations = 256;  /* Safety: limit bytes processed per ISR */
 
     /* Drain all available bytes from the SPI0 RX FIFO.

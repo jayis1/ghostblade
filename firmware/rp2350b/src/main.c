@@ -47,16 +47,26 @@
 #include "peripheral_power.h"
 
 /* ── Binary info for picotool ──────────────────────────────────────────────── */
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_program_name("GhostBlade Firmware"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_program_version_string("1.0.0"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_program_description("GhostBlade RP2350B coprocessor firmware"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_program_build_date(__DATE__))
 
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_1pin_with_name(PIN_SPI0_RX,  "SPI0 RX  (from RK3576)"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_1pin_with_name(PIN_SPI0_CSN, "SPI0 CSn (from RK3576)"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_1pin_with_name(PIN_SPI0_SCK, "SPI0 SCK (from RK3576)"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_1pin_with_name(PIN_SPI0_TX,  "SPI0 TX  (to RK3576)"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_1pin_with_name(PIN_INT_REQ,  "INT_REQ  (to RK3576)"))
+/* cppcheck-suppress unknownMacro */
 bi_decl(bi_1pin_with_name(PIN_HOST_RDY, "HOST_RDY (from RK3576)"))
 
 /* ── Configuration constants ───────────────────────────────────────────────── */

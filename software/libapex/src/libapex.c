@@ -89,6 +89,13 @@ struct apex_device {
     char device_path[64]; /* Device path for diagnostics */
 };
 
+static int apex_fail(apex_handle_t handle, int error)
+{
+    if (handle)
+        handle->last_error = error;
+    return error;
+}
+
 /* Default device path */
 #define APEX_DEFAULT_DEVICE  "/dev/apex_bridge0"
 
@@ -175,11 +182,15 @@ int apex_sdr_tune(apex_handle_t handle, uint32_t freq_hz,
     struct kernel_sdr_tune_cmd cmd;
 
     if (!handle || handle->fd < 0)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     if (freq_hz < 100000 || freq_hz > 3800000000UL)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
+    if (gain_db < 0.0f || gain_db > 6553.5f)
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
+
+    memset(&cmd, 0, sizeof(cmd));
     cmd.freq_hz = freq_hz;
     cmd.bw_khz = bw_khz;
     cmd.gain_db_x10 = (uint16_t)(gain_db * 10.0f);
@@ -256,15 +267,16 @@ int apex_cc1101_write_regs(apex_handle_t handle,
     struct kernel_cc1101_cfg kcmd;
 
     if (!handle || handle->fd < 0 || !cfg)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     if (cfg->reg_len == 0 || cfg->reg_len > 64)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     /* Validate register address range (CC1101 config: 0x00-0x2E, status: 0x30-0x3D) */
     if (cfg->reg_addr > 0x3D)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
+    memset(&kcmd, 0, sizeof(kcmd));
     kcmd.reg_addr = cfg->reg_addr;
     kcmd.reg_len = cfg->reg_len;
     memcpy(kcmd.data, cfg->data, cfg->reg_len);
@@ -319,11 +331,12 @@ int apex_nfc_transact(apex_handle_t handle, apex_nfc_transact_t *txn) {
     struct kernel_nfc_transact ktxn;
 
     if (!handle || handle->fd < 0 || !txn)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     if (txn->data_len > 256)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
+    memset(&ktxn, 0, sizeof(ktxn));
     ktxn.cmd = txn->cmd;
     ktxn.flags = txn->flags;
     ktxn.data_len = txn->data_len;
@@ -390,8 +403,9 @@ int apex_get_telemetry(apex_handle_t handle, apex_telemetry_t *telem) {
     struct kernel_telemetry ktelem;
 
     if (!handle || handle->fd < 0 || !telem)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
+    memset(&ktelem, 0, sizeof(ktelem));
     if (ioctl(handle->fd, IOC_GET_TELEMETRY, &ktelem) < 0) {
         handle->last_error = APEX_ERR_IOCTL_FAILED;
         return APEX_ERR_IOCTL_FAILED;
@@ -453,15 +467,16 @@ int apex_cc1101_read_regs(apex_handle_t handle, apex_cc1101_config_t *cfg) {
     struct kernel_cc1101_cfg kcmd;
 
     if (!handle || handle->fd < 0 || !cfg)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     if (cfg->reg_len == 0 || cfg->reg_len > 64)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     /* Validate register address range */
     if (cfg->reg_addr > 0x3D)
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
+    memset(&kcmd, 0, sizeof(kcmd));
     kcmd.reg_addr = cfg->reg_addr;
     kcmd.reg_len = cfg->reg_len;
     memset(kcmd.data, 0, sizeof(kcmd.data));
