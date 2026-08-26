@@ -1,272 +1,179 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 <!-- Copyright (C) 2026 GhostBlade Project -->
 
-# Flashing Guide — GhostBlade (Project NullSpectre)
+# Flashing Guide
 
-This guide covers flashing firmware to the RP2350B coprocessor and loading
-the kernel driver on the RK3576 SoC.
+This guide covers RP2350B firmware flashing, RK3576 driver bring-up, and DTB/overlay deployment.
 
-## Table of Contents
+## Required Artifacts
 
-1. [Prerequisites](#prerequisites)
-2. [Flashing the RP2350B Firmware](#flashing-the-rp2350b-firmware)
-3. [Loading the Kernel Driver on RK3576](#loading-the-kernel-driver-on-rk3576)
-4. [Cross-Compiling the Kernel Driver](#cross-compiling-the-kernel-driver)
-5. [Verifying the SPI Bridge](#verifying-the-spi-bridge)
-6. [Updating the Device Tree](#updating-the-device-tree)
-7. [Troubleshooting](#troubleshooting)
+Build these first:
 
----
+- `firmware/rp2350b/build/ghostblade.uf2` or `ghostblade.elf`
+- `software/linux-drivers/apex_bridge.ko`
+- optional `.dtb` / `.dtbo` outputs from `software/dts/`
 
-## Prerequisites
+## RP2350B Flashing
 
-- GhostBlade hardware (RK3576 + RP2350B)
-- USB-C cable for RP2350B programming
-- Serial console access to RK3576 (UART, 1500000 baud)
-- Built firmware image (`ghostblade.uf2` or `ghostblade.elf`)
-- Built kernel module (`apex_bridge.ko`)
+### Method 1: BOOTSEL mass-storage mode
 
----
-
-## Flashing the RP2350B Firmware
-
-### Method 1: USB BOOTSEL Mode (Recommended)
-
-The RP2350B supports USB mass-storage bootloader mode, similar to the
-Raspberry Pi Pico.
-
-1. **Disconnect power** from the GhostBlade board
-2. **Hold the BOOTSEL button** on the RP2350B (SW2 on the schematic)
-3. **Connect USB-C cable** from the RP2350B USB port to your host PC
-4. **Release BOOTSEL button** — the RP2350B will appear as a USB mass storage device
-5. **Copy the firmware**:
+1. Power down the board or hold the RP2350B in reset.
+2. Hold **BOOTSEL**.
+3. Connect the RP2350B USB port to the host.
+4. Release **BOOTSEL** once the `RPI-RP2` volume appears.
+5. Copy the UF2 image:
 
 ```bash
-# The RP2350B appears as a drive (e.g., /media/$USER/RPI-RP2)
-cp build/ghostblade.uf2 /media/$USER/RPI-RP2/
+cp firmware/rp2350b/build/ghostblade.uf2 /media/$USER/RPI-RP2/
 ```
 
-6. The RP2350B will automatically reboot with the new firmware
-7. Verify with serial console:
-```
-RP2350B: Clocks configured - SYS=150MHz, PERI=150MHz, PLL=1200MHz
-RP2350B: SPI0 slave initialized at 50MHz
-RP2350B: GPIO pins configured (23 total)
-RP2350B: All peripherals initialized - MCU_READY asserted
-```
+The RP2350B reboots automatically after the copy completes.
 
-### Method 2: OpenOCD / SWD Debug Probe
-
-For development and debugging, use SWD via a debug probe:
+### Method 2: OpenOCD / SWD
 
 ```bash
-# Using a Raspberry Pi Debug Probe or compatible SWD adapter
-openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg
-
-# In another terminal, flash via GDB
-arm-none-eabi-gdb build/ghostblade.elf
-(gdb) target remote :3333
-(gdb) load
-(gdb) continue
+openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
+  -c "program firmware/rp2350b/build/ghostblade.elf verify reset exit"
 ```
 
 ### Method 3: picotool
 
 ```bash
-# Erase and flash
-picotool load -x build/ghostblade.uf2
-
-# Or load ELF directly with debug symbols
-picotool load -x build/ghostblade.elf
+picotool load -x firmware/rp2350b/build/ghostblade.uf2
 ```
 
----
+## RP2350B Post-Flash Checks
 
-## Loading the Kernel Driver on RK3576
+Recommended checks after flashing:
 
-### Method 1: Manual Load (Development)
+- serial console shows firmware boot output
+- RK3576-side reset line can release the MCU cleanly
+- `INT_REQ` and `HOST_RDY` behavior matches the timing docs
+
+## Device Tree Deployment
+
+### Build the base DTB and overlays
 
 ```bash
-# Build the module
-cd software/linux-drivers
-make -C /lib/modules/$(uname -r)/build M=$(pwd) modules
-
-# Load the module
-sudo insmod apex_bridge.ko
-
-# Verify
-dmesg | tail -20
-# Should see:
-# apex_bridge: SPI driver for GhostBlade bridge device registered
-# apex_bridge apx_bridge0: MCU ready detected (status=0x01)
-# apex_bridge apx_bridge0: character device /dev/apex_bridge0 created
-
-# Check device node
-ls -la /dev/apex_bridge0
+make -C software/dts all
 ```
 
-### Method 2: Auto-Load via /etc/modules (Persistent)
+### Install the base DTB
 
 ```bash
-# Copy module to kernel modules tree
-sudo cp apex_bridge.ko /lib/modules/$(uname -r)/extra/
-sudo depmod -a
-
-# Add to module list for auto-loading
-echo "apex_bridge" | sudo tee /etc/modules-load.d/apex_bridge.conf
-
-# Reboot or load manually
-sudo modprobe apex_bridge
+sudo cp software/dts/ghostblade-rk3576.dtb /boot/dtbs/$(uname -r)/rockchip/
 ```
 
-### Unloading the Module
+### Install overlays for runtime use
+
+```bash
+sudo mkdir -p /sys/kernel/config/device-tree/overlays/sdr
+sudo cp software/dts/ghostblade-sdr-overlay.dtbo /sys/kernel/config/device-tree/overlays/sdr/dtbo
+
+sudo mkdir -p /sys/kernel/config/device-tree/overlays/nfc
+sudo cp software/dts/ghostblade-nfc-overlay.dtbo /sys/kernel/config/device-tree/overlays/nfc/dtbo
+
+sudo mkdir -p /sys/kernel/config/device-tree/overlays/wifi
+sudo cp software/dts/ghostblade-wifi-overlay.dtbo /sys/kernel/config/device-tree/overlays/wifi/dtbo
+```
+
+If your kernel requires external include paths during compile, use `DTS_INCLUDE_PATHS` as documented in [Build Instructions](build-instructions.md).
+
+## RK3576 Driver Bring-Up
+
+### Load the module
+
+```bash
+sudo insmod software/linux-drivers/apex_bridge.ko
+```
+
+### Verify probe success
+
+```bash
+dmesg | tail -50
+ls -l /dev/apex_bridge0
+ls -l /sys/class/apex/apex_bridge0
+```
+
+Expected results:
+
+- the driver probes without SPI or GPIO errors
+- `/dev/apex_bridge0` exists
+- sysfs entries are present under `/sys/class/apex/apex_bridge0/`
+
+### Unload the module
 
 ```bash
 sudo rmmod apex_bridge
 ```
 
----
+## Cross-Built Driver Installation
 
-## Cross-Compiling the Kernel Driver
-
-If building on an x86_64 host for the RK3576 (aarch64):
+If you built on a workstation:
 
 ```bash
-export ARCH=arm64
-export CROSS_COMPILE=aarch64-linux-gnu-
-export KERNEL_SRC=/path/to/rk3576-kernel-source
-
-cd software/linux-drivers
-make -C $KERNEL_SRC ARCH=$ARCH CROSS_COMPILE=$CROSS_COMPILE M=$(pwd) modules
-
-# Copy to target
-scp apex_bridge.ko root@192.168.1.100:/lib/modules/$(uname -r)/extra/
+scp software/linux-drivers/apex_bridge.ko root@target:/tmp/
+ssh root@target 'install -m 0644 /tmp/apex_bridge.ko /lib/modules/'"$(uname -r)"'/extra/apex_bridge.ko && depmod -a'
 ```
 
-### Reproducible Builds
-
-For reproducible builds, set the `SOURCE_DATE_EPOCH` and `KBUILD_BUILD_TIMESTAMP`:
+Then on target:
 
 ```bash
-export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
-export KBUILD_BUILD_TIMESTAMP="$(date -u -d @${SOURCE_DATE_EPOCH})"
-make -C $KERNEL_SRC M=$(pwd) modules
+sudo modprobe apex_bridge
 ```
 
----
+## Bridge Validation
 
-## Verifying the SPI Bridge
-
-After loading both the firmware and the kernel driver, verify communication:
+### Repository-level validation
 
 ```bash
-# Check driver status
-cat /sys/class/apex_bridge/apex_bridge0/status
-
-# Read telemetry using libapex
-cd software/libapex
-./examples/telemetry_read
-# Expected output:
-# Battery: 4120 mV
-# Temperature: 42.3 C
-# Uptime: 15234 ms
-# SDR RX: inactive
-# CC1101 RSSI: -87.5 dBm
-
-# Run the Python bindings test
-python3 -c "import pyapex; d=pyapex.ApexBridge(); print(d.get_telemetry())"
+python3 tools/validate_dts.py
+python3 tools/validate_netlist.py
 ```
 
-### SPI Debug
-
-If the bridge is not responding:
+### Host-side tests
 
 ```bash
-# Enable dynamic debug
-echo 'module apex_bridge +p' | sudo tee /sys/kernel/debug/dynamic_debug/control
-
-# Check SPI controller status
-cat /sys/bus/spi/devices/spi0.0/modalias
-cat /sys/bus/spi/devices/spi0.0/statistics/transfers
-
-# Monitor SPI traffic (if CONFIG_SPI_DEBUG is enabled)
-dmesg | grep -i spi
+make -C tests run
 ```
 
----
-
-## Updating the Device Tree
-
-The device tree blob must include the `apex_bridge` node. The provided
-DTS file at `software/dts/ghostblade-rk3576.dts` includes all required nodes.
-
-### Compile the DTS
+### On-target smoke checks
 
 ```bash
-# Native
-dtc -I dts -O dtb -o ghostblade-rk3576.dtb software/dts/ghostblade-rk3576.dts
-
-# Install to boot partition
-sudo cp ghostblade-rk3576.dtb /boot/dtbs/$(uname -r)/rockchip/
+cat /sys/class/apex/apex_bridge0/status 2>/dev/null || true
+ls /sys/class/apex/apex_bridge0
 ```
 
-### Apply as Overlay (if supported)
+## Recovery Paths
 
-```bash
-# Compile overlays
-dtc -I dts -O dtb -@ -o ghostblade-sdr-overlay.dtbo software/dts/ghostblade-sdr-overlay.dts
-dtc -I dts -O dtb -@ -o ghostblade-nfc-overlay.dtbo software/dts/ghostblade-nfc-overlay.dts
-dtc -I dts -O dtb -@ -o ghostblade-wifi-overlay.dtbo software/dts/ghostblade-wifi-overlay.dts
-dtc -I dts -O dtb -@ -o ghostblade-options.dtbo software/dts/ghostblade-options.dts
+### RP2350B does not enumerate in BOOTSEL mode
 
-# Apply at runtime
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/sdr
-sudo cp ghostblade-sdr-overlay.dtbo /sys/kernel/config/device-tree/overlays/sdr/dtbo
+- try a known-good data cable
+- remove hubs/adapters
+- verify 3V3 is present on the MCU side
+- fall back to SWD with OpenOCD
 
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/nfc
-sudo cp ghostblade-nfc-overlay.dtbo /sys/kernel/config/device-tree/overlays/nfc/dtbo
+### Driver does not probe
 
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/wifi
-sudo cp ghostblade-wifi-overlay.dtbo /sys/kernel/config/device-tree/overlays/wifi/dtbo
+- verify the installed DTB contains the `apex,apex-bridge` node on `&spi0`
+- confirm GPIO polarity matches `ghostblade-rk3576.dts`
+- confirm the SPI controller is enabled in the kernel
 
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/options
-sudo cp ghostblade-options.dtbo /sys/kernel/config/device-tree/overlays/options/dtbo
-```
+### Overlay application fails
 
----
+- ensure configfs overlay support is enabled
+- confirm the target nodes exist in the running base tree
+- rebuild the overlay with any required include paths
 
-## Troubleshooting
+### `/dev/apex_bridge0` is missing
 
-### RP2350B not entering BOOTSEL mode
+- check `dmesg` for probe failures
+- confirm the module is loaded with `lsmod | grep apex_bridge`
+- confirm the MCU firmware is running and bridge GPIOs are wired as documented
 
-- Ensure the USB cable provides data (not charge-only)
-- Try a different USB port (USB 2.0 preferred)
-- Hold BOOTSEL for at least 2 seconds before releasing
-- Check that RP2350B has power (VDD_3V3 rail must be stable)
+## Related Docs
 
-### Kernel driver not probing
-
-- Verify the DTS node matches the SPI bus (`spi0` on RK3576)
-- Check `compatible = "apex,apex-bridge"` matches the driver
-- Ensure `reg = <0>` for SPI chip select 0
-- Confirm SPI controller is enabled in the kernel config (`CONFIG_SPI_ROCKCHIP=y`)
-
-### MCU_READY not detected
-
-- Check SPI0 physical connections (CLK, MOSI, MISO, CS, INT_REQ, HOST_RDY)
-- Verify RP2350B firmware is running (check serial output)
-- The MCU may need up to 200ms after reset release to assert MCU_READY
-- Check RP2350B pin 20 (INT_REQ, → RK3576 GPIO1_B0) and pin 21 (HOST_RDY, → RK3576 GPIO1_B1) are correctly mapped in DTS
-
-### SPI communication errors
-
-- Reduce SPI clock speed (try 10 MHz instead of 50 MHz)
-- Check for signal integrity issues (probe with oscilloscope)
-- Verify CRC alignment in protocol frames
-- Enable `CONFIG_SPI_DEBUG` for detailed SPI logging
-- Check `max-frequency` in DTS matches hardware capability
-
-### More Help
-
-See [FAQ & Troubleshooting](faq-troubleshooting.md) for additional
-common issues and solutions.
+- [Getting Started](getting-started.md)
+- [Build Instructions](build-instructions.md)
+- [SPI Protocol & Timing](spi-protocol-timing.md)
+- [FAQ & Troubleshooting](faq-troubleshooting.md)

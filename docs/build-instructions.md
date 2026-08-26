@@ -3,310 +3,241 @@
 
 # Build Instructions
 
-**GhostBlade — Project NullSpectre**
+This document covers reproducible local builds for all software artifacts in the GhostBlade repository.
 
-This document describes how to build all software components of the GhostBlade project: the RP2350B firmware, the Linux kernel driver, the userspace library, and the Python bindings.
+## Build Matrix
 
----
+| Component | Path | Build System | Primary Target |
+|-----------|------|--------------|----------------|
+| RP2350B firmware | `firmware/rp2350b/` | CMake + Pico SDK | `ghostblade.uf2` / `ghostblade.elf` |
+| RK3576 kernel driver | `software/linux-drivers/` | Kbuild | `apex_bridge.ko` |
+| Userspace C library | `software/libapex/` | GNU Make | `libapex.a` / `libapex.so` |
+| Python bindings | `software/libapex/` | setuptools | `pyapex` extension |
+| Device tree | `software/dts/` | `dtc` + Make | `.dtb` / `.dtbo` |
+| Test suite | `tests/` | GNU Make | host-side test binaries |
 
-## 1. Prerequisites
-
-### 1.1 Host System
-
-A Linux x86-64 host is recommended. Tested on Ubuntu 22.04 LTS and Debian 12.
-
-```bash
-sudo apt update
-sudo apt install -y build-essential cmake git python3 python3-pip \
-    gcc-arm-none-eabi libnewlib-arm-none-eabi \
-    gcc-aarch64-linux-gnu libncurses-dev bison flex libssl-dev \
-    kicad python3-kicad
-```
-
-### 1.2 Toolchain Versions
-
-| Component | Toolchain | Version | Notes |
-|-----------|-----------|---------|-------|
-| RP2350B firmware | `arm-none-eabi-gcc` | ≥ 13.2 | Bare-metal Cortex-M33 |
-| Linux kernel driver | `aarch64-linux-gnu-gcc` | ≥ 12.0 | Cross-compile for ARM64 |
-| libapex (userspace C) | `gcc` or `aarch64-linux-gnu-gcc` | ≥ 11.0 | Native or cross |
-| Python bindings | `gcc` + Python 3.8+ | ≥ 3.8 | CPython extension |
-
-> **Tip:** Run `make check` at the project root to verify all toolchain
-> dependencies are installed. See `software/toolchain.conf` for environment
-> variable defaults.
-
----
-
-## 2. Building RP2350B Firmware
-
-### 2.1 Install Pico SDK
+## Prerequisites
 
 ```bash
-git clone https://github.com/raspberrypi/pico-sdk.git /opt/pico-sdk
-cd /opt/pico-sdk
-git submodule update --init
-export PICO_SDK_PATH=/opt/pico-sdk
+sudo apt-get update
+sudo apt-get install -y \
+  build-essential cmake git python3 python3-pip python3-venv \
+  gcc-aarch64-linux-gnu gcc-arm-none-eabi libnewlib-arm-none-eabi \
+  device-tree-compiler libssl-dev flex bison
 ```
 
-### 2.2 Build
+Optional but recommended:
 
-```bash
-cd firmware/rp2350b
-mkdir -p build && cd build
-cmake .. -DPICO_SDK_PATH=$PICO_SDK_PATH \
-         -DPICO_BOARD=pico2 \
-         -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
-```
+- KiCad 8 for hardware edits
+- OpenOCD and `picotool` for RP2350B flashing
 
-Output: `ghostblade_rp2350b.elf`, `ghostblade_rp2350b.uf2`, `ghostblade_rp2350b.bin`
+## Reproducible Build Environment
 
-### 2.3 Build with Debug Symbols
-
-```bash
-cmake .. -DPICO_SDK_PATH=$PICO_SDK_PATH \
-         -DPICO_BOARD=pico2 \
-         -DCMAKE_BUILD_TYPE=Debug
-make -j$(nproc)
-```
-
-### 2.4 Memory Map
-
-The firmware uses a custom linker script (`rp2350b_memmap.ld`) that allocates:
-
-| Region | Base | Size | Purpose |
-|--------|------|------|---------|
-| FLASH | 0x10000100 | ~16 MB - 256 | Code + read-only data (XIP) |
-| SRAM | 0x20000000 | 260 KB | .data, .bss, heap, stacks |
-| DMA_RAM | 0x20041000 | 4 KB | DMA ring buffers (no CPU contention) |
-| PSRAM | 0x11000000 | 2 MB | SDR IQ capture buffers, large allocations |
-
----
-
-## 3. Building Linux Kernel Driver
-
-### 3.1 Cross-Compilation
-
-```bash
-cd software/linux-drivers
-
-# Set kernel source path and cross-compiler
-export ARCH=arm64
-export CROSS_COMPILE=aarch64-linux-gnu-
-export KDIR=/path/to/rk3576/kernel/source
-
-make -C $KDIR M=$(pwd) modules
-```
-
-Output: `apex_bridge.ko`
-
-### 3.2 Native Build on Target
-
-```bash
-cd software/linux-drivers
-make
-```
-
-### 3.3 Install
-
-```bash
-sudo make install
-sudo depmod -a
-```
-
-### 3.4 Loading the Driver
-
-```bash
-sudo modprobe apex_bridge
-# Or with custom SPI speed:
-sudo insmod apex_bridge.ko spi_speed_hz=25000000
-```
-
-Verify:
-
-```bash
-dmesg | grep apex
-ls /dev/apex_bridge0
-```
-
----
-
-## 4. Building libapex (Userspace C Library)
-
-### 4.1 Native Build
-
-```bash
-cd software/libapex
-make all    # Builds both static and shared libraries
-```
-
-Output: `build/libapex.a`, `build/libapex.so`
-
-### 4.2 Cross-Compilation
-
-```bash
-cd software/libapex
-make CC=aarch64-linux-gnu-gcc AR=aarch64-linux-gnu-ar all
-```
-
-### 4.3 Install
-
-```bash
-sudo make install PREFIX=/usr/local
-sudo ldconfig
-```
-
-### 4.4 Linking Your Application
-
-```bash
-gcc -o my_app my_app.c -lapex
-```
-
----
-
-## 5. Building Python Bindings (pyapex)
-
-```bash
-cd software/libapex
-python3 -m pip install .          # Install system-wide
-# Or for development:
-pip3 install -e .       # Editable mode
-python3 setup.py build_ext --inplace   # In-place build
-```
-
-### Usage
-
-```python
-import pyapex
-dev = pyapex.ApexBridge()
-telem = dev.get_telemetry()
-print(f"Battery: {telem['vbat_mv']} mV")
-dev.close()
-```
-
----
-
-## 6. Running Unit Tests
-
-```bash
-cd tests
-
-# Build and run all userspace tests:
-make run
-
-# Or build individually:
-make test_spi_protocol
-make test_battery_monitor
-make test_cc1101_config
-make test_watchdog
-make test_power_states
-make test_sleep_wake
-make test_sdr_dma
-make test_spi0_isr
-make test_libapex
-make test_libapex_framing
-make test_st25r3916_init
-make test_adc_calibration
-make test_peripheral_power
-make test_cc1101_lms7002m
-make test_crc_validation
-```
-
-You can also build from the project root:
-
-```bash
-make tests
-```
-
----
-
-## 7. Compiling Device Tree Sources
-
-### 7.1 Validate DTS Syntax
-
-```bash
-cd software/dts
-make validate
-```
-
-### 7.2 Compile DTB/DTBO
-
-```bash
-cd software/dts
-
-# Simple compilation (no kernel include paths):
-make all
-
-# With kernel DTS include paths for full #include resolution:
-make DTS_INCLUDE_PATHS="-I/path/to/linux/include/dt-bindings -I/path/to/linux/arch/arm64/boot/dts/rockchip"
-```
-
-Output: `ghostblade-rk3576.dtb`, `ghostblade-options.dtbo`, `ghostblade-sdr-overlay.dtbo`, `ghostblade-cc1101-overlay.dtbo`, `ghostblade-nfc-overlay.dtbo`, `ghostblade-wifi-overlay.dtbo`, `ghostblade-sleep-overlay.dtbo`, `ghostblade-gps-overlay.dtbo`
-
-### 7.3 Applying Overlays on Target
-
-```bash
-# Load base DTB
-mkdir -p /boot/overlays
-cp ghostblade-rk3576.dtb /boot/dtbs/rockchip/rk3576-ghostblade.dtb
-
-# Copy overlays
-cp ghostblade-options.dtbo /boot/overlays/
-cp ghostblade-sdr-overlay.dtbo /boot/overlays/
-cp ghostblade-cc1101-overlay.dtbo /boot/overlays/
-cp ghostblade-nfc-overlay.dtbo /boot/overlays/
-cp ghostblade-wifi-overlay.dtbo /boot/overlays/
-cp ghostblade-sleep-overlay.dtbo /boot/overlays/
-cp ghostblade-gps-overlay.dtbo /boot/overlays/
-
-# Add to /boot/extlinux.conf or /boot/armbianEnv.txt:
-# overlay_prefix=ghostblade-
-# overlays=options sdr-overlay cc1101-overlay nfc-overlay wifi-overlay sleep-overlay gps-overlay
-```
-
----
-
-## 8. Generating Hardware Files
-
-### 8.1 Gerber Files
-
-```bash
-python3 tools/generate_gerbers.py --fab-note --zip
-```
-
-### 8.2 BOM
-
-The interactive BOM is at `hardware/bom/ghostblade-bom-interactive.html`. The CSV BOM is at `hardware/bom/ghostblade-bom.csv`.
-
----
-
-## 9. Reproducible Builds
-
-For reproducible builds, set the following environment variables:
+Set deterministic timestamps before packaging or publishing artifacts:
 
 ```bash
 export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
-export TZ=UTC
-export LC_ALL=C
+export KBUILD_BUILD_TIMESTAMP="$(date -u -d @${SOURCE_DATE_EPOCH} '+%Y-%m-%d %H:%M:%S')"
+export PYTHONHASHSEED=0
 ```
 
-The firmware CMakeLists and driver Makefile respect `SOURCE_DATE_EPOCH` for embedded timestamps.
+You can also source the repository helper:
 
----
+```bash
+source software/toolchain.conf
+```
 
-## 10. Troubleshooting Build Issues
+## Device Tree
 
-| Problem | Solution |
-|---------|----------|
-| `arm-none-eabi-gcc: not found` | Install `gcc-arm-none-eabi` package |
-| `PICO_SDK_PATH not set` | Export `PICO_SDK_PATH` to your pico-sdk directory |
-| `aarch64-linux-gnu-gcc: not found` | Install `gcc-aarch64-linux-gnu` package |
-| `Kernel headers not found` | Set `KDIR` to your kernel source tree root |
-| `cmake version too old` | Install CMake ≥ 3.15 (`pip install cmake --upgrade`) |
-| `undefined reference to spi_protocol_*` | Ensure all `.c` files are listed in `CMakeLists.txt` |
-| `dtc: not found` | Install `device-tree-compiler` package |
-| `DTS include not found` | Set `DTS_INCLUDE_PATHS` to your kernel include directories |
-| `dtc: Warning` | Most warnings are benign; use `-Wno-*` flags in `software/dts/Makefile` |
+Validate syntax:
 
-For more troubleshooting, see [FAQ & Troubleshooting](faq-troubleshooting.md).
+```bash
+make -C software/dts validate
+```
+
+Compile all DTB/DTBO outputs:
+
+```bash
+make -C software/dts all
+```
+
+If kernel include paths are required:
+
+```bash
+make -C software/dts all \
+  DTS_INCLUDE_PATHS="-I/path/to/linux/include/dt-bindings -I/path/to/linux/arch/arm64/boot/dts/rockchip"
+```
+
+## RP2350B Firmware
+
+### Configure
+
+```bash
+cmake -S firmware/rp2350b -B firmware/rp2350b/build \
+  -DPICO_SDK_PATH=$HOME/pico-sdk \
+  -DPICO_PLATFORM=rp2350 \
+  -DCMAKE_BUILD_TYPE=Release
+```
+
+### Build
+
+```bash
+cmake --build firmware/rp2350b/build -j$(nproc)
+```
+
+### Outputs
+
+- `ghostblade.uf2`
+- `ghostblade.elf`
+- `ghostblade.bin`
+- `ghostblade.hex`
+- `ghostblade.map`
+
+### Toolchain-file driven configure
+
+```bash
+cmake -S firmware/rp2350b -B firmware/rp2350b/build \
+  -DCMAKE_TOOLCHAIN_FILE=firmware/rp2350b/toolchain-arm-none-eabi.cmake \
+  -DPICO_SDK_PATH=$HOME/pico-sdk
+```
+
+## RK3576 Kernel Driver
+
+### Native build on target
+
+```bash
+make -C software/linux-drivers
+```
+
+### Cross-build on workstation
+
+```bash
+make -C software/linux-drivers \
+  KDIR=/path/to/kernel/build \
+  ARCH=arm64 \
+  CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+### Install into staging root
+
+```bash
+make -C software/linux-drivers \
+  KDIR=/path/to/kernel/build \
+  ARCH=arm64 \
+  CROSS_COMPILE=aarch64-linux-gnu- \
+  INSTALL_MOD_PATH=$PWD/out/modules \
+  install
+```
+
+## libapex
+
+### Native build
+
+```bash
+make -C software/libapex clean all
+```
+
+### Cross-build
+
+```bash
+make -C software/libapex \
+  CC=aarch64-linux-gnu-gcc \
+  AR=aarch64-linux-gnu-ar \
+  RANLIB=aarch64-linux-gnu-ranlib \
+  STRIP=aarch64-linux-gnu-strip \
+  all
+```
+
+### Staged install
+
+```bash
+make -C software/libapex DESTDIR=$PWD/out/rootfs PREFIX=/usr install
+```
+
+Generated files include:
+
+- `software/libapex/build/libapex.a`
+- `software/libapex/build/libapex.so`
+- `software/libapex/build/libapex.so.0`
+- `software/libapex/build/libapex.pc`
+
+## Python Bindings
+
+Use a virtual environment on systems enforcing PEP 668:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install ./software/libapex
+```
+
+Editable install for development:
+
+```bash
+python3 -m pip install -e ./software/libapex
+```
+
+## Test Suite
+
+Build and run all host-side tests:
+
+```bash
+make -C tests run
+```
+
+Build a single test target:
+
+```bash
+make -C tests test_spi_protocol
+./tests/test_spi_protocol
+```
+
+## Repository-wide Validation
+
+```bash
+python3 tools/check_internal_links.py
+python3 tools/validate_dts.py
+python3 tools/validate_netlist.py
+```
+
+## Top-Level Convenience Targets
+
+From the repository root:
+
+```bash
+make check
+make validate
+make validate-dts
+make validate-netlist
+make libapex
+make tests
+```
+
+## Troubleshooting
+
+### Firmware configure fails
+
+- Confirm `PICO_SDK_PATH` points to a valid Pico SDK checkout.
+- Confirm the Pico SDK submodules are initialized.
+
+### `apex_bridge.ko` build fails
+
+- Check `KDIR` matches the exact target kernel build tree.
+- Verify `ARCH=arm64` and `CROSS_COMPILE=aarch64-linux-gnu-` for workstation builds.
+
+### `libapex.so` installs but applications cannot find it
+
+- Use `DESTDIR` for packaging.
+- Ensure the final rootfs refreshes the dynamic linker cache or ships the library in a known runtime path.
+
+### DTS compile fails on missing `dt-bindings`
+
+- Pass `DTS_INCLUDE_PATHS` to the `software/dts/Makefile`.
+
+## Related Docs
+
+- [Getting Started](getting-started.md)
+- [Flashing Guide](flashing-guide.md)
+- [FAQ & Troubleshooting](faq-troubleshooting.md)
+- [Documentation Index](index.md)

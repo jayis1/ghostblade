@@ -29,6 +29,11 @@ software/linux-drivers/modules.order
 
 # libapex build
 software/libapex/build/
+software/libapex/*.so
+software/libapex/*.a
+
+# Toolchain scratch
+software/toolchains/*.user
 
 # KiCad
 hardware/kicad/*.bak

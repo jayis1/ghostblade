@@ -142,10 +142,10 @@ ninja -j$(nproc)
 ```
 
 The build produces:
-- `ghostblade_rp2350b.uf2` — UF2 flash image (drag-and-drop via BOOTSEL)
-- `ghostblade_rp2350b.elf` — ELF with debug symbols
-- `ghostblade_rp2350b.bin` — Raw binary
-- `ghostblade_rp2350b.hex` — Intel HEX format
+- `ghostblade.uf2` — UF2 flash image (drag-and-drop via BOOTSEL)
+- `ghostblade.elf` — ELF with debug symbols
+- `ghostblade.bin` — Raw binary
+- `ghostblade.hex` — Intel HEX format
 
 ### Firmware Configuration
 
@@ -282,7 +282,7 @@ dev.close()
 1. Hold the BOOTSEL button on the RP2350B
 2. Press and release the RESET button
 3. Release BOOTSEL — the RP2350B appears as a USB mass storage device
-4. Copy `ghostblade_rp2350b.uf2` to the mass storage device
+4. Copy `ghostblade.uf2` to the mass storage device
 5. The MCU automatically reboots and runs the new firmware
 
 ### Method 2: OpenOCD / SWD
@@ -290,7 +290,7 @@ dev.close()
 ```bash
 # Using OpenOCD with an SWD adapter (e.g., Picoprobe)
 openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
-    -c "program ghostblade_rp2350b.elf verify reset exit"
+    -c "program ghostblade.elf verify reset exit"
 ```
 
 ### Method 3: Kernel Driver Managed Flash
@@ -299,7 +299,7 @@ openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
 # Via apex-ctl utility (when driver is loaded)
 apex-ctl --mcu-reset
 sleep 0.5
-apex-ctl --flash-firmware ghostblade_rp2350b.bin
+apex-ctl --flash-firmware ghostblade.bin
 ```
 
 ---
@@ -445,16 +445,16 @@ Examples:
 2. **Create a feature branch** from `main`
 3. **Make your changes** with clear, descriptive commits
 4. **Test** your changes — run the unit test suite and HIL tests if applicable
-5. **Push** your branch and open a Pull Request against `main`
+5. **Share** your branch, commit, or patch series with maintainers for integration
 
-### PR Checklist
+### Submission Checklist
 
 - [ ] All unit tests pass (`make test` in `tests/`)
 - [ ] Code follows project style conventions
 - [ ] SPDX license identifiers are present in all new files
 - [ ] New functionality has corresponding tests
 - [ ] Documentation is updated (if applicable)
-- [ ] No `.github/workflows/` files (the project does not use CI workflows)
+- [ ] No repository-hosted automation files
 
 ---
 

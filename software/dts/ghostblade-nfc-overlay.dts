@@ -162,6 +162,8 @@
 		target-path = "/";
 
 		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
 			st25r3916: nfc-controller@0 {
 				compatible = "st,st25r3916";
 				reg = <0>; /* SPI chip select 0 */

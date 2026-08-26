@@ -120,7 +120,7 @@ This produces `ghostblade-gerbers.zip` containing all manufacturing layers plus 
 
 ### 4.2 BOM Review
 
-Before submitting a PR that changes the BOM:
+Before submitting a hardware change that affects the BOM:
 
 1. Update `hardware/bom/ghostblade-bom.csv` with new/changed parts.
 2. Verify pricing in the interactive HTML BOM.
@@ -130,7 +130,7 @@ Before submitting a PR that changes the BOM:
 
 ## 5. Code Review Checklist
 
-Before opening a PR, verify:
+Before handing off a hardware update for review, verify:
 
 - [ ] ERC passes with zero violations
 - [ ] DRC passes with zero violations

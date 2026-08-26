@@ -1,0 +1,6 @@
+#ifndef _GHOSTBLADE_THERMAL_COMPAT_H
+#define _GHOSTBLADE_THERMAL_COMPAT_H
+
+#define THERMAL_NO_LIMIT (~0)
+
+#endif

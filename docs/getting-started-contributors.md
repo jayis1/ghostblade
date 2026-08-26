@@ -182,14 +182,14 @@ gcc -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2 -o test_<name> test_<name>.c
 
 The `-DNO_CMOCKA` flag enables the built-in minimal test framework when cmocka is not available.
 
-### Pull Request Checklist
+### Submission Checklist
 
-Before submitting a PR:
+Before sharing a contribution for review:
 
 - [ ] All existing tests pass (`make run` in `tests/`)
 - [ ] New code has corresponding unit tests
 - [ ] New header files have include guards and SPDX license identifiers
-- [ ] No `.github/workflows/` files or CI references added (this project has no CI)
+- [ ] No repository-hosted automation files added
 - [ ] Code follows the project's naming conventions
 - [ ] Hardware-specific code is documented with register references
 - [ ] SPI protocol changes update both firmware and driver sides

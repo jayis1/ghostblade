@@ -31,12 +31,12 @@
 	compatible = "ghostblade,nullspectre", "rockchip,rk3576";
 
 	/*
-	 * Fragment 0: PCIe configuration for MT7922 Wi-Fi 6E
+	 * Fragment 0: Wi-Fi operating profile for MT7922
 	 *
-	 * The MT7922 Wi-Fi module uses the RK3576's PCIe 2.1 lane 0.
-	 * The mt7921e driver (compatible with MT7922) handles the Wi-Fi
-	 * interface. This fragment configures the PCIe endpoint and
-	 * associates the board's Wi-Fi antenna GPIO controls.
+	 * The populated GhostBlade design uses SDIO for Wi-Fi and UART1
+	 * for Bluetooth HCI. This fragment provides runtime policy data
+	 * consumed by userspace or board support code without changing the
+	 * base SDIO topology in the main DTS.
 	 */
 	fragment@0 {
 		target-path = "/";
@@ -176,7 +176,7 @@
 
 				/*
 				 * Wi-Fi module enable GPIO.
-				 * Must be asserted after PCIe and UART are ready.
+				 * Must be asserted after SDIO and UART are ready.
 				 */
 				gpio = <&gpio1 25 GPIO_ACTIVE_HIGH>;
 				         /* GPIO1_D1 mapped to WIFI_EN */
@@ -186,7 +186,7 @@
 				/*
 				 * Power sequencing delays.
 				 * The MT7922 requires:
-				 *   - 10 ms after VDD stable before PCIe link training
+				 *   - 10 ms after VDD stable before SDIO enumeration
 				 *   - 5 ms between BT_REG_ON assertion and HCI commands
 				 */
 				startup-delay-us = <10000>;

@@ -9,6 +9,7 @@ Checks that:
 3. Pin connections specified in the manifest are consistent
 4. All components in the netlist have correct footprint assignments
 5. 3D model references exist in the 3dmodels/README.md
+6. Core ICs are documented in the KiCad library manifest
 """
 
 import re
@@ -86,6 +87,24 @@ def parse_3dmodels_readme():
     return models
 
 
+def parse_library_manifest_refs():
+    """Parse component references documented in hardware/kicad/library-manifest.md."""
+    manifest_path = os.path.join(ROOT, "hardware/kicad/library-manifest.md")
+    refs = set()
+
+    if not os.path.exists(manifest_path):
+        WARNINGS.append(f"KiCad library manifest not found: {manifest_path}")
+        return refs
+
+    with open(manifest_path) as f:
+        content = f.read()
+
+    for m in re.finditer(r'\|\s*(U\d+)\s*\|', content):
+        refs.add(m.group(1))
+
+    return refs
+
+
 def main():
     print("GhostBlade Netlist Cross-Reference Validation")
     print("=" * 50)
@@ -94,6 +113,7 @@ def main():
     manifest_nets = parse_manifest_nets()
     components, kicad_nets = parse_kicad_netlist()
     models_3d = parse_3dmodels_readme()
+    library_manifest_refs = parse_library_manifest_refs()
 
     # Check 1: All manifest net names should be referenced consistently
     print(f"\n✓ Parsed {len(manifest_nets)} net definitions from GhostBlade.mf")
@@ -122,6 +142,9 @@ def main():
                 ERRORS.append(f"{ref}: expected '{expected_value}', got '{actual}'")
         else:
             WARNINGS.append(f"{ref} ({expected_value}) not found in KiCad netlist")
+
+        if library_manifest_refs and ref not in library_manifest_refs:
+            WARNINGS.append(f"{ref} missing from hardware/kicad/library-manifest.md")
 
     # Check 3: Verify manifest net names reference correct components
     for net_name, net_value in manifest_nets.items():

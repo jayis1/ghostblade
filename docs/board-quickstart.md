@@ -47,7 +47,7 @@ cd firmware/rp2350b
 mkdir -p build && cd build
 cmake -G Ninja -DPICO_SDK_PATH=$PICO_SDK_PATH ..
 ninja -j$(nproc)
-# Output: ghostblade_rp2350b.uf2
+# Output: ghostblade.uf2
 
 # Linux kernel driver (cross-compile)
 cd ../../software/linux-drivers
@@ -75,14 +75,14 @@ python3 -m pip install --user .
 1. Hold **BOOTSEL** on the RP2350B
 2. Press and release **RESET**
 3. Release **BOOTSEL** — RP2350B appears as USB mass storage
-4. Copy `ghostblade_rp2350b.uf2` to the drive
+4. Copy `ghostblade.uf2` to the drive
 5. MCU reboots automatically
 
 ### Method 2: OpenOCD/SWD
 
 ```bash
 openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
-    -c "program ghostblade_rp2350b.elf verify reset exit"
+    -c "program ghostblade.elf verify reset exit"
 ```
 
 ### Method 3: Kernel Driver Managed Flash
@@ -90,7 +90,7 @@ openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
 ```bash
 apex-ctl --mcu-reset
 sleep 0.5
-apex-ctl --flash-firmware ghostblade_rp2350b.bin
+apex-ctl --flash-firmware ghostblade.bin
 ```
 
 ---

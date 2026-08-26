@@ -1,132 +1,148 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
 
 # Contributing to GhostBlade
 
-Thank you for your interest in contributing to the GhostBlade (Project NullSpectre) project! This document provides guidelines for contributing.
+Thanks for helping with GhostBlade (Project NullSpectre). This repository contains hardware design files, RP2350B firmware, RK3576 device-tree sources, Linux driver code, userspace libraries, and manufacturing/test documentation. Contributions are most useful when they keep those layers in sync.
 
-## Code of Conduct
+## Ground Rules
 
-Be respectful, constructive, and professional. We're all here to build something great.
+- Be respectful, technical, and specific.
+- Keep documentation, schematic/netlist assumptions, DTS files, and firmware pin maps aligned.
+- Do not add repository-hosted automation files.
+- Prefer small, reviewable commits with a clear scope.
 
-## How to Contribute
+## Recommended Workflow
 
-### Hardware (Schematics, PCB, BOM)
+1. Sync your local clone with `main`.
+2. Make your change.
+3. Run the relevant local validation steps from the checklist below.
+4. Update impacted documentation.
+5. Share the commit, patch series, or repository link with maintainers for review and integration.
 
-1. Use KiCad 8+ for all schematic and PCB edits
-2. Follow the naming conventions in `GhostBlade.mf`
-3. Ensure all net names match the schematic netlist in Phase 2 documentation
-4. Run ERC/DRC before submitting changes — use the project DRC rules in `hardware/drc/ghostblade-drc-rules.kicad_drc`
-5. Submit Gerber files + BOM for manufacturing review
-6. Verify footprint assignments have correct 3D model references (see `hardware/kicad/3dmodels/README.md`)
-7. Follow the [hardware contributor guide](docs/hardware-contributor-guide.md) for detailed design rules
+## Project Areas
 
-### Firmware (RP2350B)
+### Hardware
 
-1. Build with CMake + Pico SDK (see `firmware/rp2350b/CMakeLists.txt`)
-2. Follow the RP2350B SDK conventions (Pico SDK)
-3. Use the pin definitions in `firmware/rp2350b/include/board_pins.h`
-4. All SPI transactions must use the framed protocol defined in `apex_bridge_regs.h`
-5. Add CRC validation for all inter-processor communication
-6. Test on hardware before submitting PRs
-7. Respect the memory layout in `firmware/rp2350b/rp2350b_memmap.ld`:
-   - DMA buffers go in `.dma.sdr_rx` / `.dma.sdr_tx` sections (SRAM bank 5)
-   - Large IQ capture buffers go in `.psram.iq_capture` section (PSRAM)
-   - Regular code/data goes in default sections (SRAM banks 0-4)
+For changes under `hardware/`:
 
-### Software (Linux Driver, Userspace)
+1. Use KiCad 8 or newer.
+2. Keep symbol names, footprint names, and net names consistent with `GhostBlade.mf`.
+3. Verify 3D model references for changed footprints.
+4. Re-run ERC/DRC using:
+   - `hardware/drc/ghostblade-erc-rules.kicad_erc`
+   - `hardware/drc/ghostblade-drc-rules.kicad_drc`
+5. Update hardware-facing docs when pinout, power, RF routing, or component choices change.
 
-1. Follow Linux kernel coding style — use `.clang-format` in the repo root
-2. The driver must compile cleanly against kernel 6.6+
-3. Add `MODULE_AUTHOR`, `MODULE_DESCRIPTION`, `MODULE_LICENSE` to all modules
-4. Use kernel-doc comments for all public functions
-5. Test with `CONFIG_DEBUG_FS`, `CONFIG_DYNAMIC_DEBUG` enabled
-6. Userspace library (`libapex`) should follow the same style
-7. When adding new ioctl commands, update both `apex_bridge_regs.h` and `sysfs-attributes.md`
+### RP2350B Firmware
+
+For changes under `firmware/rp2350b/`:
+
+1. Preserve the SPI framing protocol in `spi_protocol.c` and `apex_bridge_regs.h`.
+2. Keep `include/board_pins.h` aligned with the schematic manifest and DTS GPIO mapping.
+3. Respect the custom memory layout in `rp2350b_memmap.ld`.
+4. Treat watchdog, brownout, and peripheral power sequencing as board-level behavior, not isolated code paths.
+
+### Linux Driver and Userspace
+
+For changes under `software/`:
+
+1. Keep ioctl/sysfs documentation aligned with implementation.
+2. Ensure cross-build settings still work for RK3576/aarch64.
+3. When changing the bridge protocol, update both kernel and userspace headers.
+4. Keep install paths, SONAMEs, and pkg-config metadata coherent.
 
 ### Device Tree
 
-1. Keep `ghostblade-rk3576.dts` in sync with `GhostBlade.mf` manifest
-2. Optional hardware goes in `ghostblade-options.dts` overlay
-3. SDR-specific configuration goes in `ghostblade-sdr-overlay.dts`
-4. NFC (ST25R3916) configuration goes in `ghostblade-nfc-overlay.dts`
-5. Verify DTS nodes/properties match `GhostBlade.mf` before submitting
-6. Ensure pinctrl entries have correct drive-strength and bias settings matching the schematic
-7. Run `cd software/dts && make validate` to validate syntax before submitting
-8. Run `make validate-dts` from project root to cross-reference DTS GPIOs with firmware and schematic
-9. Run `make validate-netlist` from project root to cross-reference netlist, manifest, DTS, and firmware pins
-10. Use `cd software/dts && make all` to compile DTB/DTBO outputs
+For changes under `software/dts/`:
+
+1. Keep `ghostblade-rk3576.dts` aligned with `GhostBlade.mf` and `board_pins.h`.
+2. Put optional hardware in overlays instead of bloating the base DTS.
+3. Ensure pinctrl groups, regulator dependencies, and interrupt polarity match the documented hardware behavior.
+4. Keep comments focused on actual bus topology and populated hardware.
 
 ### Documentation
 
-1. Markdown format for all docs — lint with `.markdownlint.json` config
-2. Include units for all measurements (mm, MHz, mA, etc.)
-3. Keep `GhostBlade.mf` in sync with any spec changes
-4. Reference component designators (U1, R5, C12, etc.) consistently
-5. Verify internal markdown links are valid
-6. Spellcheck with `codespell` using `.codespell.ignore`
-7. Add new docs to the Documentation Index in `README.md`
+For changes under `docs/` or top-level Markdown:
 
-## Testing
+1. Use explicit units.
+2. Prefer exact filenames and commands that exist in the repository.
+3. Verify internal links before submitting.
+4. When changing build or flashing steps, make sure the commands match the current Makefiles/CMake files.
 
-Before submitting a PR, ensure:
+## Local Validation Checklist
 
-1. **Firmware builds** with no warnings: `cmake --build build -Werror=dev`
-2. **Kernel module compiles**: `make -C /path/to/kernel M=$(pwd) modules`
-3. **Unit tests pass**: `cd tests && make run`
-   - test_spi_protocol (236 tests): SPI frame format, CRC-64/CRC-32 validation, edge cases, fuzzing
-   - test_battery_monitor (97 tests): ADC conversion, battery percentage, brownout hysteresis
-   - test_cc1101_config (794 tests): CC1101 register configuration validation
-   - test_watchdog (72 tests): Watchdog timer constants, brownout magic values, reset reasons
-   - test_power_states (57 tests): Power state machine transitions, voltage thresholds
-   - test_sleep_wake (248 tests): Sleep/wake state machine transitions
-   - test_libapex (238 tests): Userspace library API, error codes, telemetry flags
-   - test_libapex_framing (89 tests): Frame encoding/parsing round-trip
-   - test_sdr_dma (1162 tests): SDR DMA ring buffer management, overrun/underrun detection
-   - test_spi0_isr (78 tests): SPI0 ISR frame assembly, sync detection, CRC validation
-   - test_st25r3916_init (395 tests): ST25R3916 NFC register map, SPI encoding, init sequence
-   - test_adc_calibration (45 tests): ADC offset/gain correction, voltage divider math
-   - test_peripheral_power (186 tests): Power rail sequencing order and timing
-   - test_cc1101_lms7002m (315 tests): CC1101/LMS7002M PLL calculations, SPI encoding
-   - test_crc_validation (110 tests): CRC-64/CRC-32 known vectors, error detection
-4. **DTS validates**: `cd software/dts && make validate`
-5. **Netlist cross-references validate**: `make validate-netlist`
-6. **Markdown lints clean**: `markdownlint docs/ README.md CONTRIBUTING.md`
-7. **No spelling errors**: `codespell --config .codespell.ignore`
-8. **Top-level build works**: `make tests` (from project root)
+Run the subset that applies to your change.
 
-## Pull Request Process
+### Repository-wide
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Make your changes with clear, descriptive commit messages
-4. Ensure all existing documentation is updated if your change affects specs
-5. Push to your fork and open a Pull Request against `main`
-6. Address review feedback promptly
-
-> **Note:** This project does not use GitHub Actions or any CI/CD automation.
-> All testing is done locally by contributors and maintainers. Do not add
-> `.github/workflows/` files. See `.github/NO_CI.md` for details.
-
-## Commit Message Format
-
-```
-type(scope): brief description
-
-Detailed explanation of the change, why it's needed, and any
-trade-offs considered.
-
-Fixes #123 (if applicable)
+```bash
+python3 tools/check_internal_links.py
+python3 tools/validate_dts.py
+python3 tools/validate_netlist.py
 ```
 
-Types: `hw` (hardware), `fw` (firmware), `sw` (software), `docs`, `fix`, `refactor`
+### Test suite
+
+```bash
+make -C tests run
+```
+
+### DTS compilation
+
+```bash
+make -C software/dts validate
+```
+
+### Driver build
+
+```bash
+make -C software/linux-drivers KDIR=/path/to/kernel/build
+```
+
+### libapex build
+
+```bash
+make -C software/libapex clean all
+```
+
+### Firmware configure/build
+
+```bash
+cmake -S firmware/rp2350b -B firmware/rp2350b/build \
+  -DPICO_SDK_PATH=/path/to/pico-sdk \
+  -DPICO_PLATFORM=rp2350
+cmake --build firmware/rp2350b/build
+```
+
+## Commit Guidance
+
+Use a short subject that states the subsystem and change.
+
+Examples:
+
+- `docs: align build and flashing guides with current outputs`
+- `dts: add wakeup and regulator metadata for bridge peripherals`
+- `build: make libapex installs reproducible and toolchain-aware`
+- `hw: document symbol-footprint-3d coverage`
+
+## What to Update Together
+
+If you touch one of these, check the related files too:
+
+- **Bridge GPIOs / pin numbers** → `GhostBlade.mf`, `board_pins.h`, `ghostblade-rk3576.dts`, pin assignment docs
+- **RF peripheral topology** → DTS overlays, firmware init code, timing docs, FAQ
+- **Build commands / outputs** → `README.md`, `docs/getting-started.md`, `docs/build-instructions.md`, `docs/flashing-guide.md`
+- **KiCad libraries / 3D models** → footprint library, 3D model reference docs, validation tooling
 
 ## License
 
-By contributing, you agree that your work will be licensed under:
+By contributing, you agree that your work is licensed under the repository's existing licensing split:
+
 - Hardware: CERN-OHL-S v2
-- Software: GPL-2.0-or-later
+- Firmware/software: GPL-2.0-or-later or file-specific SPDX identifier
 - Documentation: CC-BY-SA 4.0
 
 ## Security
 
-Found a security vulnerability? Please see [SECURITY.md](SECURITY.md) for responsible disclosure guidelines. **Do not report security issues through public GitHub issues.**
+Please follow [SECURITY.md](SECURITY.md) for vulnerability disclosure. Do not post undisclosed security issues in public trackers.

@@ -61,10 +61,12 @@
 		target = <&i2c2>;
 
 		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
 			status = "okay";
 			clock-frequency = <100000>;
 
-			gps-i2c: gps@42 {
+			gps_i2c: gps@42 {
 				compatible = "u-blox,neo-m10n-i2c";
 				reg = <0x42>;
 			};

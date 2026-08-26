@@ -14,8 +14,8 @@
 
 prefix=@PREFIX@
 exec_prefix=@PREFIX@
-libdir=@PREFIX@/lib
-includedir=@PREFIX@/include
+libdir=@LIBDIR@
+includedir=@INCLUDEDIR@
 
 Name: libapex
 Description: GhostBlade SPI Bridge userspace library (RK3576 <-> RP2350B)

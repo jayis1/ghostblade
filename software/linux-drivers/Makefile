@@ -5,29 +5,20 @@
 
 obj-m += apex_bridge.o
 
-# Cross-compilation settings
-# For native build on RK3576:
-#   make
-#
-# For cross-compilation on x86 host:
-#   make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-#
-# For out-of-tree build against specific kernel:
-#   make -C /path/to/kernel/source M=$(PWD) modules
-
 KDIR ?= /lib/modules/$(shell uname -r)/build
+PWD  := $(CURDIR)
 
 .PHONY: all clean install uninstall
 
 all:
-	$(MAKE) -C $(KDIR) M=$(PWD) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) modules
 
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
 	rm -f Module.symvers Module.markers modules.order
 
 install:
-	$(MAKE) -C $(KDIR) M=$(PWD) modules_install
+	$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) modules_install
 
 uninstall:
 	rm -f /lib/modules/$(shell uname -r)/extra/apex_bridge.ko

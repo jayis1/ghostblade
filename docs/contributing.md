@@ -194,11 +194,10 @@ make check
 
 ## Submitting Changes
 
-1. **Create a feature branch** from `main`:
+1. **Sync with `main`**:
    ```bash
    git checkout main
    git pull origin main
-   git checkout -b improvement/YYYY-MM-DD-topic
    ```
 
 2. **Make focused commits** with clear messages:
@@ -207,15 +206,14 @@ make check
    git commit -m "firmware: add ST25R3916 field strength measurement function"
    ```
 
-3. **Push your branch**:
+3. **Run the relevant local checks**:
    ```bash
-   git push origin improvement/YYYY-MM-DD-topic
+   python3 tools/validate_dts.py
+   python3 tools/validate_netlist.py
+   make -C tests run
    ```
 
-4. **Open a Pull Request** against `main`:
-   ```bash
-   gh pr create --title "firmware: ST25R3916 improvements" --body "Description of changes..."
-   ```
+4. **Share the resulting commit or patch series** with maintainers for integration.
 
 ### Commit Message Convention
 
@@ -231,11 +229,11 @@ Use the following prefixes:
 | `test:` | Test additions or changes |
 | `build:` | Build system changes |
 
-### Code Review
+### Review Guidance
 
-- All PRs require review before merging
-- Address review feedback with additional commits (do not force-push)
-- Keep PRs focused — one concern per PR
+- Keep submissions focused — one concern per commit or patch series.
+- Include the local validation commands you ran.
+- Update docs when a hardware, DTS, protocol, or build behavior changes.
 
 ## Areas That Need Help
 

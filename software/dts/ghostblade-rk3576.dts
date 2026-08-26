@@ -26,6 +26,8 @@
 #include "rk3576.dtsi"
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/linux-event-codes.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+#include "thermal-compat.h"
 
 / {
 	model = "GhostBlade NullSpectre";
@@ -202,6 +204,7 @@
 			linux,code = <KEY_RESTART>; /* RP2350B BOOTSEL */
 			gpios = <&gpio1 12 GPIO_ACTIVE_LOW>; /* GPIO1_B4 */
 			debounce-interval = <50>;
+			wakeup-source;
 		};
 
 		button-user: button-user {
@@ -209,6 +212,7 @@
 			linux,code = <KEY_F24>;
 			gpios = <&gpio1 13 GPIO_ACTIVE_LOW>; /* GPIO1_B5 */
 			debounce-interval = <50>;
+			wakeup-source;
 		};
 	};
 
@@ -324,6 +328,7 @@
 	max-frequency = <50000000>; /* 50 MHz */
 	#address-cells = <1>;
 	#size-cells = <0>;
+	cs-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>; /* GPIO1_A3 */
 
 	/* DMA engine for scatter-gather transfers to/from RP2350B.
 	 * The PL330 DMA controller at fe610800 provides zero-copy
@@ -347,6 +352,8 @@
 		/* Interrupt from RP2350B INT_REQ (GPIO1_B0) */
 		interrupt-parent = <&gpio1>;
 		interrupts = <8 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "int_req";
+		wakeup-source;
 
 		apex,int-req-gpio = <&gpio1 8 GPIO_ACTIVE_LOW>;
 		apex,host-rdy-gpio = <&gpio1 9 GPIO_ACTIVE_LOW>;

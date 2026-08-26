@@ -273,11 +273,11 @@ Open an issue at https://github.com/jayis1/ghostblade/issues with:
 ### How do I submit a patch?
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contribution guide.
-In short: fork, branch, commit, push, open a PR.
+In short: sync, branch if needed, commit clearly, run local checks, and share the result with maintainers.
 
-### My PR isn't getting reviewed
+### My contribution is not getting reviewed yet
 
-Be patient — maintainers review PRs as time permits. You can bump by
+Be patient — maintainers review submissions as time permits. You can bump by
 adding a polite comment after a few days. Make sure your branch is
 up-to-date with `main` and that all local checks pass.
 

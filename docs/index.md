@@ -14,6 +14,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Development Environment](development-environment.md) | Quick-setup guide — one-line install and build |
 | [Getting Started Guide (detailed)](getting-started-guide.md) | Comprehensive build, flash, and test guide with pyapex examples |
 | [Build Instructions](build-instructions.md) | Detailed build steps for firmware, driver, libapex, Python bindings |
+| [Reproducible Builds](reproducible-builds.md) | Deterministic build environment, toolchain-file usage, and staging guidance |
 | [Flashing Guide](flashing-guide.md) | Firmware flashing via OpenOCD/picotool/USB, driver loading, recovery |
 | [Changelog](../CHANGELOG.md) | Project changelog and version history |
 
@@ -43,6 +44,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Hardware Test Procedures](hardware-test-procedures.md) | 17-section manufacturing test plan with pass/fail criteria |
 | [Hardware Contributor Guide](hardware-contributor-guide.md) | Schematic/PCB design rules, DRC constraints, review checklist |
 | [ESD Protection, Reset Circuits & Test Points](hardware-protection-and-testpoints.md) | TVS protection, reset timing, test point map, decoupling requirements |
+| [KiCad Library Manifest](../hardware/kicad/library-manifest.md) | Symbol ↔ footprint ↔ 3D model cross-reference for the custom CAD libraries |
 | [Reset Circuit Design](reset-circuit-design.md) | Detailed reset circuit schematics for all processors and peripherals |
 | [Pin Assignments](pin-assignments.md) | Cross-reference: schematic net, DTS GPIO, and firmware pin mappings |
 
@@ -57,6 +59,13 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | `ghostblade-options.dts` | Optional hardware: GPS (u-blox NEO-M10N on UART2), external LNA, Bluetooth |
 | `ghostblade-sleep-overlay.dts` | Power management: sleep/wake state transitions, brownout thresholds, thermal scaling |
 | `ghostblade-gps-overlay.dts` | Optional GPS (u-blox NEO-M10N on UART2 + I2C2) with 1PPS time sync |
+
+## Build Toolchains
+
+| File | Description |
+|------|-------------|
+| `../software/toolchains/rk3576-aarch64.cmake` | Generic aarch64/Linux CMake toolchain file for RK3576-side builds |
+| `../firmware/rp2350b/toolchain-arm-none-eabi.cmake` | RP2350B bare-metal CMake toolchain file for Pico SDK firmware builds |
 
 ## Validation Tools
 

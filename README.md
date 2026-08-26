@@ -27,6 +27,15 @@ GhostBlade is a pocket-sized penetration testing device that combines a powerful
 
 The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling) while the RK3576 runs a full Linux distribution with pentesting tools.
 
+## Current Repository State
+
+Validated locally on 2026-08-26:
+
+- `python3 tools/check_internal_links.py` → no broken internal links
+- `python3 tools/validate_dts.py` → DTS cross-reference checks passed
+- `python3 tools/validate_netlist.py` → manifest/netlist/library checks passed
+- `make -C tests run` → full host-side unit test suite passed
+
 ---
 
 ## Architecture at a Glance
@@ -334,6 +343,7 @@ ghostblade/
 | [Getting Started Guide (detailed)](docs/getting-started-guide.md) | Comprehensive build, flash, and test guide with examples |
 | [Development Environment](docs/development-environment.md) | Quick-setup guide for Ubuntu — one-line install and build |
 | [Build Instructions](docs/build-instructions.md) | Detailed build steps for firmware, driver, libapex |
+| [Reproducible Builds](docs/reproducible-builds.md) | Deterministic build environment and toolchain-file usage |
 | [Flashing Guide](docs/flashing-guide.md) | Firmware flashing, driver loading, recovery |
 | [FAQ & Troubleshooting](docs/faq-troubleshooting.md) | Common issues and solutions |
 | [Pin Assignments](docs/pin-assignments.md) | Cross-reference: schematic, DTS, and firmware pin mappings |
@@ -372,9 +382,11 @@ ghostblade/
 | [ghostblade-footprints.kicad_mod](hardware/kicad/footprints/ghostblade-footprints.pretty/ghostblade-footprints.kicad_mod) | Footprint library (FCBGA-732, QFN-60, QFN-64, BGA-153, SOT-23-5/6, SOP-8, VQFN-14, USB-C, MicroSD, FPC 30/40-pin, crystals, inductors, 0402 passives, all packages) |
 | [ghostblade.net](hardware/kicad/ghostblade.net) | Schematic netlist (150+ nets, all IC connections) |
 | [ghostblade-drc-rules.kicad_drc](hardware/drc/ghostblade-drc-rules.kicad_drc) | Custom DRC rules (IPC Class 3, RF/high-speed constraints) |
+| [hardware/drc/README.md](hardware/drc/README.md) | How to apply the custom ERC/DRC rule sets |
 | [ghostblade-bom.csv](hardware/bom/ghostblade-bom.csv) | Full bill of materials (67 line items, MPN, price) |
 | [ghostblade-bom-interactive.html](hardware/bom/ghostblade-bom-interactive.html) | Interactive HTML BOM (search, filter, sort, cost calc) |
 | [3D models README](hardware/kicad/3dmodels/README.md) | STEP model references and parametric generation scripts |
+| [KiCad library manifest](hardware/kicad/library-manifest.md) | Symbol ↔ footprint ↔ 3D model coverage for custom hardware libraries |
 
 ---
 
@@ -450,10 +462,10 @@ See [CHANGELOG.md](CHANGELOG.md) for a record of all notable changes.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. In short:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes with clear descriptions
-4. Push to your fork and open a Pull Request
+1. Sync with `main`
+2. Make your change
+3. Run the relevant local validation steps
+4. Share the resulting commit or patch series with maintainers for integration
 
 ## Security
 

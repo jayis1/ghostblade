@@ -56,7 +56,7 @@ make validate
 
 ```bash
 # Flash RP2350B (BOOTSEL mode)
-cp firmware/rp2350b/build/ghostblade_rp2350b.uf2 /media/$USER/RPI-RP2/
+cp firmware/rp2350b/build/ghostblade.uf2 /media/$USER/RPI-RP2/
 
 # Load kernel driver
 sudo insmod software/linux-drivers/apex_bridge.ko
