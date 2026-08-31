@@ -181,14 +181,13 @@ static int build_spi_frame(uint8_t cmd, const uint8_t *payload,
         idx += payload_len;
     }
 
-    /* CRC-32 over payload (only) */
-    if (payload_len > 0) {
-        uint32_t pay_crc = crc32_compute(payload, payload_len);
-        frame[idx++] = (uint8_t)(pay_crc & 0xFF);
-        frame[idx++] = (uint8_t)((pay_crc >> 8) & 0xFF);
-        frame[idx++] = (uint8_t)((pay_crc >> 16) & 0xFF);
-        frame[idx++] = (uint8_t)((pay_crc >> 24) & 0xFF);
-    }
+    /* Every frame carries a CRC-32 trailer, including zero-length payloads.
+     * This must mirror the RP2350B and Linux driver implementations. */
+    uint32_t pay_crc = crc32_compute(&frame[SPI_HDR_SIZE], payload_len);
+    frame[idx++] = (uint8_t)(pay_crc & 0xFF);
+    frame[idx++] = (uint8_t)((pay_crc >> 8) & 0xFF);
+    frame[idx++] = (uint8_t)((pay_crc >> 16) & 0xFF);
+    frame[idx++] = (uint8_t)((pay_crc >> 24) & 0xFF);
 
     return idx;
 }
@@ -219,9 +218,7 @@ static int validate_spi_frame(const uint8_t *frame, size_t frame_len) {
     uint16_t payload_len = (uint16_t)frame[2] | ((uint16_t)frame[3] << 8);
 
     /* Validate frame length matches expected */
-    size_t expected_len = SPI_HDR_SIZE + payload_len;
-    if (payload_len > 0)
-        expected_len += SPI_CRC32_SIZE;
+    size_t expected_len = SPI_HDR_SIZE + payload_len + SPI_CRC32_SIZE;
 
     if (frame_len < expected_len)
         return -4;
@@ -236,18 +233,16 @@ static int validate_spi_frame(const uint8_t *frame, size_t frame_len) {
     if (expected_hdr_crc != received_hdr_crc)
         return -2;
 
-    /* Validate payload CRC-32 (if payload present) */
-    if (payload_len > 0) {
-        uint32_t expected_pay_crc = crc32_compute(&frame[SPI_HDR_SIZE], payload_len);
-        uint32_t received_pay_crc = 0;
-        size_t crc_offset = SPI_HDR_SIZE + payload_len;
-        for (int i = 0; i < 4; i++) {
-            received_pay_crc |= ((uint32_t)frame[crc_offset + i]) << (8 * i);
-        }
-
-        if (expected_pay_crc != received_pay_crc)
-            return -3;
+    /* Validate payload CRC-32, including the required empty-payload trailer. */
+    uint32_t expected_pay_crc = crc32_compute(&frame[SPI_HDR_SIZE], payload_len);
+    uint32_t received_pay_crc = 0;
+    size_t crc_offset = SPI_HDR_SIZE + payload_len;
+    for (int i = 0; i < 4; i++) {
+        received_pay_crc |= ((uint32_t)frame[crc_offset + i]) << (8 * i);
     }
+
+    if (expected_pay_crc != received_pay_crc)
+        return -3;
 
     return 0;
 }
@@ -332,13 +327,15 @@ static void test_frame_building(void) {
 
     /* Test 1: NOP command with zero-length payload */
     len = build_spi_frame(CMD_NOP, NULL, 0, frame);
-    TEST_ASSERT(len == SPI_HDR_SIZE, "NOP frame length = 16 bytes");
+    TEST_ASSERT(len == SPI_HDR_SIZE + SPI_CRC32_SIZE,
+                "NOP frame length includes CRC-32 trailer");
     TEST_ASSERT(frame[0] == SPI_SYNC_BYTE, "NOP sync byte = 0xAA");
     TEST_ASSERT(frame[1] == CMD_NOP, "NOP command byte = 0xFF");
 
     /* Test 2: Telemetry request with zero-length payload */
     len = build_spi_frame(CMD_TELEMETRY_REQ, NULL, 0, frame);
-    TEST_ASSERT(len == SPI_HDR_SIZE, "TELEMETRY_REQ frame length = 16 bytes");
+    TEST_ASSERT(len == SPI_HDR_SIZE + SPI_CRC32_SIZE,
+                "TELEMETRY_REQ frame length includes CRC-32 trailer");
     TEST_ASSERT(frame[1] == CMD_TELEMETRY_REQ, "TELEMETRY_REQ command = 0x06");
 
     /* Test 3: SDR tune command with 8-byte payload */
@@ -396,6 +393,11 @@ static void test_frame_validation(void) {
     len = build_spi_frame(CMD_NOP, NULL, 0, frame);
     result = validate_spi_frame(frame, len);
     TEST_ASSERT_EQ(result, 0, "Zero-length payload frame valid");
+
+    /* The CRC-32 trailer remains integrity-protected even with no payload. */
+    frame[SPI_HDR_SIZE] ^= 0x01;
+    result = validate_spi_frame(frame, len);
+    TEST_ASSERT_EQ(result, -3, "Corrupted empty-payload CRC-32 detected");
 }
 
 static void test_error_detection(void) {

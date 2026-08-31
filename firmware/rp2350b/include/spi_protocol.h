@@ -113,7 +113,7 @@
  * The response carries the NFC chip's RX FIFO contents (if any) plus a
  * status byte indicating success/timeout/CRC-error so the host can react.
  *
- * Wire layout (5 + data_len bytes):
+ * Wire layout (4 + data_len bytes):
  *   [0]    status      — 0 = OK, 1 = timeout (no tag response),
  *                         2 = CRC error in response, 3 = invalid params,
  *                         4 = NFC chip not initialized

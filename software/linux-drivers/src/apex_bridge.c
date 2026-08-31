@@ -366,15 +366,16 @@ static int apex_validate_frame(const uint8_t *frame, size_t frame_len,
     if (frame_len < APEX_SPI_HDR_SIZE + len + APEX_SPI_CRC32_SIZE)
         return -EBADMSG;
 
-    /* Check payload CRC-32 */
-    if (len > 0) {
-        actual_crc32 = apex_crc32(&frame[APEX_SPI_HDR_SIZE], len);
-        expected_crc32 = get_unaligned_le32(&frame[APEX_SPI_HDR_SIZE + len]);
-        if (actual_crc32 != expected_crc32) {
-            pr_err("apex_bridge: payload CRC-32 mismatch (expected 0x%08x, got 0x%08x)\n",
-                   expected_crc32, actual_crc32);
-            return -EBADMSG;
-        }
+    /* Check payload CRC-32, including zero-length payloads. A zero-length
+     * frame still carries its four-byte trailer; accepting it unchecked
+     * would make host and MCU validation disagree and permit corrupted NOP
+     * or control frames through the driver. */
+    actual_crc32 = apex_crc32(&frame[APEX_SPI_HDR_SIZE], len);
+    expected_crc32 = get_unaligned_le32(&frame[APEX_SPI_HDR_SIZE + len]);
+    if (actual_crc32 != expected_crc32) {
+        pr_err("apex_bridge: payload CRC-32 mismatch (expected 0x%08x, got 0x%08x)\n",
+               expected_crc32, actual_crc32);
+        return -EBADMSG;
     }
 
     /* Return parsed fields */
@@ -793,7 +794,11 @@ static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
             apex_rx_fifo_push(dev, resp_payload, resp_len);
     }
 
-    ret = count;  /* Report full write as consumed */
+    /* Preserve transfer failures for userspace. Reporting a successful
+     * write after spi_sync() failed silently drops a command and prevents
+     * callers from applying normal retry/error handling. */
+    if (ret >= 0)
+        ret = count;  /* Report full write as consumed */
 
 out:
     /* Securely wipe buffers that may contain protocol data before freeing */
