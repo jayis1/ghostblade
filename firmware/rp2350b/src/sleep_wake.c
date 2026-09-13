@@ -21,7 +21,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "pico/stdlib.h"
-#include "pico/multicore.h"
 #include "hardware/clocks.h"
 #include "hardware/irq.h"
 #include "sleep_wake.h"
@@ -126,18 +125,17 @@ static void exit_light_sleep(void) {
 /**
  * enter_deep_sleep — Transition to SLEEP_DEEP
  *
- * Halts Core 1 and reduces system clock further.
+ * Keeps Core 1 running and reduces system clock further.
  * Only SPI0 and watchdog remain active.
  */
 static void enter_deep_sleep(void) {
-    /* Already in light sleep (48 MHz); Core 1 may already be
-     * paused by the SDR DMA idle detection. Signal Core 1 to
-     * finish its current buffer and stop. */
+    /* Core 1 has no companion FIFO receive loop. Do not use a blocking
+     * multicore FIFO write here: it would deadlock Core 0 once the FIFO
+     * fills and prevent watchdog servicing. DMA processing is already a
+     * no-op while streaming is stopped, so Core 1 can remain running. */
 
     /* Reset activity tracker before deep sleep */
     reset_spi_activity_tracker();
-
-    multicore_fifo_push_blocking(0xDEAD0000U);
 
     /* Further reduce clock — keep at 48 MHz but disable more
      * peripheral clocks. SPI0 slave still works at 48 MHz since
@@ -147,7 +145,7 @@ static void enter_deep_sleep(void) {
 /**
  * exit_deep_sleep — Restore full operation from SLEEP_DEEP
  *
- * Restores clocks and relaunches Core 1.
+ * Restores clocks while the already-running Core 1 continues processing.
  * Also kicks the watchdog since deep sleep may have consumed
  * significant time from the watchdog timeout window.
  */
@@ -160,11 +158,9 @@ static void exit_deep_sleep(void) {
      * during the deep sleep period. */
     watchdog_kick();
 
-    /* Relaunch Core 1 — it will reinitialize SDR DMA.
-     * The SDR DMA module handles its own re-init on Core 1
-     * startup, so we just need to launch the entry point again. */
-    extern void core1_entry(void);
-    multicore_launch_core1(core1_entry);
+    /* Core 1 was not halted on entry. Relaunching it here would create a
+     * second entry attempt against an active core and is not supported by
+     * the Pico multicore API. */
 }
 
 enum sleep_state sleep_wake_process(void) {

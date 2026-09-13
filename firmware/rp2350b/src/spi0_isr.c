@@ -105,6 +105,7 @@ static struct {
 static struct {
     uint8_t buf[SPI_FRAME_BUF_SIZE];   /* TX response buffer */
     uint16_t len;                        /* Response length */
+    uint16_t pos;                        /* Next byte for the TX FIFO */
     volatile bool response_pending;      /* True when response is queued */
 } spi0_tx;
 
@@ -400,12 +401,13 @@ void spi0_handler(void) {
          * to prevent a stuck TNF bit from causing an infinite loop in
          * the ISR. If TNF stays asserted beyond the FIFO size, the
          * peripheral is malfunctioning and we bail out defensively. */
-        uint16_t tx_pos = 0;
-        while (tx_pos < spi0_tx.len && tx_pos < 16 &&
+        uint16_t fifo_entries = 0;
+        while (spi0_tx.pos < spi0_tx.len && fifo_entries < 16 &&
                (spi[SPI_SSPSR / 4] & SPI_SSPSR_TNF)) {
-            spi[SPI_SSPDR / 4] = spi0_tx.buf[tx_pos++];
+            spi[SPI_SSPDR / 4] = spi0_tx.buf[spi0_tx.pos++];
+            fifo_entries++;
         }
-        if (tx_pos >= spi0_tx.len) {
+        if (spi0_tx.pos >= spi0_tx.len) {
             spi0_tx.response_pending = false;
             spi0_deassert_int_req();
         }
@@ -429,6 +431,9 @@ void spi0_handler(void) {
  * Returns: true if a frame is available
  */
 bool spi0_rx_get_frame(const uint8_t **buf, uint16_t *len) {
+    if (!buf || !len)
+        return false;
+
     if (!spi0_rx.frame_ready)
         return false;
 
@@ -477,11 +482,12 @@ void spi0_rx_release_frame(void) {
  * the host that data is available.
  */
 void spi0_tx_queue_response(const uint8_t *frame, uint16_t len) {
-    if (len > SPI_FRAME_BUF_SIZE)
+    if (!frame || len == 0 || len > SPI_FRAME_BUF_SIZE)
         return;
 
     memcpy(spi0_tx.buf, frame, len);
     spi0_tx.len = len;
+    spi0_tx.pos = 0;
     /* Ensure TX data is visible before setting response_pending flag.
      * Without this barrier, the ISR could start reading the TX buffer
      * before the memcpy completes on ARM Cortex-M33 with data cache. */
