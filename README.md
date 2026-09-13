@@ -29,7 +29,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ## Current Repository State
 
-Validated locally on 2026-08-26:
+Validated locally on 2026-09-13:
 
 - `python3 tools/check_internal_links.py` → no broken internal links
 - `python3 tools/validate_dts.py` → DTS cross-reference checks passed

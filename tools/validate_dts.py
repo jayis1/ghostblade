@@ -9,6 +9,7 @@ Checks that:
 3. LED/button GPIO numbers match DTS to schematic netlist
 4. Overlay references target existing nodes
 5. All referenced pinctrl groups are defined in the base DTS
+6. The base DTS memory range matches the 8 GiB LPDDR5 manifest entry
 """
 
 import re
@@ -65,6 +66,35 @@ def check_bridge_gpios():
         ERRORS.append(f"Bridge GPIO pins {bridge_pins} don't match expected [8, 9, 10]")
     else:
         print("✓ Bridge GPIOs: INT_REQ=gpio1.8, HOST_RDY=gpio1.9, MCU_RESET=gpio1.10 (correct)")
+
+
+def check_memory_size():
+    """Verify the 64-bit DTS RAM size agrees with the hardware manifest."""
+    dts_path = os.path.join(ROOT, "software/dts/ghostblade-rk3576.dts")
+    manifest_path = os.path.join(ROOT, "GhostBlade.mf")
+    with open(dts_path) as f:
+        dts = f.read()
+    with open(manifest_path) as f:
+        manifest = f.read()
+
+    memory = re.search(
+        r'memory@0\s*\{.*?reg\s*=\s*<\s*0x[0-9a-fA-F]+\s+'
+        r'0x[0-9a-fA-F]+\s+(0x[0-9a-fA-F]+)\s+(0x[0-9a-fA-F]+)\s*>;',
+        dts, re.DOTALL)
+    if not memory:
+        ERRORS.append("DTS memory@0 node has no parseable 64-bit reg property")
+        return
+
+    size = (int(memory.group(1), 16) << 32) | int(memory.group(2), 16)
+    expected = 8 * 1024 * 1024 * 1024
+    if "RAM               = \"8GB LPDDR5" not in manifest:
+        ERRORS.append("Manifest no longer declares 8GB LPDDR5; update memory validation")
+    elif size != expected:
+        ERRORS.append(
+            f"DTS memory size is {size:#x} ({size // (1024 * 1024)} MiB), "
+            "but manifest requires 8 GiB")
+    else:
+        print("✓ DTS memory@0 size is 8 GiB and matches the manifest")
 
 
 def check_pinctrl_completeness():
@@ -136,6 +166,7 @@ def main():
 
     check_dts_spi_pins()
     check_bridge_gpios()
+    check_memory_size()
     check_pinctrl_completeness()
     check_overlay_targets()
     check_nfc_overlay_gpio()

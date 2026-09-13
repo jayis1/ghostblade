@@ -13,6 +13,15 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
+### Fixed
+
+- **DTS memory capacity mismatch**: Corrected the base board `memory@0` range from 2 GiB to the manifest-specified 8 GiB LPDDR5 capacity. `tools/validate_dts.py` now parses the 64-bit memory range and rejects future manifest/DTS capacity drift.
+- **Documentation-index table syntax**: Repaired malformed Markdown table delimiters in the validation-tools section so it renders consistently across Markdown viewers.
+
+### Changed
+
+- Refreshed the README local-validation date after running the documentation, DTS/netlist, and host-side test checks. Added SPDX and copyright metadata to the KiCad 3D-model reference document.
+
 ### Added
 
 - **Python packaging metadata for pyapex**: Added `software/libapex/pyproject.toml` and an `apex.py` compatibility shim so modern `python3 -m pip install .` builds work cleanly and both `import pyapex` and legacy `import apex` scripts are supported.

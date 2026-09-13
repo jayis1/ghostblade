@@ -44,7 +44,8 @@
 
 	memory@0 {
 		device_type = "memory";
-		reg = <0x0 0x0 0x0 0x80000000>; /* 8 GB LPDDR5 */
+		/* 64-bit address and size cells: 0x00000002_00000000 = 8 GiB. */
+		reg = <0x0 0x0 0x2 0x0>; /* 8 GB LPDDR5 */
 	};
 
 	/* ================================================================

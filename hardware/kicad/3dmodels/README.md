@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- Copyright (C) 2026 GhostBlade Project -->
+
 # GhostBlade — 3D Model References
 
 Each major IC has a corresponding STEP model for KiCad 3D visualization.
