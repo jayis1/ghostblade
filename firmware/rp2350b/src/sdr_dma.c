@@ -209,15 +209,15 @@ void sdr_dma_irq_handler(void) {
          * usable. On overrun discard exactly one oldest block before
          * publishing the completed block; never let blocks_filled exceed
          * SDR_RING_NUM_BLOCKS. */
-        if (filled >= SDR_RING_NUM_BLOCKS) {
+        if (next_write == proto_read_block) {
             dma_stats.overruns++;
             __atomic_store_n(&proto_read_block,
                              (uint8_t)((proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1)),
-                             __ATOMIC_RELEASE);
-            __atomic_sub_fetch(&blocks_filled, 1, __ATOMIC_RELEASE);
+                             __ATOMIC_RELAXED);
+        } else {
+            __atomic_add_fetch(&blocks_filled, 1, __ATOMIC_RELAXED);
         }
 
-        __atomic_add_fetch(&blocks_filled, 1, __ATOMIC_RELEASE);
         dma_write_block = next_write;
         dma_stats.total_blocks_captured++;
 

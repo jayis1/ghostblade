@@ -670,7 +670,35 @@ static void test_continuous_streaming_overrun_recovery(void) {
                   "Buffer empty after balanced phase");
 }
 
-/* Test 17: Ring buffer pointer alignment after multiple wrap cycles */
+/* Test 17: Occupancy stays bounded after repeated producer overruns.
+ *
+ * This specifically guards the ISR accounting rule: replacing an oldest
+ * block on an overrun must leave occupancy at seven, rather than increment
+ * it past the ring capacity. */
+static void test_overrun_occupancy_is_bounded(void) {
+    sim_reset();
+
+    for (int i = 0; i < 256; i++) {
+        sim_dma_isr_handler();
+        ASSERT_TRUE(sim_blocks_filled <= SDR_RING_NUM_BLOCKS - 1,
+                    "Ring occupancy never exceeds usable capacity");
+    }
+
+    ASSERT_EQ_INT(SDR_RING_NUM_BLOCKS - 1, (int)sim_blocks_filled,
+                  "Ring remains at usable capacity after producer burst");
+    ASSERT_EQ_UINT(256 - (SDR_RING_NUM_BLOCKS - 1), sim_dma_stats.overruns,
+                   "Each post-capacity completion records one overrun");
+
+    while (sim_blocks_filled > 0)
+        sim_proto_release_block();
+
+    ASSERT_EQ_INT(0, (int)sim_blocks_filled,
+                  "Draining a full ring does not expose stale blocks");
+    ASSERT_EQ_UINT(SDR_RING_NUM_BLOCKS - 1, sim_dma_stats.total_blocks_sent,
+                   "Only retained blocks are reported as sent");
+}
+
+/* Test 18: Ring buffer pointer alignment after multiple wrap cycles */
 static void test_pointer_alignment_multiple_cycles(void) {
     sim_reset();
 
@@ -737,6 +765,7 @@ int main(void) {
     RUN_TEST(test_multiple_underruns);
     RUN_TEST(test_partial_consume_pattern);
     RUN_TEST(test_continuous_streaming_overrun_recovery);
+    RUN_TEST(test_overrun_occupancy_is_bounded);
     RUN_TEST(test_pointer_alignment_multiple_cycles);
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
