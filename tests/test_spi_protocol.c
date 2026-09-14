@@ -177,7 +177,8 @@ static int build_spi_frame(uint8_t cmd, const uint8_t *payload,
     uint64_t hdr_crc;
     uint32_t pay_crc;
 
-    if (payload_len > SPI_MAX_PAYLOAD)
+    if (payload_len > SPI_MAX_PAYLOAD ||
+        (payload_len != 0 && payload == NULL))
         return -1;
 
     total_len = SPI_HDR_SIZE + payload_len + SPI_CRC32_SIZE;
@@ -644,7 +645,21 @@ static void test_oversized_payload(void) {
     ASSERT_TRUE(ret > 0, "Accept payload = max (4092 bytes)");
 }
 
-/* Test 12: CRC-32 bit-flip detection (single bit corruption in payload) */
+/* Test 12: Reject a non-empty payload without a source buffer */
+static void test_null_payload_rejected(void) {
+    uint8_t frame[64];
+    int ret;
+
+    ret = build_spi_frame(CMD_TELEMETRY, NULL, 1, frame, sizeof(frame));
+    ASSERT_EQ_INT(-1, ret,
+                  "Reject non-empty frame with NULL payload source");
+
+    ret = build_spi_frame(CMD_NOP, NULL, 0, frame, sizeof(frame));
+    ASSERT_EQ_INT(SPI_HDR_SIZE + SPI_CRC32_SIZE, ret,
+                  "Allow zero-length frame with NULL payload source");
+}
+
+/* Test 13: CRC-32 bit-flip detection (single bit corruption in payload) */
 static void test_crc32_single_bit_flip(void) {
     uint8_t frame[512];
     int frame_len;
@@ -1540,6 +1555,7 @@ int main(void) {
     RUN_TEST(test_length_mismatch);
     RUN_TEST(test_max_payload_frame);
     RUN_TEST(test_oversized_payload);
+    RUN_TEST(test_null_payload_rejected);
     RUN_TEST(test_crc32_single_bit_flip);
     RUN_TEST(test_crc64_single_bit_flip);
     RUN_TEST(test_multiple_frame_types);

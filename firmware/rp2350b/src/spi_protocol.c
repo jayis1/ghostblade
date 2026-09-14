@@ -506,7 +506,11 @@ static int build_response_frame(uint8_t cmd, const uint8_t *payload,
     uint64_t crc64_val;
     uint32_t crc32_val;
 
-    if (payload_len > SPI_MAX_PAYLOAD)
+    /* A non-empty frame must have an explicit source buffer.  Leaving the
+     * payload portion of the stack frame uninitialized would both produce a
+     * non-deterministic CRC and disclose stale stack contents to the host. */
+    if (payload_len > SPI_MAX_PAYLOAD ||
+        (payload_len != 0 && payload == NULL))
         return -1;
 
     /* Build header */
