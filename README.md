@@ -39,9 +39,56 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 
 ## What Is This?
 
-GhostBlade is a pocket-sized penetration testing device that combines a powerful Linux SoC with a real-time coprocessor to deliver wideband SDR, sub-GHz radio, NFC, and Wi-Fi 6E — all in a form factor that fits in your hand.
+GhostBlade is a pocket-sized penetration testing and security research platform that combines a powerful Linux SoC with a real-time coprocessor to deliver wideband SDR, sub-GHz radio, NFC/RFID, Wi-Fi 6E, RTK GPS — all in a rugged handheld form factor.
 
-The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling) while the RK3576 runs a full Linux distribution with pentesting tools.
+The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling) while the RK3576 runs a full Linux distribution with pentesting tools pre-loaded.
+
+---
+
+## What Can It Do?
+
+### 📡 Software-Defined Radio (100 kHz – 3.8 GHz)
+- Full-duplex 2×2 MIMO SDR via **LMS7002M** over MIPI-CSI-2 to the RK3576
+- Spectrum analysis, signal capture, replay, and jamming research across the full RF band
+- Wideband receiver for GSM, LTE, FM/AM, ADS-B, AIS, APRS, P25, DMR, Tetra, LoRa and more
+- Transmit capability for authorized research: signal generation, replay attacks, protocol fuzzing
+- DMA ring buffer on RP2350B streams IQ blocks at 512-byte chunks to the Linux host in real time
+
+### 📻 Sub-GHz Radio (300–928 MHz)
+- **CC1101** transceiver for OOK, (G)FSK, ASK — the same chipset used in Flipper Zero
+- Capture, decode, replay, and brute-force garage openers, car key fobs, alarm sensors, TPMS
+- Raw RF packet sniffing and injection at configurable data rates and frequencies
+- Managed by the RP2350B real-time core — ultra-low latency TX/RX without Linux scheduling jitter
+
+### 🔖 NFC & RFID (13.56 MHz)
+- **ST25R3916** NFC controller — ISO 14443 A/B, ISO 15693, FeliCa, NFC-DEP (P2P)
+- Read, clone, and emulate MIFARE Classic, MIFARE Ultralight, MIFARE DESFire EV1/EV2/EV3
+- ISO 15693 vicinity card polling (HID iCLASS, LEGIC, EM4xx)
+- NFC loop coil antenna integrated into the back plate — full-device contact area
+
+### 📶 Wi-Fi 6E & Bluetooth 5.4
+- **MT7922** for 2.4 GHz / 5 GHz / 6 GHz Wi-Fi 6E 2×2 — monitor mode, packet injection, AP mode
+- WPA3, 802.11r/k/v analysis, deauthentication testing, Evil Twin / KARMA attacks
+- Bluetooth 5.4 with BLE and Classic — passive sniffing, MITM, device spoofing
+
+### 🛰 RTK GPS (L1/L2/L5)
+- **u-blox ZED-F9P** — centimeter-level RTK positioning across GPS, GLONASS, Galileo, BeiDou, NavIC
+- External SMA port for high-gain patch or helical antennas
+- Geofencing, trail logging, precision timing for SDR frequency references
+
+### 🧠 Linux Host (RK3576)
+- 4× Cortex-A72 + 4× Cortex-A53 @ up to 2.2 GHz, **6 TOPS** NPU for on-device ML inference
+- 8 GB LPDDR5 + 32 GB eMMC + M.2 NVMe slot — runs a full Debian/Kali Linux environment
+- Pre-loaded pentesting tools: GNU Radio, SoapySDR, GqRX, Aircrack-ng, Hashcat, Kismet, Wireshark, Nmap, Metasploit and more
+- `libapex` Python library exposes SDR, sub-GHz, and NFC as a clean Python API
+
+### 🔌 Connectivity
+- **3× USB-A 3.0** host ports — plug in Rubber Ducky, Wi-Fi adapters, SDR dongles, storage
+- **1× USB-C** — power delivery, OTG, debug UART
+- M.2 2230 NVMe for high-speed tool/capture storage
+- 5000 mAh Li-Po — estimated 4–6 hours active pentesting runtime
+
+---
 
 ## Current Repository State
 
@@ -331,12 +378,52 @@ ghostblade/
 | Battery | 5000 mAh Li-Po (19.25 Wh) |
 | Form Factor | 162 × 76 × 18 mm, ~320 g |
 | GPS | u-blox ZED-F9P (multi-band RTK, L1/L2/L5, cm-level, 184-ch) |
-| USB | 4× USB-A 3.0 (host) + 1× USB-C (power/OTG) |
+| USB | 3× USB-A 3.0 (host) + 1× USB-C (power/data/OTG) |
 | PCB | 6-layer FR-4 (Isola 370HR), 1.6 mm, IPC Class 3 |
 
 ---
 
-## Repository Stats
+## Concept Art Specification
+
+> **For AI image generation (ChatGPT, Midjourney, DALL·E, Stable Diffusion):**
+> Paste the block below as your prompt to generate accurate concept art.
+
+```
+GhostBlade — rugged handheld Linux pentesting device, military-grade product render.
+
+FORM FACTOR: 162mm × 76mm × 18mm, ~320g. Looks like a thicker smartphone crossed with a Flipper Zero — matte black anodized aluminum chassis with soft rubber grip zones at all four corners.
+
+FRONT FACE:
+- Large 5.5-inch 1080p touchscreen (most of the front) showing a dark SDR spectrum analyzer UI with electric cyan waveforms and status HUD
+- Four illuminated tactile buttons below screen: [SDR] [NFC] [SUB-GHz] [BT] with colored LED rings (cyan, green, amber, purple)
+- GhostBlade diamond logo (faceted gem shape) glowing electric blue — top-right corner
+- "PROJECT NULLSPECTRE" text badge below logo
+
+TOP EDGE (left to right, 5 stubby black SMA antenna ports):
+  1. SDR (LMS7002M) — wideband 100kHz–3.8GHz
+  2. SUB-G (CC1101) — 300–928MHz sub-GHz
+  3. Wi-Fi 6E (MT7922) — 2.4/5/6GHz
+  4. BT 5.4 (MT7922) — Bluetooth
+  5. GPS (ZED-F9P) — RTK L1/L2/L5 (slightly taller antenna)
+
+RIGHT SIDE (top to bottom):
+  - 3× USB-A 3.0 ports stacked vertically, each with a blue LED indicator ring
+
+LEFT SIDE (top to bottom):
+  - 1× USB-C port (power/OTG/debug)
+  - 1× 6-pin debug header (gold pins)
+  - Thermal vent slats
+  - Small green LED labeled "GPS"
+
+BACK:
+  - Large NFC loop coil antenna embedded behind the entire back plate (visible as subtle rectangular trace outline)
+  - GhostBlade diamond emblem in brushed metal center
+  - Battery cover seam at bottom third
+
+COLOR SCHEME: deep charcoal black chassis, electric cyan (#00E8FF) accent lighting, cobalt blue (#0055FF) secondary, green (#00FF88) status LEDs. Screen emits blue-cyan glow.
+
+STYLE: cinematic CGI product photography, studio hero shot from 3/4 isometric angle above-right, floating on pure black void, dramatic underlighting in cyan, sharp shadows, photorealistic anodized aluminum and rubber materials, 8K detail.
+```
 
 | Metric | Value |
 |--------|-------|
