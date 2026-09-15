@@ -90,6 +90,14 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 - M.2 2230 NVMe for high-speed tool/capture storage
 - 5000 mAh Li-Po — estimated 4–6 hours active pentesting runtime
 
+### 🎙 Audio — Walkie-Talkie & Voice
+- **ES8388 audio codec** connected to RK3576 via I2S — low-latency full-duplex audio
+- **Dual 1W stereo speakers** — loud enough for field use, voice alerts, and audio replay of decoded signals
+- **Digital MEMS microphone array (PDM)** — front-facing, voice-optimized with noise cancellation
+- Push-to-talk walkie-talkie over any RF link: CC1101 (sub-GHz), Wi-Fi 6E (VoIP/Mumble), Bluetooth (SCO/HFP)
+- On-device voice commands via the RK3576's 6 TOPS NPU — wake word detection without cloud
+- Audio playback of decoded RF signals: AM/FM demod, APRS tones, DTMF, pager intercepts
+
 ---
 
 ## Current Repository State
@@ -324,6 +332,7 @@ ghostblade/
 │       ├── ghostblade-wifi-overlay.dts          # Wi-Fi 6E (MT7922) configuration overlay
 │       ├── ghostblade-sleep-overlay.dts          # Sleep/wake power state overlay
 │       ├── ghostblade-gps-overlay.dts            # GPS (u-blox ZED-F9P, RTK, L1/L2/L5) overlay
+│       ├── ghostblade-audio-overlay.dts          # ES8388 audio codec (I2S + PDM mic) overlay
 │       └── Makefile                            # DTS compile & validate targets
 │   └── toolchain.conf                          # Cross-compilation toolchain setup
 ├── tests/
@@ -377,6 +386,7 @@ ghostblade/
 | Sub-GHz | CC1101 (300–928 MHz, OOK/FSK/GFSK) |
 | NFC | ST25R3916 (ISO 14443 A/B, 15693, FeliCa) |
 | Wi-Fi/BT | MT7922 (Wi-Fi 6E 2×2, BT 5.4) |
+| Audio | ES8388 codec — stereo speaker (1W × 2) + digital MEMS mic array (PDM) |
 | Battery | 5000 mAh Li-Po (19.25 Wh) |
 | Form Factor | 162 × 76 × 18 mm, ~320 g |
 | GPS | u-blox ZED-F9P (multi-band RTK, L1/L2/L5, cm-level, 184-ch) |
@@ -398,6 +408,8 @@ FORM FACTOR: 162mm × 76mm × 18mm, ~320g. Looks like a thicker smartphone cross
 FRONT FACE:
 - Large 5.5-inch 1080p touchscreen (most of the front) showing a dark SDR spectrum analyzer UI with electric cyan waveforms and status HUD
 - Four illuminated tactile buttons below screen: [SDR] [NFC] [SUB-GHz] [BT] with colored LED rings (cyan, green, amber, purple)
+- Small speaker grille (dot matrix pattern) on the upper-left of the front face, above the screen
+- Tiny MEMS microphone pinhole above the screen, next to the speaker grille
 - GhostBlade diamond logo (faceted gem shape) glowing electric blue — top-right corner
 - "PROJECT NULLSPECTRE" text badge below logo
 
