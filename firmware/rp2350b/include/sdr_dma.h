@@ -7,7 +7,7 @@
  * Manages DMA-based ring buffer for SDR IQ data streaming from the
  * LMS7002M to the RK3576 host. The RP2350B's Core 1 runs the DMA
  * processing loop (sdr_dma_process) which continuously transfers
- * IQ samples from the LMS7002M MIPI CSI-2 interface into DMA buffers
+ * IQ samples from the LMS7002M SPI1 receive path into DMA buffers
  * and feeds them into the SPI protocol handler.
  *
  * Data format: interleaved I16/Q16 samples (4 bytes per IQ sample)
@@ -25,7 +25,7 @@
 #define SDR_DMA_RING_SIZE           8
 
 /** Size of each DMA buffer in bytes (must be multiple of 4) */
-#define SDR_DMA_BUF_SIZE            32768
+#define SDR_DMA_BUF_SIZE            512
 
 /** Maximum IQ sample rate in samples per second */
 #define SDR_DMA_MAX_SAMPLE_RATE     4096000
@@ -62,7 +62,7 @@ int sdr_dma_init(void);
 /**
  * sdr_dma_start — Start SDR IQ data streaming
  *
- * Begins DMA transfers from the LMS7002M CSI-2 interface into the
+ * Begins DMA transfers from the LMS7002M SPI1 receive path into the
  * ring buffer. Core 1 will call sdr_dma_process() in a tight loop
  * to feed completed buffers into the SPI protocol handler.
  *
