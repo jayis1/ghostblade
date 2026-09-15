@@ -29,7 +29,9 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 
 ![GhostBlade Blueprint](concept-art/ghostblade-blueprint.png)
 
-*Blueprint schematic showing all views — front, top, sides, back, and isometric — with key specifications.*
+![GhostBlade Concept Art](concept-art/ghostblade-concept-art.png)
+
+*Blueprint schematic and concept art — front, top, sides, back, isometric views with SDR UI, NFC back-plate coil detail, and full specifications.*
 
 </div>
 
