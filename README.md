@@ -21,6 +21,24 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 
 ---
 
+## Concept Art
+
+> Device renderings and visual concepts live here. Drop your images into `concept-art/` and they will appear below automatically once the PR is merged.
+
+<div align="center">
+
+<!-- Add rendered images below. Example:
+![GhostBlade Front View](concept-art/ghostblade-front.png)
+![GhostBlade Side View](concept-art/ghostblade-side.png)
+![GhostBlade Exploded View](concept-art/ghostblade-exploded.png)
+-->
+
+*Concept renderings coming soon — contributions welcome via pull request.*
+
+</div>
+
+---
+
 ## What Is This?
 
 GhostBlade is a pocket-sized penetration testing device that combines a powerful Linux SoC with a real-time coprocessor to deliver wideband SDR, sub-GHz radio, NFC, and Wi-Fi 6E — all in a form factor that fits in your hand.
@@ -314,6 +332,8 @@ ghostblade/
 | Wi-Fi/BT | MT7922 (Wi-Fi 6E 2×2, BT 5.4) |
 | Battery | 5000 mAh Li-Po (19.25 Wh) |
 | Form Factor | 162 × 76 × 18 mm, ~320 g |
+| GPS | u-blox NEO-M10N (72-channel, L1 C/A, UART/I2C, 1.8V) |
+| USB | 2× USB-A 3.0 (host) + 1× USB-C (power/OTG) |
 | PCB | 6-layer FR-4 (Isola 370HR), 1.6 mm, IPC Class 3 |
 
 ---
