@@ -53,6 +53,7 @@ set(FW_SOURCES
     src/peripheral_power.c
     src/lms7002m_driver.c
     src/adc_calibration.c
+    src/es8388_driver.c
 )
 
 set(FW_HEADERS
@@ -69,6 +70,7 @@ set(FW_HEADERS
     include/peripheral_power.h
     include/lms7002m_driver.h
     include/adc_calibration.h
+    include/es8388_driver.h
 )
 
 # ── Create executable ─────────────────────────────────────────────────────────
