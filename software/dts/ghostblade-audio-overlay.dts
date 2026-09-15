@@ -1,0 +1,139 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree Overlay — GhostBlade ES8388 Audio Codec
+ * Project NullSpectre
+ *
+ * Configures the ES8388 stereo audio codec connected to the RK3576:
+ *   - I2S2 (RK3576) as I2S master → ES8388 as I2S slave
+ *   - MCLK from RK3576 MCLK_OUT2
+ *   - ES8388 I2C control via RP2350B I2C0 (addr 0x11)
+ *   - Dual 1W speaker outputs (LOUT1/ROUT1)
+ *   - MEMS PDM microphone capture (ADC LINPUT1/RINPUT1)
+ *   - Supports PTT via RP2350B GPIO6 → LMS7002M TX enable
+ *
+ * Audio capabilities:
+ *   - SDR walkie-talkie (any freq 100 kHz–3.8 GHz, NFM/AM/DMR/P25/FreeDV)
+ *   - CC1101 sub-GHz PTT (OOK/FSK voice)
+ *   - Wi-Fi 6E VoIP (Mumble/SIP)
+ *   - Bluetooth SCO/HFP headset
+ *   - On-device wake word via 6 TOPS NPU (no cloud)
+ *
+ * Usage:
+ *   dtc -I dts -O dtb -@ -o ghostblade-audio-overlay.dtbo ghostblade-audio-overlay.dts
+ *   sudo mkdir -p /sys/kernel/config/device-tree/overlays/audio
+ *   sudo cp ghostblade-audio-overlay.dtbo /sys/kernel/config/device-tree/overlays/audio/dtbo
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/sound/rockchip,rk-audio.h>
+
+/ {
+	compatible = "ghostblade,nullspectre", "rockchip,rk3576";
+
+	/*
+	 * Fragment 0: ES8388 codec node on I2C2 (RK3576 side)
+	 *
+	 * The ES8388's I2C control is bridged through the RP2350B
+	 * on the hardware side, but from Linux's perspective it
+	 * appears as a native I2C device on RK3576 I2C2.
+	 */
+	fragment@0 {
+		target = <&i2c2>;
+		__overlay__ {
+			status = "okay";
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			es8388: es8388@11 {
+				compatible = "everest,es8388";
+				reg = <0x11>;
+				clocks = <&mclkout_i2s2>;
+				clock-names = "mclk";
+				DVDD-supply = <&vcc_1v8>;
+				AVDD-supply = <&vcc_3v3>;
+				PVDD-supply = <&vcc_3v3>;
+				HPVDD-supply = <&vcc_3v3>;
+				/* PTT signal driven by RP2350B GPIO6 */
+				ptt-gpios = <&gpio_mcu 6 GPIO_ACTIVE_HIGH>;
+				#sound-dai-cells = <0>;
+			};
+		};
+	};
+
+	/*
+	 * Fragment 1: I2S2 controller (RK3576) as I2S master
+	 *
+	 * RK3576 I2S2 clocks the ES8388 as I2S slave.
+	 * Sample rate: 16 kHz (voice), 44.1/48 kHz (audio playback).
+	 * Audio pipeline: MEMS mic → ADC → I2S2 → RK3576 ALSA capture
+	 *                 RK3576 ALSA playback → I2S2 → ES8388 DAC → speakers
+	 */
+	fragment@1 {
+		target = <&i2s2_8ch>;
+		__overlay__ {
+			status = "okay";
+			rockchip,bclk-fs = <32>;
+			rockchip,clk-trcm = <1>;
+		};
+	};
+
+	/*
+	 * Fragment 2: ASoC sound card — "GhostBlade Audio"
+	 *
+	 * Exposes the following ALSA PCM devices:
+	 *   hw:0,0 — Voice capture (MEMS mic, 16 kHz mono)
+	 *   hw:0,1 — Speaker playback (decoded RF audio, 16–48 kHz)
+	 *   hw:0,2 — Full-rate stereo (music / GNU Radio audio pipe)
+	 */
+	fragment@2 {
+		target-path = "/";
+		__overlay__ {
+			ghostblade_audio: ghostblade-audio {
+				compatible = "simple-audio-card";
+				simple-audio-card,name = "GhostBlade Audio";
+				simple-audio-card,format = "i2s";
+				simple-audio-card,mclk-fs = <256>;
+
+				simple-audio-card,widgets =
+					"Microphone", "MEMS Mic",
+					"Speaker", "Left Speaker",
+					"Speaker", "Right Speaker";
+
+				simple-audio-card,routing =
+					"LINPUT1", "MEMS Mic",
+					"RINPUT1", "MEMS Mic",
+					"Left Speaker", "LOUT1",
+					"Right Speaker", "ROUT1";
+
+				simple-audio-card,cpu {
+					sound-dai = <&i2s2_8ch>;
+					dai-tdm-slot-num = <2>;
+					dai-tdm-slot-width = <16>;
+				};
+
+				simple-audio-card,codec {
+					sound-dai = <&es8388>;
+					clocks = <&mclkout_i2s2>;
+				};
+			};
+		};
+	};
+
+	/*
+	 * Fragment 3: MCLK_OUT2 clock enable
+	 *
+	 * RK3576 provides MCLK to ES8388. Default rate: 11.2896 MHz
+	 * (256 × 44.1 kHz) — covers all target sample rates.
+	 */
+	fragment@3 {
+		target = <&mclkout_i2s2>;
+		__overlay__ {
+			status = "okay";
+			assigned-clocks = <&mclkout_i2s2>;
+			assigned-clock-rates = <11289600>;
+		};
+	};
+};
