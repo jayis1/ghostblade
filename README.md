@@ -398,46 +398,51 @@ ghostblade/
 
 ## Concept Art Specification
 
-> **For AI image generation (ChatGPT, Midjourney, DALL·E, Stable Diffusion):**
-> Paste the block below as your prompt to generate accurate concept art.
+> **Copy and paste this prompt directly into ChatGPT, Midjourney, DALL·E, or Stable Diffusion.**
 
 ```
-GhostBlade — rugged handheld Linux pentesting device, military-grade product render.
+Product render of the GhostBlade — a rugged, military-grade handheld Linux 
+pentesting device. Photorealistic CGI, studio hero shot, 3/4 isometric angle 
+from above-right, floating on pure black void. Cinematic underlighting in 
+electric cyan and cobalt blue. Sharp shadows, 8K detail, no text overlays.
 
-FORM FACTOR: 162mm × 76mm × 18mm, ~320g. Looks like a thicker smartphone crossed with a Flipper Zero — matte black anodized aluminum chassis with soft rubber grip zones at all four corners.
+CHASSIS: 162 × 76 × 18mm, ~320g. Matte black anodized aluminum body. 
+Soft-touch black rubber grip zones recessed into all four corners. 
+Slim profile — thicker than a phone, smaller than a tablet.
 
-FRONT FACE:
-- Large 5.5-inch 1080p touchscreen (most of the front) showing a dark SDR spectrum analyzer UI with electric cyan waveforms and status HUD
-- Four illuminated tactile buttons below screen: [SDR] [NFC] [SUB-GHz] [BT] with colored LED rings (cyan, green, amber, purple)
-- Small speaker grille (dot matrix pattern) on the upper-left of the front face, above the screen
-- Tiny MEMS microphone pinhole above the screen, next to the speaker grille
-- GhostBlade diamond logo (faceted gem shape) glowing electric blue — top-right corner
-- "PROJECT NULLSPECTRE" text badge below logo
+FRONT:
+- 5.5-inch 1080p touchscreen fills most of the front face. Screen shows a 
+  live dark-theme SDR spectrum analyzer — glowing cyan FFT waveform, signal 
+  peaks, frequency grid, status bar.
+- Above the screen, top-left: small dot-matrix speaker grille and a 
+  MEMS microphone pinhole beside it.
+- Below the screen: four physical backlit buttons in a row — 
+  [SDR] cyan, [NFC] green, [SUB-GHz] amber, [BT] purple — each with a 
+  matching LED ring glowing through the chassis.
+- Top-right corner of front face: GhostBlade diamond logo — a faceted gem 
+  shape, glowing electric blue, with "PROJECT NULLSPECTRE" engraved below it.
 
-TOP EDGE (left to right, 5 stubby black SMA antenna ports):
-  1. SDR (LMS7002M) — wideband 100kHz–3.8GHz
-  2. SUB-G (CC1101) — 300–928MHz sub-GHz
-  3. Wi-Fi 6E (MT7922) — 2.4/5/6GHz
-  4. BT 5.4 (MT7922) — Bluetooth
-  5. GPS (ZED-F9P) — RTK L1/L2/L5 (slightly taller antenna)
+TOP EDGE (left to right): five stubby black SMA antenna ports, evenly spaced, 
+each with a knurled metal collar and a small status LED. Labels:
+  1 — SDR   2 — SUB-G   3 — Wi-Fi 6E   4 — BT 5.4   5 — GPS (slightly taller)
 
-RIGHT SIDE (top to bottom):
-  - 3× USB-A 3.0 ports stacked vertically, each with a blue LED indicator ring
+RIGHT SIDE (top to bottom): three USB-A 3.0 ports stacked vertically, 
+each with a blue LED ring glowing inside the port opening.
 
-LEFT SIDE (top to bottom):
-  - 1× USB-C port (power/OTG/debug)
-  - 1× 6-pin debug header (gold pins)
-  - Thermal vent slats
-  - Small green LED labeled "GPS"
+LEFT SIDE (top to bottom): USB-C port, 6-pin gold debug header, 
+horizontal thermal vent slats, small green GPS status LED.
 
-BACK:
-  - Large NFC loop coil antenna embedded behind the entire back plate (visible as subtle rectangular trace outline)
-  - GhostBlade diamond emblem in brushed metal center
-  - Battery cover seam at bottom third
+BACK: entire back plate has a large rectangular NFC loop coil antenna 
+visible as a subtle embossed trace outline. Center: GhostBlade diamond 
+emblem in brushed metal. Lower third: battery cover seam.
 
-COLOR SCHEME: deep charcoal black chassis, electric cyan (#00E8FF) accent lighting, cobalt blue (#0055FF) secondary, green (#00FF88) status LEDs. Screen emits blue-cyan glow.
+MATERIALS: anodized aluminum with hairline brushing on the back panel, 
+hard-coated matte black on the front, soft rubber grips, glass screen 
+with anti-reflective coating and a fingerprint smudge near the bottom corner.
 
-STYLE: cinematic CGI product photography, studio hero shot from 3/4 isometric angle above-right, floating on pure black void, dramatic underlighting in cyan, sharp shadows, photorealistic anodized aluminum and rubber materials, 8K detail.
+LIGHTING: key light from upper-left in cool white, rim light in electric 
+cyan (#00E8FF) from behind-right, subtle cobalt blue (#0055FF) fill from below. 
+Screen glow illuminates the front face. No background — pure black void.
 ```
 
 | Metric | Value |
