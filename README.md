@@ -29,7 +29,9 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 
 ![GhostBlade Blueprint](concept-art/ghostblade-blueprint.png)
 
-*Blueprint schematic showing all views — front, top, sides, back, and isometric — with key specifications.*
+![GhostBlade Concept Art](concept-art/ghostblade-concept-art.png)
+
+*Blueprint schematic and concept art — front, top, sides, back, isometric views with SDR UI, NFC back-plate coil detail, and full specifications.*
 
 </div>
 
@@ -272,7 +274,7 @@ ghostblade/
 │       ├── ghostblade-nfc-overlay.dts          # NFC (ST25R3916) configuration overlay
 │       ├── ghostblade-wifi-overlay.dts          # Wi-Fi 6E (MT7922) configuration overlay
 │       ├── ghostblade-sleep-overlay.dts          # Sleep/wake power state overlay
-│       ├── ghostblade-gps-overlay.dts            # GPS (u-blox NEO-M10N) overlay
+│       ├── ghostblade-gps-overlay.dts            # GPS (u-blox ZED-F9P, RTK, L1/L2/L5) overlay
 │       └── Makefile                            # DTS compile & validate targets
 │   └── toolchain.conf                          # Cross-compilation toolchain setup
 ├── tests/
@@ -328,7 +330,7 @@ ghostblade/
 | Wi-Fi/BT | MT7922 (Wi-Fi 6E 2×2, BT 5.4) |
 | Battery | 5000 mAh Li-Po (19.25 Wh) |
 | Form Factor | 162 × 76 × 18 mm, ~320 g |
-| GPS | u-blox NEO-M10N (72-channel, L1 C/A, UART/I2C, 1.8V) |
+| GPS | u-blox ZED-F9P (multi-band RTK, L1/L2/L5, cm-level, 184-ch) |
 | USB | 4× USB-A 3.0 (host) + 1× USB-C (power/OTG) |
 | PCB | 6-layer FR-4 (Isola 370HR), 1.6 mm, IPC Class 3 |
 
