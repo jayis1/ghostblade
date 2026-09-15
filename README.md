@@ -98,7 +98,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 - **3× USB-A 3.0** host ports — plug in Rubber Ducky, Wi-Fi adapters, SDR dongles, storage
 - **1× USB-C** — power delivery, OTG, debug UART
 - M.2 2230 NVMe for high-speed tool/capture storage
-- 5000 mAh Li-Po — estimated 4–6 hours active pentesting runtime
+- 10000 mAh Li-Po — estimated 8–12 hours active pentesting runtime
 
 ### 🎙 Audio — Walkie-Talkie & Voice
 - **ES8388 audio codec** connected to RK3576 via I2S — low-latency full-duplex audio
@@ -175,7 +175,7 @@ graph TB
     eMMC[32 GB eMMC 5.1]
     NVMe[M.2 2230 NVMe]
     PMIC[RK817 PMIC]
-    BAT[5000 mAh Li-Po]
+    BAT[10000 mAh Li-Po]
 
     RK3576 -- SPI0 50 MHz<br/>CRC-64/CRC-32 framed --> RP2350B
     RK3576 -- INT_REQ / HOST_RDY --> RP2350B
@@ -398,7 +398,7 @@ ghostblade/
 | NFC | ST25R3916 (ISO 14443 A/B, 15693, FeliCa) |
 | Wi-Fi/BT | MT7922 (Wi-Fi 6E 2×2, BT 5.4) |
 | Audio | ES8388 codec — stereo speaker (1W × 2) + digital MEMS mic array (PDM) |
-| Battery | 5000 mAh Li-Po (19.25 Wh) |
+| Battery | 10000 mAh Li-Po (38.5 Wh) |
 | Form Factor | 162 × 76 × 18 mm, ~320 g |
 | GPS | u-blox ZED-F9P (multi-band RTK, L1/L2/L5, cm-level, 184-ch) |
 | USB | 3× USB-A 3.0 (host) + 1× USB-C (power/data/OTG) |
