@@ -27,13 +27,9 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 
 <div align="center">
 
-<!-- Add rendered images below. Example:
-![GhostBlade Front View](concept-art/ghostblade-front.png)
-![GhostBlade Side View](concept-art/ghostblade-side.png)
-![GhostBlade Exploded View](concept-art/ghostblade-exploded.png)
--->
+![GhostBlade Blueprint](concept-art/ghostblade-blueprint.png)
 
-*Concept renderings coming soon — contributions welcome via pull request.*
+*Blueprint schematic showing all views — front, top, sides, back, and isometric — with key specifications.*
 
 </div>
 
@@ -276,7 +272,7 @@ ghostblade/
 │       ├── ghostblade-nfc-overlay.dts          # NFC (ST25R3916) configuration overlay
 │       ├── ghostblade-wifi-overlay.dts          # Wi-Fi 6E (MT7922) configuration overlay
 │       ├── ghostblade-sleep-overlay.dts          # Sleep/wake power state overlay
-│       ├── ghostblade-gps-overlay.dts            # Optional GPS (u-blox NEO-M10N) overlay
+│       ├── ghostblade-gps-overlay.dts            # GPS (u-blox NEO-M10N) overlay
 │       └── Makefile                            # DTS compile & validate targets
 │   └── toolchain.conf                          # Cross-compilation toolchain setup
 ├── tests/
@@ -333,7 +329,7 @@ ghostblade/
 | Battery | 5000 mAh Li-Po (19.25 Wh) |
 | Form Factor | 162 × 76 × 18 mm, ~320 g |
 | GPS | u-blox NEO-M10N (72-channel, L1 C/A, UART/I2C, 1.8V) |
-| USB | 2× USB-A 3.0 (host) + 1× USB-C (power/OTG) |
+| USB | 4× USB-A 3.0 (host) + 1× USB-C (power/OTG) |
 | PCB | 6-layer FR-4 (Isola 370HR), 1.6 mm, IPC Class 3 |
 
 ---
