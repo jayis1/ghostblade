@@ -25,6 +25,7 @@
 #include "spi_protocol.h"
 #include "watchdog.h"
 #include "lms7002m_driver.h"
+#include "es8388_driver.h"
 
 /* Forward declarations from other modules */
 extern void watchdog_kick(void);
@@ -80,6 +81,10 @@ static void secure_wipe(void *ptr, size_t len) {
 #define CMD_NFC_TRANSACT        0x05
 #define CMD_TELEMETRY_REQ       0x06
 #define CMD_RESET_MCU           0x07
+/* Audio codec commands (Host → MCU) */
+#define CMD_AUDIO_VOLUME        0x08
+#define CMD_AUDIO_MIC_GAIN      0x09
+#define CMD_AUDIO_PTT           0x0A
 
 /* Command opcodes — MCU to Host */
 #define CMD_TELEMETRY           0x81
@@ -918,6 +923,109 @@ static int validate_frame_payload(void) {
 }
 
 /* ========================================================================
+ * Audio Codec Command Handlers
+ * ======================================================================== */
+
+/**
+ * handle_cmd_audio_volume — Set ES8388 DAC output volume
+ *
+ * Payload: 1 byte, signed 8-bit volume in dB (-96 to 0).
+ * A value of 0 = full scale; -96 = minimum (effectively muted).
+ *
+ * If the ES8388 is not initialized (audio hardware fault on boot),
+ * this command is silently ignored and not counted as an error —
+ * the device degrades gracefully without blocking the control path.
+ */
+static void handle_cmd_audio_volume(const uint8_t *payload, uint16_t len)
+{
+    if (len < 1) {
+        printf("AUDIO_VOLUME: short payload (%u bytes, need 1)\r\n", len);
+        proto_stats.cmd_unknown_rx++;
+        return;
+    }
+
+    int8_t vol_db = (int8_t)payload[0];
+    int ret = es8388_set_volume(vol_db);
+    if (ret != 0) {
+        printf("AUDIO_VOLUME: es8388_set_volume(%d) failed (%d)\r\n",
+               vol_db, ret);
+    } else {
+        printf("AUDIO_VOLUME: DAC volume set to %d dB\r\n", vol_db);
+    }
+}
+
+/**
+ * handle_cmd_audio_mic_gain — Set ES8388 ADC/PGA microphone gain
+ *
+ * Payload: 1 byte, unsigned gain in dB (0–24, clamped to 24 if higher).
+ * Gain is applied in 3 dB steps: 0, 3, 6, 9, 12, 15, 18, 21, 24 dB.
+ */
+static void handle_cmd_audio_mic_gain(const uint8_t *payload, uint16_t len)
+{
+    if (len < 1) {
+        printf("AUDIO_MIC_GAIN: short payload (%u bytes, need 1)\r\n", len);
+        proto_stats.cmd_unknown_rx++;
+        return;
+    }
+
+    uint8_t gain_db = payload[0];
+    int ret = es8388_set_mic_gain(gain_db);
+    if (ret != 0) {
+        printf("AUDIO_MIC_GAIN: es8388_set_mic_gain(%u) failed (%d)\r\n",
+               gain_db, ret);
+    } else {
+        printf("AUDIO_MIC_GAIN: PGA gain set to %u dB\r\n",
+               gain_db > 24 ? 24 : gain_db);
+    }
+}
+
+/**
+ * handle_cmd_audio_ptt — Assert or release Push-To-Talk
+ *
+ * Payload: 2 bytes.
+ *   Byte 0: PTT mode (es8388_ptt_mode_t):
+ *             0 = off, 1 = SDR, 2 = CC1101, 3 = Wi-Fi, 4 = Bluetooth
+ *   Byte 1: active flag — 0x01 = PTT pressed (TX), 0x00 = released (RX)
+ *
+ * On PTT active:
+ *   - SDR/CC1101 modes: speaker muted to prevent acoustic feedback;
+ *     SDR mode also asserts the PTT GPIO to LMS7002M TX enable.
+ *   - Wi-Fi/BT modes: full-duplex, speaker remains active.
+ * On PTT released:
+ *   - LMS7002M TX enable deasserted (SDR mode only).
+ *   - Speaker unmuted for RX audio playback.
+ *
+ * Invalid mode values are rejected with an error log. This ensures
+ * the RF transmitters cannot be activated by a malformed command.
+ */
+static void handle_cmd_audio_ptt(const uint8_t *payload, uint16_t len)
+{
+    if (len < 2) {
+        printf("AUDIO_PTT: short payload (%u bytes, need 2)\r\n", len);
+        proto_stats.cmd_unknown_rx++;
+        return;
+    }
+
+    uint8_t mode_raw = payload[0];
+    bool    active   = (payload[1] != 0);
+
+    /* Validate mode range before casting to the enum */
+    if (mode_raw > (uint8_t)ES8388_PTT_BT) {
+        printf("AUDIO_PTT: invalid mode %u (max %u)\r\n",
+               mode_raw, (uint8_t)ES8388_PTT_BT);
+        proto_stats.cmd_unknown_rx++;
+        return;
+    }
+
+    es8388_ptt_mode_t mode = (es8388_ptt_mode_t)mode_raw;
+    int ret = es8388_ptt_set(mode, active);
+    if (ret != 0) {
+        printf("AUDIO_PTT: es8388_ptt_set(mode=%u, active=%d) failed (%d)\r\n",
+               mode_raw, (int)active, ret);
+    }
+}
+
+/* ========================================================================
  * Frame Dispatch
  * ======================================================================== */
 
@@ -973,6 +1081,15 @@ static void dispatch_frame(void) {
                 /* Does not return */
             }
         }
+        break;
+    case CMD_AUDIO_VOLUME:
+        handle_cmd_audio_volume(rx_ctx.payload_buf, len);
+        break;
+    case CMD_AUDIO_MIC_GAIN:
+        handle_cmd_audio_mic_gain(rx_ctx.payload_buf, len);
+        break;
+    case CMD_AUDIO_PTT:
+        handle_cmd_audio_ptt(rx_ctx.payload_buf, len);
         break;
     default:
         /* Unknown command — increment error counter and ignore */

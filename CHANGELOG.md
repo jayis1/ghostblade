@@ -13,6 +13,52 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
+### Added
+
+- **ES8388 audio codec build integration**: Added `es8388_driver.c` and
+  `es8388_driver.h` to `firmware/rp2350b/CMakeLists.txt` `FW_SOURCES` and
+  `FW_HEADERS` lists. These files existed in the repository but were not
+  included in the firmware build, so the ES8388 init and all audio control
+  functions would be omitted at link time. The codec is now compiled into
+  the firmware binary.
+
+- **SPI audio command handlers**: Added three audio command dispatch handlers
+  to `firmware/rp2350b/src/spi_protocol.c`:
+  - `handle_cmd_audio_volume()` — sets ES8388 DAC output volume via
+    `CMD_AUDIO_VOLUME` (0x08); validates 1-byte signed payload, clamps to
+    [-96, 0] dB range.
+  - `handle_cmd_audio_mic_gain()` — sets ES8388 ADC/PGA gain via
+    `CMD_AUDIO_MIC_GAIN` (0x09); validates 1-byte unsigned payload, clamps
+    to 24 dB maximum.
+  - `handle_cmd_audio_ptt()` — asserts/releases PTT via `CMD_AUDIO_PTT`
+    (0x0A); validates 2-byte payload, rejects invalid mode values (≥5) to
+    prevent unintended RF TX activation from malformed frames.
+  All three commands were defined in `spi_protocol.h` but had no
+  corresponding handlers or dispatch cases — they were silently treated as
+  unknown commands. The firmware now fully implements the audio control path.
+
+- **Audio codec unit tests** (`tests/test_es8388_audio.c`, 198 assertions):
+  - ES8388 DAC volume register encoding (0 to -96 dB, full range)
+  - ES8388 PGA gain register encoding (0–24 dB, 3 dB steps)
+  - PTT mode validation (valid 0–4, reject 5–255)
+  - SPI audio command payload dispatch: AUDIO_VOLUME, AUDIO_MIC_GAIN,
+    AUDIO_PTT — including short-payload rejection for each
+  - PTT half-duplex mute semantics: SDR/CC1101 mutes speaker, Wi-Fi/BT does
+    not
+  - Volume encode/decode round-trip across the full -96 to 0 dB range
+  - Gain encode/decode round-trip for all valid 3 dB multiples
+  All 198 tests pass (verified: `gcc -Wall -Wextra -std=c11`).
+
+- **Audio subsystem documentation** (`docs/audio-subsystem.md`): New
+  document covering hardware architecture, ES8388 pin assignments,
+  initialization sequence with register rationale, SPI command interface
+  reference (CMD_AUDIO_VOLUME/MIC_GAIN/PTT payload formats), PTT half-
+  duplex flow diagram, power management, register summary, test instructions,
+  and known limitations. Added to `docs/index.md` table.
+
+- **Test infrastructure**: Added `test_es8388_audio` to `tests/Makefile`
+  (build rule, help text, `run` invocation) and to `tests/.gitignore`.
+
 ### Fixed
 
 - **DTS memory capacity mismatch**: Corrected the base board `memory@0` range from 2 GiB to the manifest-specified 8 GiB LPDDR5 capacity. `tools/validate_dts.py` now parses the 64-bit memory range and rejects future manifest/DTS capacity drift.

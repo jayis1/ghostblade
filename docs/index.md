@@ -26,6 +26,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Memory Map & Registers](memory-map.md) | Register reference, SPI bridge protocol, DMA, ioctl interfaces |
 | [Sysfs Attributes](sysfs-attributes.md) | Driver telemetry attributes under `/sys/class/apex/apex_bridge0/` |
 | [SPI Protocol & Timing](spi-protocol-timing.md) | Bridge protocol frame format, timing diagrams, CRC spec |
+| [Audio Subsystem](audio-subsystem.md) | ES8388 codec driver, PTT flow, SPI audio commands, unit tests |
 | [Power Tree](power-tree.md) | Power domain diagram, rail assignments, sequencing chart |
 | [Power Tree Diagram](power-tree-diagram.md) | Detailed power tree with current budgets, ESD, test points |
 | [Power Sequencing Timing](power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing charts |

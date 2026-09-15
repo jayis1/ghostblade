@@ -14,6 +14,7 @@ test_adc_calibration
 test_peripheral_power
 test_cc1101_lms7002m
 test_crc_validation
+test_es8388_audio
 
 # Build artifacts
 *.o

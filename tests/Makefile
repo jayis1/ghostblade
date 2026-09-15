@@ -20,6 +20,7 @@
 #   test_peripheral_power — Peripheral power sequencing unit tests
 #   test_cc1101_lms7002m  — CC1101 and LMS7002M initialization unit tests
 #   test_crc_validation  — SPI protocol CRC-64/CRC-32 validation tests
+#   test_es8388_audio    — ES8388 audio codec driver and SPI command tests
 #   all                   — Build all userspace tests
 #   clean                 — Remove build artifacts
 #
@@ -43,7 +44,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_libapex_framing test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_libapex_framing test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation test_es8388_audio
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -72,6 +73,7 @@ help:
 	@echo "  test_peripheral_power - Build peripheral power sequencing unit tests"
 	@echo "  test_cc1101_lms7002m - Build CC1101 and LMS7002M init tests"
 	@echo "  test_crc_validation  - Build SPI protocol CRC validation tests"
+	@echo "  test_es8388_audio    - Build ES8388 audio codec unit tests"
 	@echo "  run / check           - Build and run all userspace tests"
 	@echo "  clean                 - Remove build artifacts"
 	@echo ""
@@ -123,6 +125,9 @@ test_cc1101_lms7002m: test_cc1101_lms7002m.c
 test_crc_validation: test_crc_validation.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
+test_es8388_audio: test_es8388_audio.c
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
 run: $(USERSPACE_TARGETS)
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol
@@ -168,6 +173,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running CRC Validation Unit Tests ==="
 	@./test_crc_validation
+	@echo ""
+	@echo "=== Running ES8388 Audio Codec Unit Tests ==="
+	@./test_es8388_audio
 	@echo ""
 
 check: run
