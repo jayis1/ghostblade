@@ -54,6 +54,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 - Spectrum analysis, signal capture, replay, and jamming research across the full RF band
 - Wideband receiver for GSM, LTE, FM/AM, ADS-B, AIS, APRS, P25, DMR, Tetra, LoRa and more
 - Transmit capability for authorized research: signal generation, replay attacks, protocol fuzzing
+- **SDR walkie-talkie** — full-duplex voice on any frequency via GNU Radio: NFM/AM narrowband voice, DMR, P25, FreeDV HF digital voice
 - DMA ring buffer on RP2350B streams IQ blocks at 512-byte chunks to the Linux host in real time
 
 ### 📻 Sub-GHz Radio (300–928 MHz)
@@ -94,7 +95,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 - **ES8388 audio codec** connected to RK3576 via I2S — low-latency full-duplex audio
 - **Dual 1W stereo speakers** — loud enough for field use, voice alerts, and audio replay of decoded signals
 - **Digital MEMS microphone array (PDM)** — front-facing, voice-optimized with noise cancellation
-- Push-to-talk walkie-talkie over any RF link: CC1101 (sub-GHz), Wi-Fi 6E (VoIP/Mumble), Bluetooth (SCO/HFP)
+- Push-to-talk walkie-talkie over any RF link: **SDR/LMS7002M** (any frequency 100 kHz–3.8 GHz, NFM/AM/DMR/P25/FreeDV), CC1101 (sub-GHz), Wi-Fi 6E (VoIP/Mumble), Bluetooth (SCO/HFP)
 - On-device voice commands via the RK3576's 6 TOPS NPU — wake word detection without cloud
 - Audio playback of decoded RF signals: AM/FM demod, APRS tones, DTMF, pager intercepts
 
