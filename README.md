@@ -81,9 +81,18 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ### 🧠 Linux Host (RK3576)
 - 4× Cortex-A72 + 4× Cortex-A53 @ up to 2.2 GHz, **6 TOPS** NPU for on-device ML inference
-- 8 GB LPDDR5 + 32 GB eMMC + M.2 NVMe slot — runs a full Debian/Kali Linux environment
+- 16 GB LPDDR5 + 32 GB eMMC + M.2 NVMe slot — runs a full Debian/Kali Linux environment
 - Pre-loaded pentesting tools: GNU Radio, SoapySDR, GqRX, Aircrack-ng, Hashcat, Kismet, Wireshark, Nmap, Metasploit and more
 - `libapex` Python library exposes SDR, sub-GHz, and NFC as a clean Python API
+
+### 🤖 Local AI (On-Device, No Cloud)
+- **6 TOPS NPU** on the RK3576 runs quantized LLMs and ML models entirely on-device — no internet required
+- **GhostAI assistant** — a local LLM (Qwen2.5 3B / Llama 3.2 3B in INT4/INT8) that understands your RF captures, decodes, and tool output, and answers questions about what it found
+- **Signal classification** — NPU-accelerated model identifies modulation type (NFM, DMR, P25, LoRa, GSM, ADS-B, etc.) from raw IQ data in real time
+- **Anomaly detection** — baseline RF environment and alert on unexpected new signals or devices
+- **Wake word** — say "Hey GhostBlade" to activate voice commands without cloud; handled entirely by the NPU
+- **Password cracking assist** — NPU acceleration for on-device hash inference and pattern matching alongside Hashcat
+- Runs `llama.cpp`, `MLC LLM`, or `rknn-llm` via the RK3576 RKNN SDK — models stored on M.2 NVMe
 
 ### 🔌 Connectivity
 - **3× USB-A 3.0** host ports — plug in Rubber Ducky, Wi-Fi adapters, SDR dongles, storage
@@ -142,7 +151,7 @@ Validated locally on 2026-09-13:
 │  │    [J5 SMA 2.4G]  [J6 SMA 5/6G]  [BT]          │     │
 │  └─────────────────────────────────────────────────┘     │
 │                                                          │
-│  ┌──────┐ 8GB LPDDR5  ┌────────┐ 32GB eMMC  ┌──────┐   │
+│  ┌──────┐ 16GB LPDDR5  ┌────────┐ 32GB eMMC  ┌──────┐   │
 │  │ DDR5 │◄────────────►│RK3576  │◄──────────►│ M.2  │   │
 │  └──────┘              │        │            │NVMe  │   │
 │                         └────────┘            └──────┘   │
@@ -162,7 +171,7 @@ graph TB
     NFC[ST25R3916 NFC<br/>ISO 14443/15693]
     MT[MT7922 Wi-Fi 6E<br/>BT 5.4]
     ANT[PE42422 Antenna Switch]
-    DDR[8 GB LPDDR5]
+    DDR[16 GB LPDDR5]
     eMMC[32 GB eMMC 5.1]
     NVMe[M.2 2230 NVMe]
     PMIC[RK817 PMIC]
@@ -381,8 +390,9 @@ ghostblade/
 |-----------|-------|
 | Primary SoC | Rockchip RK3576 (4× A72 + 4× A53, 6 TOPS NPU) |
 | Coprocessor | RP2350B (2× Cortex-M33 / Hazard3 RISC-V @ 150 MHz) |
-| RAM | 8 GB LPDDR5 @ 3200 MT/s |
+| RAM | 16 GB LPDDR5 @ 3200 MT/s |
 | Storage | 32 GB eMMC 5.1 + M.2 2230 NVMe (PCIe Gen3 ×2) |
+| Display | 5.5-inch 1920×1080 IPS touchscreen, 10-point capacitive, 400 nit, Gorilla Glass |
 | SDR | LMS7002M (100 kHz – 3.8 GHz, 2×2 MIMO, 12-bit) |
 | Sub-GHz | CC1101 (300–928 MHz, OOK/FSK/GFSK) |
 | NFC | ST25R3916 (ISO 14443 A/B, 15693, FeliCa) |
