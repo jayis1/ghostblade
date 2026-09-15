@@ -92,18 +92,18 @@ static void sim_dma_fill_block(uint8_t block_idx) {
 static void sim_dma_isr_handler(void) {
     uint8_t next_write = (sim_dma_write_block + 1) % SDR_RING_NUM_BLOCKS;
 
-    /* Check for overrun: next write block equals read block while buffer has data.
-     * This mirrors sdr_dma_irq_handler() which discards the oldest block on overrun. */
-    if (next_write == sim_proto_read_block && sim_blocks_filled > 0) {
+    /* A count disambiguates full from empty, so all blocks are usable.
+     * On overrun discard exactly one oldest block before publishing the
+     * block whose DMA transfer has just completed. */
+    if (sim_blocks_filled >= SDR_RING_NUM_BLOCKS) {
         sim_dma_stats.overruns++;
-        /* Overrun: discard oldest block (advance read pointer) */
         sim_proto_read_block = (sim_proto_read_block + 1) % SDR_RING_NUM_BLOCKS;
         sim_blocks_filled--;
     }
 
-    sim_dma_write_block = next_write;
-    sim_dma_fill_block(next_write);
+    sim_dma_fill_block(sim_dma_write_block);
     sim_blocks_filled++;
+    sim_dma_write_block = next_write;
     sim_dma_stats.total_blocks_captured++;
 }
 
@@ -219,38 +219,35 @@ static void test_single_block_produce_consume(void) {
     ASSERT_TRUE(data != NULL, "Block data pointer is not NULL");
     ASSERT_EQ_INT(SDR_RING_BLOCK_SIZE, (int)block_size, "Block size is 512");
 
-    /* Block 0 was never filled by the ISR (ISR fills block 1, the next block),
-     * so it should contain zeros from initialization. */
-    bool block0_zeros = true;
+    /* The completion IRQ publishes the block that just completed (block 0),
+     * rather than the next block selected for DMA. */
+    bool block0_matches_pattern = true;
     for (uint16_t i = 0; i < SDR_RING_BLOCK_SIZE; i++) {
-        if (data[i] != 0) {
-            block0_zeros = false;
+        if (data[i] != DMA_PATTERN_BYTE(0, i)) {
+            block0_matches_pattern = false;
             break;
         }
     }
-    ASSERT_TRUE(block0_zeros, "Unfilled block 0 contains zeros");
+    ASSERT_TRUE(block0_matches_pattern, "Completed block 0 has DMA data");
 
     sim_proto_release_block();
     ASSERT_EQ_INT(0, (int)sim_blocks_filled, "0 blocks filled after release");
     ASSERT_EQ_UINT(1, sim_dma_stats.total_blocks_sent, "1 block sent");
 }
-/* Test 3: Fill 7 blocks (max without overrun) and drain them */
+/* Test 3: Fill every ring block and drain them */
 static void test_fill_max_blocks(void) {
     sim_reset();
 
-    /* With 8 blocks, we can fill at most 7 without overrun because
-     * the ring buffer needs one block of separation between write
-     * and read pointers to detect "full" vs "empty". */
-    int max_without_overrun = SDR_RING_NUM_BLOCKS - 1;  /* 7 */
+    int max_without_overrun = SDR_RING_NUM_BLOCKS;
 
     for (int i = 0; i < max_without_overrun; i++) {
         sim_dma_isr_handler();
     }
 
     ASSERT_EQ_INT(max_without_overrun, (int)sim_blocks_filled,
-                   "7 blocks filled (max without overrun)");
+                   "8 blocks filled (max without overrun)");
     ASSERT_EQ_UINT((unsigned)max_without_overrun, sim_dma_stats.total_blocks_captured,
-                   "7 blocks captured");
+                   "8 blocks captured");
     ASSERT_EQ_UINT(0, sim_dma_stats.overruns, "No overruns");
 
     /* Read all blocks */
@@ -264,7 +261,7 @@ static void test_fill_max_blocks(void) {
 
     ASSERT_EQ_INT(0, (int)sim_blocks_filled, "All blocks drained");
     ASSERT_EQ_UINT((unsigned)max_without_overrun, sim_dma_stats.total_blocks_sent,
-                   "7 blocks sent");
+                   "8 blocks sent");
     ASSERT_EQ_UINT(0, sim_dma_stats.underruns, "No underruns");
 }
 
@@ -272,21 +269,17 @@ static void test_fill_max_blocks(void) {
 static void test_overrun_detection(void) {
     sim_reset();
 
-    /* Fill 8 blocks without consuming any.
-     * The 8th fill causes an overrun because next_write (block 0)
-     * equals the read pointer (block 0) while the buffer has data.
-     * The overrun handler discards the oldest block (advances read). */
-    for (int i = 0; i < SDR_RING_NUM_BLOCKS; i++) {
+    /* Fill one more than capacity without consuming any. The final
+     * completion discards the oldest block before publishing its data. */
+    for (int i = 0; i <= SDR_RING_NUM_BLOCKS; i++) {
         sim_dma_isr_handler();
     }
 
-    /* After 8 fills: the 8th caused an overrun. The buffer holds 7 blocks
-     * (the oldest was discarded), not 8. */
-    ASSERT_EQ_INT(SDR_RING_NUM_BLOCKS - 1, (int)sim_blocks_filled,
-                   "7 blocks filled after one overrun");
+    ASSERT_EQ_INT(SDR_RING_NUM_BLOCKS, (int)sim_blocks_filled,
+                   "ring remains at capacity after one overrun");
     ASSERT_EQ_UINT(1, sim_dma_stats.overruns, "1 overrun detected");
 
-    /* One more fill will cause another overrun (buffer at capacity again) */
+    /* One more fill causes another overrun while preserving the bound. */
     sim_dma_isr_handler();
     ASSERT_EQ_UINT(2, sim_dma_stats.overruns, "2 overruns after extra fill");
 }
@@ -349,11 +342,8 @@ static void test_interleaved_produce_consume(void) {
 static void test_ring_wraparound(void) {
     sim_reset();
 
-    /* Fill and drain blocks twice to verify wrap-around.
-     * We fill only 7 blocks (SDR_RING_NUM_BLOCKS - 1) each cycle
-     * to avoid overrun, since the ring buffer can hold at most
-     * NUM_BLOCKS - 1 blocks without overrun. */
-    int max_without_overrun = SDR_RING_NUM_BLOCKS - 1;
+    /* Fill and drain blocks twice to verify wrap-around. */
+    int max_without_overrun = SDR_RING_NUM_BLOCKS;
 
     for (int cycle = 0; cycle < 2; cycle++) {
         for (int i = 0; i < max_without_overrun; i++)
@@ -373,18 +363,18 @@ static void test_ring_wraparound(void) {
     ASSERT_EQ_UINT(0, sim_dma_stats.underruns, "No underruns in wrap-around");
     ASSERT_EQ_UINT((unsigned)(max_without_overrun * 2),
                    sim_dma_stats.total_blocks_captured,
-                   "14 blocks captured in double cycle");
+                   "16 blocks captured in double cycle");
     ASSERT_EQ_UINT((unsigned)(max_without_overrun * 2),
                    sim_dma_stats.total_blocks_sent,
-                   "14 blocks sent in double cycle");
+                   "16 blocks sent in double cycle");
 }
 
 /* Test 8: Block data integrity after wrap-around */
 static void test_data_integrity_after_wraparound(void) {
     sim_reset();
 
-    /* Fill 7 blocks (max without overrun) */
-    for (int i = 0; i < SDR_RING_NUM_BLOCKS - 1; i++)
+    /* Fill all blocks without overrun */
+    for (int i = 0; i < SDR_RING_NUM_BLOCKS; i++)
         sim_dma_isr_handler();
 
     /* Consume 4 blocks */
@@ -400,7 +390,7 @@ static void test_data_integrity_after_wraparound(void) {
     for (int i = 0; i < 4; i++)
         sim_dma_isr_handler();
 
-    /* Now blocks_filled = 3 (remaining) + 4 (new) = 7.
+    /* Now blocks_filled = 4 (remaining) + 4 (new) = 8.
      * The read pointer should be at block 4, write pointer at block 4
      * (after wrapping), and blocks 4-7 and 0-2 should be readable. */
     int consumed = 0;
@@ -413,7 +403,7 @@ static void test_data_integrity_after_wraparound(void) {
         consumed++;
     }
 
-    ASSERT_EQ_INT(7, consumed, "7 blocks consumed after wrap-around");
+    ASSERT_EQ_INT(8, consumed, "8 blocks consumed after wrap-around");
 }
 
 /* Test 9: Sustained streaming pattern (producer faster than consumer) */
@@ -632,17 +622,17 @@ static void test_continuous_streaming_overrun_recovery(void) {
 
     /* Phase 1: Producer runs ahead, causing overruns.
      * Fill 20 blocks without any consumption — with 8 blocks in the
-     * ring, this will cause 20 - 7 = 13 overruns (after the first 7
-     * fills the buffer is full, each subsequent fill causes an overrun). */
+     * ring, this causes 20 - 8 = 12 overruns (after all eight blocks
+     * are full, each subsequent completion causes an overrun). */
     for (int i = 0; i < 20; i++)
         sim_dma_isr_handler();
 
-    /* After 20 fills: 7 blocks remain (the oldest is discarded on each
-     * overrun after the buffer is full). Overruns = 20 - 7 = 13. */
-    ASSERT_EQ_INT(7, (int)sim_blocks_filled,
-                   "7 blocks in buffer after overrun phase");
-    ASSERT_EQ_UINT(13, sim_dma_stats.overruns,
-                   "13 overruns during overrun phase");
+    /* After 20 fills all eight blocks remain occupied; the oldest is
+     * discarded for each of the 12 completions beyond capacity. */
+    ASSERT_EQ_INT(8, (int)sim_blocks_filled,
+                   "8 blocks in buffer after overrun phase");
+    ASSERT_EQ_UINT(12, sim_dma_stats.overruns,
+                   "12 overruns during overrun phase");
     ASSERT_EQ_UINT(20, sim_dma_stats.total_blocks_captured,
                    "20 blocks captured total");
 
@@ -656,7 +646,7 @@ static void test_continuous_streaming_overrun_recovery(void) {
         sim_proto_release_block();
         consumed++;
     }
-    ASSERT_EQ_INT(7, consumed, "7 blocks consumed during recovery");
+    ASSERT_EQ_INT(8, consumed, "8 blocks consumed during recovery");
 
     /* Phase 3: Resume normal streaming with balanced produce/consume */
     for (int i = 0; i < 50; i++) {
@@ -670,12 +660,12 @@ static void test_continuous_streaming_overrun_recovery(void) {
     }
 
     /* Verify no additional overruns during balanced phase */
-    ASSERT_EQ_UINT(13, sim_dma_stats.overruns,
+    ASSERT_EQ_UINT(12, sim_dma_stats.overruns,
                    "No new overruns during balanced phase");
     ASSERT_EQ_UINT(70, sim_dma_stats.total_blocks_captured,
                    "70 total blocks captured (20 + 50)");
-    ASSERT_EQ_UINT(57, sim_dma_stats.total_blocks_sent,
-                   "57 total blocks sent (7 + 50)");
+    ASSERT_EQ_UINT(58, sim_dma_stats.total_blocks_sent,
+                   "58 total blocks sent (8 + 50)");
     ASSERT_EQ_INT(0, (int)sim_blocks_filled,
                   "Buffer empty after balanced phase");
 }

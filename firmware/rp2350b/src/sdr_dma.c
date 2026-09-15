@@ -198,24 +198,27 @@ void sdr_dma_irq_handler(void) {
         /* Clear interrupt */
         REG32(DMA_INTS0) = (1 << 0);
 
-        /* Advance write block pointer — use mask arithmetic for
-         * correctness since SDR_RING_NUM_BLOCKS is a power of 2. */
+        /* dma_write_block identifies the block whose transfer just
+         * completed. Publish that block before programming the next one.
+         * Advancing it before publishing used to expose an unfilled block
+         * to the protocol consumer after every DMA completion. */
         uint8_t next_write = (dma_write_block + 1) & (SDR_RING_NUM_BLOCKS - 1);
+        uint8_t filled = __atomic_load_n(&blocks_filled, __ATOMIC_ACQUIRE);
 
-        /* Check for overrun: next write block equals read block */
-        if (next_write == proto_read_block) {
+        /* The count disambiguates full from empty, so all ring blocks are
+         * usable. On overrun discard exactly one oldest block before
+         * publishing the completed block; never let blocks_filled exceed
+         * SDR_RING_NUM_BLOCKS. */
+        if (filled >= SDR_RING_NUM_BLOCKS) {
             dma_stats.overruns++;
-            /* Overrun: discard oldest block (advance read pointer).
-             * Use atomic store to prevent race with main-loop reader.
-             * On Cortex-M33, 8-bit writes are atomic, but we use
-             * __atomic to ensure proper memory ordering. */
             __atomic_store_n(&proto_read_block,
                              (uint8_t)((proto_read_block + 1) & (SDR_RING_NUM_BLOCKS - 1)),
-                             __ATOMIC_RELAXED);
+                             __ATOMIC_RELEASE);
+            __atomic_sub_fetch(&blocks_filled, 1, __ATOMIC_RELEASE);
         }
 
+        __atomic_add_fetch(&blocks_filled, 1, __ATOMIC_RELEASE);
         dma_write_block = next_write;
-        __atomic_add_fetch(&blocks_filled, 1, __ATOMIC_RELAXED);
         dma_stats.total_blocks_captured++;
 
         /* Ensure ISR writes are visible before potentially starting next DMA */
