@@ -45,6 +45,7 @@
 #include "watchdog.h"
 #include "sleep_wake.h"
 #include "peripheral_power.h"
+#include "es8388_driver.h"
 
 /* ── Binary info for picotool ──────────────────────────────────────────────── */
 /* cppcheck-suppress unknownMacro */
@@ -85,6 +86,7 @@ static struct {
     bool cc1101_ready;          /* CC1101 initialized */
     bool st25r3916_ready;       /* ST25R3916 initialized */
     bool battery_monitor_ready; /* Battery monitor initialized */
+    bool es8388_ready;          /* ES8388 audio codec initialized */
     bool core1_launched;        /* Core 1 (DMA engine) launched */
     uint32_t loop_count;        /* Main loop iteration counter */
     uint32_t last_telem_ms;    /* Last telemetry send timestamp */
@@ -235,6 +237,14 @@ static int init_peripherals(void)
 
     /* Step 8: Sleep/wake state machine for power management */
     sleep_wake_init();
+
+    /* Step 9: ES8388 audio codec (I2S slave, MEMS mic, dual 1W speakers) */
+    ret = es8388_init();
+    if (ret == 0) {
+        g_state.es8388_ready = true;
+    } else {
+        printf("WARN: es8388_init failed (%d), audio unavailable\r\n", ret);
+    }
 
     /* Note: Peripheral power rails were enabled in Step 2b above. */
 

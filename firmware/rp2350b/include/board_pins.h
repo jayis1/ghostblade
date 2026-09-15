@@ -78,6 +78,21 @@
 #define PIN_NFC_IRQ       44   /* ST25R3916 interrupt (active-low) */
 
 /* ========================================================================
+ * I2C0 — ES8388 Audio Codec Control Bus
+ * 400 kHz Fast Mode
+ * ======================================================================== */
+
+#define PIN_AUDIO_I2C_SDA  4    /* I2C0 SDA to ES8388 */
+#define PIN_AUDIO_I2C_SCL  5    /* I2C0 SCL to ES8388 */
+
+/* ========================================================================
+ * Audio PTT GPIO — LMS7002M TX Enable (SDR walkie-talkie)
+ * Active-high: HIGH = TX, LOW = RX
+ * ======================================================================== */
+
+#define PIN_AUDIO_PTT      6    /* PTT → LMS7002M SDR_GPIO0 TX enable */
+
+/* ========================================================================
  * I2C — Secondary NFC Control Bus
  * 400 kHz Fast-Mode Plus
  * ======================================================================== */

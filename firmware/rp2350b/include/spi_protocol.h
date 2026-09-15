@@ -71,6 +71,10 @@
 #define TELEM_FLAG_SPI_ERR           (1 << 8)
 /** Telemetry flag: DMA error (must match APEX_FLAG_DMA_ERR in kernel driver) */
 #define TELEM_FLAG_DMA_ERR           (1 << 9)
+/** Telemetry flag: Audio PTT active */
+#define TELEM_FLAG_AUDIO_PTT         (1 << 10)
+/** Telemetry flag: Audio codec initialized */
+#define TELEM_FLAG_AUDIO_READY       (1 << 11)
 
 /* ── Command opcodes ────────────────────────────────────────────────────── */
 
@@ -97,6 +101,18 @@
 
 /** Host → MCU: Reset MCU (requires magic value in payload) */
 #define SPI_CMD_RESET_MCU       0x07
+
+/** Host → MCU: Set audio codec volume (payload: 1 byte, signed dB, -96 to 0) */
+#define SPI_CMD_AUDIO_VOLUME    0x08
+
+/** Host → MCU: Set microphone PGA gain (payload: 1 byte, 0–24 dB) */
+#define SPI_CMD_AUDIO_MIC_GAIN  0x09
+
+/**
+ * Host → MCU: Assert/release push-to-talk
+ * Payload: 2 bytes — [0] mode (0=off,1=SDR,2=CC1101,3=WiFi,4=BT), [1] active (0/1)
+ */
+#define SPI_CMD_AUDIO_PTT       0x0A
 
 /** MCU → Host: Telemetry response */
 #define SPI_CMD_TELEMETRY       0x81
