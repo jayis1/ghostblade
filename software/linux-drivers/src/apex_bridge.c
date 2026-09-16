@@ -2116,8 +2116,20 @@ static int apex_sg_engine_stop(struct apex_bridge_dev *dev)
     /* Signal the engine to stop */
     eng->state = APEX_SG_STATE_IDLE;
 
-    /* Cancel pending work */
+    /* Drop the lock before cancel_work_sync to prevent deadlock.
+     * The SG work handler accesses eng->state (protected by sg_lock)
+     * in its loop condition; if we hold sg_lock here and call
+     * cancel_work_sync, we block waiting for the work to finish
+     * while the work is blocked waiting for sg_lock — deadlock.
+     * Releasing the lock before cancel_work_sync allows the running
+     * work to observe the IDLE state and exit naturally. */
+    mutex_unlock(&eng->sg_lock);
+
+    /* Cancel pending work — safe to call without the lock now */
     cancel_work_sync(&eng->sg_work);
+
+    /* Re-acquire lock for buffer teardown */
+    mutex_lock(&eng->sg_lock);
 
     /* Send SDR stream stop command to MCU */
     {
@@ -2377,7 +2389,7 @@ static int apex_bridge_probe(struct spi_device *spi)
         pm_runtime_put_noidle(&spi->dev);
         dev_err(&spi->dev, "Failed to resume device during probe: %d\n",
                 ret);
-        goto err_destroy_class;
+        goto err_disable_pm;
     }
 
     /* Initialize scatter-gather DMA engine */
@@ -2390,6 +2402,8 @@ static int apex_bridge_probe(struct spi_device *spi)
 
     return 0;
 
+err_disable_pm:
+    pm_runtime_disable(&spi->dev);
 err_destroy_class:
     class_destroy(dev->class);
 err_del_cdev:
