@@ -474,7 +474,7 @@ int main(void)
                         peripheral_power_off(POWER_RAIL_NFC);
                         peripheral_power_off(POWER_RAIL_SUBGHZ);
                         printf("[MAIN] CRITICAL: Battery at %u mV, "
-                               "initiating graceful shutdown\\r\\n", vbat);
+                               "initiating graceful shutdown\r\n", vbat);
                     }
                 }
             }

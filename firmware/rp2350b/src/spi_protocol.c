@@ -975,7 +975,7 @@ static void handle_cmd_audio_mic_gain(const uint8_t *payload, uint16_t len)
                gain_db, ret);
     } else {
         printf("AUDIO_MIC_GAIN: PGA gain set to %u dB\r\n",
-               gain_db > 24 ? 24 : gain_db);
+               (unsigned int)(gain_db > 24u ? 24u : gain_db));
     }
 }
 
