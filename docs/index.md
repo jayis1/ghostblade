@@ -29,6 +29,7 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Audio Subsystem](audio-subsystem.md) | ES8388 codec driver, PTT flow, SPI audio commands, unit tests |
 | [Power Tree](power-tree.md) | Power domain diagram, rail assignments, sequencing chart |
 | [Power Tree Diagram](power-tree-diagram.md) | Detailed power tree with current budgets, ESD, test points |
+| [Power Sequencing Overview](power-sequencing.md) | Multi-rail power architecture, rail dependencies, and sequencing constraints |
 | [Power Sequencing Timing](power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing charts |
 | [Reset Circuit Design](reset-circuit-design.md) | Reset circuits for all processors and peripherals |
 | [Timing Diagrams](timing-diagrams.md) | Mermaid sequence diagrams for boot, power, SPI, SDR, NFC, CC1101, watchdog, brownout |
