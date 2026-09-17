@@ -672,21 +672,27 @@ static void test_continuous_streaming_overrun_recovery(void) {
 
 /* Test 17: Occupancy stays bounded after repeated producer overruns.
  *
- * This specifically guards the ISR accounting rule: replacing an oldest
- * block on an overrun must leave occupancy at seven, rather than increment
- * it past the ring capacity. */
+ * The simulation uses count-based overrun detection: an overrun fires
+ * when blocks_filled reaches SDR_RING_NUM_BLOCKS (all 8 slots occupied)
+ * and the producer tries to add another block — the oldest is evicted and
+ * blocks_filled stays at SDR_RING_NUM_BLOCKS.  Maximum usable capacity is
+ * therefore SDR_RING_NUM_BLOCKS (8), consistent with tests 7, 8, and 16.
+ *
+ * This guards the ISR accounting rule: evicting an oldest block on
+ * overrun must keep occupancy at SDR_RING_NUM_BLOCKS rather than
+ * incrementing it past the ring capacity. */
 static void test_overrun_occupancy_is_bounded(void) {
     sim_reset();
 
     for (int i = 0; i < 256; i++) {
         sim_dma_isr_handler();
-        ASSERT_TRUE(sim_blocks_filled <= SDR_RING_NUM_BLOCKS - 1,
+        ASSERT_TRUE(sim_blocks_filled <= SDR_RING_NUM_BLOCKS,
                     "Ring occupancy never exceeds usable capacity");
     }
 
-    ASSERT_EQ_INT(SDR_RING_NUM_BLOCKS - 1, (int)sim_blocks_filled,
+    ASSERT_EQ_INT(SDR_RING_NUM_BLOCKS, (int)sim_blocks_filled,
                   "Ring remains at usable capacity after producer burst");
-    ASSERT_EQ_UINT(256 - (SDR_RING_NUM_BLOCKS - 1), sim_dma_stats.overruns,
+    ASSERT_EQ_UINT(256 - SDR_RING_NUM_BLOCKS, sim_dma_stats.overruns,
                    "Each post-capacity completion records one overrun");
 
     while (sim_blocks_filled > 0)
@@ -694,7 +700,7 @@ static void test_overrun_occupancy_is_bounded(void) {
 
     ASSERT_EQ_INT(0, (int)sim_blocks_filled,
                   "Draining a full ring does not expose stale blocks");
-    ASSERT_EQ_UINT(SDR_RING_NUM_BLOCKS - 1, sim_dma_stats.total_blocks_sent,
+    ASSERT_EQ_UINT(SDR_RING_NUM_BLOCKS, sim_dma_stats.total_blocks_sent,
                    "Only retained blocks are reported as sent");
 }
 
