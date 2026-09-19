@@ -207,6 +207,11 @@
 #define APEX_CMD_TELEMETRY_REQ    0x06
 #define APEX_CMD_RESET_MCU        0x07
 
+/* Audio control commands — match SPI_CMD_AUDIO_* in spi_protocol.h */
+#define APEX_CMD_AUDIO_VOLUME     0x08  /* Payload: 1 byte, int8_t dB (-96 to 0) */
+#define APEX_CMD_AUDIO_MIC_GAIN   0x09  /* Payload: 1 byte, uint8_t dB (0-24) */
+#define APEX_CMD_AUDIO_PTT        0x0A  /* Payload: 2 bytes — [0] mode, [1] active */
+
 /* Reset confirmation magic value — must match SPI_RESET_MAGIC in MCU firmware */
 #define APEX_RESET_MAGIC          0x52534554UL  /* "RSET" */
 
@@ -307,6 +312,24 @@ struct apex_nfc_transact {
 #define APEX_IOC_SG_STOP       _IO(APEX_IOC_MAGIC, 10)
 #define APEX_IOC_SG_GET_STATUS _IOR(APEX_IOC_MAGIC, 11, struct apex_sg_status)
 #define APEX_IOC_SOFT_RESET    _IOW(APEX_IOC_MAGIC, 12, __u32)  /* Soft reset MCU (requires APEX_RESET_MAGIC) */
+
+/* Audio codec ioctl commands (ES8388 via RP2350B) */
+#define APEX_IOC_AUDIO_VOLUME  _IOW(APEX_IOC_MAGIC, 13, __s8)   /* DAC volume, -96 to 0 dB */
+#define APEX_IOC_AUDIO_MIC_GAIN _IOW(APEX_IOC_MAGIC, 14, __u8)  /* PGA gain, 0–24 dB */
+#define APEX_IOC_AUDIO_PTT     _IOW(APEX_IOC_MAGIC, 15, struct apex_audio_ptt)
+
+/**
+ * struct apex_audio_ptt — PTT assertion parameters for APEX_IOC_AUDIO_PTT
+ *
+ * @mode:   PTT radio backend (0=off, 1=SDR, 2=CC1101, 3=WiFi, 4=BT)
+ *          Matches ES8388_PTT_* in es8388_driver.h and PTTMode in walkie_talkie.py
+ * @active: 1 to assert TX (ES8388 unmute + LMS7002M/CC1101 TX enable),
+ *          0 to release (return to receive mode)
+ */
+struct apex_audio_ptt {
+    __u8 mode;
+    __u8 active;
+} __packed;
 
 /* ── DMA Scatter-Gather Structures ──────────────────────────────────────── */
 

@@ -1,15 +1,15 @@
 {
-  "C": 25927,
-  "headers": 3478,
-  "dts": 2260,
-  "docs": 12023,
-  "python": 1361,
-  "shell": 2235,
-  "makefiles": 524,
-  "cmake": 94,
+  "C": 26281,
+  "headers": 3486,
+  "dts": 2252,
+  "docs": 12035,
+  "python": 1352,
+  "shell": 2231,
+  "makefiles": 522,
+  "cmake": 158,
   "linker": 251,
   "bom_components": 67,
-  "total_files": 130,
-  "total_lines": 48153,
-  "last_updated": "2026-09-17"
+  "total_files": 131,
+  "total_lines": 48567,
+  "last_updated": "2026-09-19"
 }
