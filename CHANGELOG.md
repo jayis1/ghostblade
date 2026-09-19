@@ -15,8 +15,54 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Added
 
+- **Audio ioctl path — kernel driver + Python bindings** (`software/linux-drivers/`
+  and `software/libapex/`): The audio control commands (AUDIO_VOLUME 0x08,
+  AUDIO_MIC_GAIN 0x09, AUDIO_PTT 0x0A) were already fully implemented in the
+  RP2350B firmware (`spi_protocol.c`) but had no corresponding ioctl interface
+  on the Linux host side. This completes the end-to-end audio control path:
+
+  - `software/linux-drivers/include/apex_bridge_regs.h`: Added
+    `APEX_CMD_AUDIO_VOLUME/MIC_GAIN/PTT` opcode constants, three new ioctl
+    commands (`APEX_IOC_AUDIO_VOLUME` nr=13, `APEX_IOC_AUDIO_MIC_GAIN` nr=14,
+    `APEX_IOC_AUDIO_PTT` nr=15), and `struct apex_audio_ptt` for the PTT
+    ioctl payload.
+
+  - `software/linux-drivers/src/apex_bridge.c`: Added three ioctl case
+    handlers in `apex_bridge_ioctl()`:
+    - `APEX_IOC_AUDIO_VOLUME` — copies `__s8` from userspace, clamps to
+      [-96, 0] dB, sends `APEX_CMD_AUDIO_VOLUME` frame to MCU.
+    - `APEX_IOC_AUDIO_MIC_GAIN` — copies `__u8` from userspace, clamps to
+      [0, 24] dB, sends `APEX_CMD_AUDIO_MIC_GAIN` frame.
+    - `APEX_IOC_AUDIO_PTT` — copies `struct apex_audio_ptt` from userspace,
+      validates mode ≤ 4 (rejects invalid to prevent unintended RF TX),
+      normalises active to 0/1, sends `APEX_CMD_AUDIO_PTT` frame.
+    Also bumped the ioctl NR range check from 12 → 15.
+
+  - `software/libapex/src/pyapex.c`: Added three C extension methods to
+    `ApexBridgeType`:
+    - `audio_volume(vol_db)` — clamps and calls `APEX_IOC_AUDIO_VOLUME`.
+    - `audio_mic_gain(gain_db)` — clamps and calls `APEX_IOC_AUDIO_MIC_GAIN`.
+    - `audio_ptt(mode, active)` — validates mode [0-4] and calls
+      `APEX_IOC_AUDIO_PTT`.
+    Added `struct apex_audio_ptt` and three IOC macros to the pyapex-local
+    ioctl definitions.
+
+  - `software/libapex/walkie_talkie.py`: Removed stale `# audio_ptt not yet
+    in pyapex — will be added in follow-up` comment; the method now exists.
+
+  All new code passes `gcc -fsyntax-only -Wall -Wextra` without warnings.
+
+- **Kernel test harness — audio frame tests** (`tests/test_apex_bridge.c`):
+  Added three test functions (tests 21–23) verifying that the audio command
+  opcodes build valid, CRC-protected SPI frames that round-trip correctly:
+  - `test_audio_volume_frame`: -30 dB, 0 dB (full scale), -96 dB (minimum)
+  - `test_audio_mic_gain_frame`: 12 dB, 24 dB (max), 0 dB (min)
+  - `test_audio_ptt_frame`: SDR assert, release, all 5 mode values (0–4)
+  Updated `run_all_tests()` to invoke all three. Updated `MODULE_DESCRIPTION`
+  from "(20 tests)" to "(23 tests)".
+
+
 - **ES8388 audio codec build integration**: Added `es8388_driver.c` and
-  `es8388_driver.h` to `firmware/rp2350b/CMakeLists.txt` `FW_SOURCES` and
   `FW_HEADERS` lists. These files existed in the repository but were not
   included in the firmware build, so the ES8388 init and all audio control
   functions would be omitted at link time. The codec is now compiled into

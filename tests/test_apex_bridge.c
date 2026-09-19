@@ -962,6 +962,171 @@ static void test_reserved_field_nonzero(void)
 }
 
 /* ========================================================================
+ * Audio command frame tests (tests 21–23)
+ *
+ * Verify that APEX_CMD_AUDIO_VOLUME, APEX_CMD_AUDIO_MIC_GAIN, and
+ * APEX_CMD_AUDIO_PTT produce valid, correctly-framed SPI messages that
+ * survive CRC validation and round-trip through the protocol layer.
+ * These are new command opcodes (0x08–0x0A) wired up in this PR.
+ * ======================================================================== */
+
+/* Local opcode mirrors (must stay in sync with apex_bridge_regs.h) */
+#define APEX_CMD_AUDIO_VOLUME   0x08
+#define APEX_CMD_AUDIO_MIC_GAIN 0x09
+#define APEX_CMD_AUDIO_PTT      0x0A
+
+static void test_audio_volume_frame(void)
+{
+    uint8_t *frame;
+    int frame_len, ret;
+    uint8_t cmd;
+    uint16_t plen;
+    const uint8_t *payload;
+    int8_t vol_payload;
+
+    frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+    TEST_ASSERT(frame != NULL, "Allocate audio volume test frame buffer");
+
+    /* Test 1: valid volume -30 dB */
+    vol_payload = -30;
+    frame_len = test_build_frame(APEX_CMD_AUDIO_VOLUME,
+                                  (const uint8_t *)&vol_payload,
+                                  sizeof(vol_payload),
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "Audio volume frame builds successfully");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "Audio volume frame CRC validates");
+    TEST_ASSERT_EQ(APEX_CMD_AUDIO_VOLUME, cmd,
+                   "AUDIO_VOLUME opcode preserved");
+    TEST_ASSERT_EQ(1, (int)plen, "AUDIO_VOLUME payload is 1 byte");
+    TEST_ASSERT_EQ((int8_t)payload[0], -30,
+                   "AUDIO_VOLUME payload value preserved (-30 dB)");
+
+    /* Test 2: boundary value — 0 dB (full scale) */
+    vol_payload = 0;
+    frame_len = test_build_frame(APEX_CMD_AUDIO_VOLUME,
+                                  (const uint8_t *)&vol_payload,
+                                  sizeof(vol_payload),
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "Audio volume 0 dB frame builds");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "Audio volume 0 dB frame CRC validates");
+
+    /* Test 3: boundary value — -96 dB (minimum) */
+    vol_payload = -96;
+    frame_len = test_build_frame(APEX_CMD_AUDIO_VOLUME,
+                                  (const uint8_t *)&vol_payload,
+                                  sizeof(vol_payload),
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "Audio volume -96 dB frame builds");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "Audio volume -96 dB frame CRC validates");
+
+    kfree(frame);
+}
+
+static void test_audio_mic_gain_frame(void)
+{
+    uint8_t *frame;
+    int frame_len, ret;
+    uint8_t cmd;
+    uint16_t plen;
+    const uint8_t *payload;
+    uint8_t gain_payload;
+
+    frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+    TEST_ASSERT(frame != NULL, "Allocate mic gain test frame buffer");
+
+    /* Test 1: typical gain 12 dB */
+    gain_payload = 12;
+    frame_len = test_build_frame(APEX_CMD_AUDIO_MIC_GAIN,
+                                  &gain_payload, sizeof(gain_payload),
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "Mic gain frame builds successfully");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "Mic gain frame CRC validates");
+    TEST_ASSERT_EQ(APEX_CMD_AUDIO_MIC_GAIN, cmd, "AUDIO_MIC_GAIN opcode preserved");
+    TEST_ASSERT_EQ(1, (int)plen, "AUDIO_MIC_GAIN payload is 1 byte");
+    TEST_ASSERT_EQ(12, (int)payload[0], "Mic gain 12 dB payload preserved");
+
+    /* Test 2: maximum gain 24 dB */
+    gain_payload = 24;
+    frame_len = test_build_frame(APEX_CMD_AUDIO_MIC_GAIN,
+                                  &gain_payload, sizeof(gain_payload),
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "Mic gain 24 dB frame builds");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "Mic gain 24 dB frame CRC validates");
+    TEST_ASSERT_EQ(24, (int)payload[0], "Mic gain 24 dB payload preserved");
+
+    /* Test 3: minimum gain 0 dB */
+    gain_payload = 0;
+    frame_len = test_build_frame(APEX_CMD_AUDIO_MIC_GAIN,
+                                  &gain_payload, sizeof(gain_payload),
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "Mic gain 0 dB frame builds");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "Mic gain 0 dB frame CRC validates");
+
+    kfree(frame);
+}
+
+static void test_audio_ptt_frame(void)
+{
+    uint8_t *frame;
+    int frame_len, ret;
+    uint8_t cmd;
+    uint16_t plen;
+    const uint8_t *payload;
+    uint8_t ptt_buf[2];
+
+    frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+    TEST_ASSERT(frame != NULL, "Allocate PTT frame buffer");
+
+    /* Test 1: PTT assert — SDR mode (mode=1, active=1) */
+    ptt_buf[0] = 1;  /* PTT_SDR */
+    ptt_buf[1] = 1;  /* active */
+    frame_len = test_build_frame(APEX_CMD_AUDIO_PTT, ptt_buf, 2,
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "PTT assert SDR frame builds");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "PTT assert SDR frame CRC validates");
+    TEST_ASSERT_EQ(APEX_CMD_AUDIO_PTT, cmd, "AUDIO_PTT opcode preserved");
+    TEST_ASSERT_EQ(2, (int)plen, "AUDIO_PTT payload is 2 bytes");
+    TEST_ASSERT_EQ(1, (int)payload[0], "PTT mode=1 (SDR) preserved");
+    TEST_ASSERT_EQ(1, (int)payload[1], "PTT active=1 preserved");
+
+    /* Test 2: PTT release (mode=0, active=0) */
+    ptt_buf[0] = 0;  /* PTT_OFF */
+    ptt_buf[1] = 0;  /* inactive */
+    frame_len = test_build_frame(APEX_CMD_AUDIO_PTT, ptt_buf, 2,
+                                  frame, APEX_SPI_FRAME_SIZE_MAX);
+    TEST_ASSERT(frame_len > 0, "PTT release frame builds");
+    ret = test_validate_frame(frame, (size_t)frame_len, &cmd, &plen, &payload);
+    TEST_ASSERT_EQ(0, ret, "PTT release frame CRC validates");
+    TEST_ASSERT_EQ(0, (int)payload[0], "PTT mode=0 (off) preserved");
+    TEST_ASSERT_EQ(0, (int)payload[1], "PTT active=0 preserved");
+
+    /* Test 3: all valid modes round-trip correctly */
+    {
+        uint8_t mode;
+        for (mode = 0; mode <= 4; mode++) {
+            ptt_buf[0] = mode;
+            ptt_buf[1] = 1;
+            frame_len = test_build_frame(APEX_CMD_AUDIO_PTT, ptt_buf, 2,
+                                          frame, APEX_SPI_FRAME_SIZE_MAX);
+            TEST_ASSERT(frame_len > 0, "PTT mode frame builds");
+            ret = test_validate_frame(frame, (size_t)frame_len,
+                                       &cmd, &plen, &payload);
+            TEST_ASSERT_EQ(0, ret, "PTT mode frame CRC validates");
+            TEST_ASSERT_EQ((int)mode, (int)payload[0], "PTT mode preserved");
+        }
+    }
+
+    kfree(frame);
+}
+
+/* ========================================================================
  * Test Runner
  * ======================================================================== */
 
@@ -1037,6 +1202,15 @@ static int run_all_tests(void)
 
     pr_info("test_apex: Running reserved field test...\n");
     test_reserved_field_nonzero();
+
+    pr_info("test_apex: Running audio volume frame test...\n");
+    test_audio_volume_frame();
+
+    pr_info("test_apex: Running audio mic gain frame test...\n");
+    test_audio_mic_gain_frame();
+
+    pr_info("test_apex: Running audio PTT frame test...\n");
+    test_audio_ptt_frame();
 
     pr_info("test_apex: === Results: %d/%d passed, %d failed ===\n",
             passed_tests, total_tests, failed_tests);
@@ -1126,5 +1300,5 @@ module_exit(test_apex_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("GhostBlade Project");
-MODULE_DESCRIPTION("Test harness for GhostBlade SPI bridge kernel driver (20 tests)");
+MODULE_DESCRIPTION("Test harness for GhostBlade SPI bridge kernel driver (23 tests)");
 MODULE_VERSION("1.1");

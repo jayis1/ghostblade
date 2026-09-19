@@ -822,7 +822,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
     /* Validate ioctl command: must use our magic number and valid direction */
     if (_IOC_TYPE(cmd) != APEX_IOC_MAGIC)
         return -ENOTTY;
-    if (_IOC_NR(cmd) < 1 || _IOC_NR(cmd) > 12)
+    if (_IOC_NR(cmd) < 1 || _IOC_NR(cmd) > 15)
         return -ENOTTY;
 
     /* Validate ioctl size to prevent integer overflow in subsequent
@@ -1179,6 +1179,114 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
         }
 
         ret = 0;
+        break;
+    }
+
+    case APEX_IOC_AUDIO_VOLUME: {
+        /*
+         * Set ES8388 DAC output volume via RP2350B SPI bridge.
+         *
+         * arg: pointer to __s8 (int8_t) — volume in dB, -96 to 0.
+         * Payload to MCU: 1 byte, signed (APEX_CMD_AUDIO_VOLUME / 0x08).
+         */
+        int8_t vol_db;
+
+        if (copy_from_user(&vol_db, (__s8 __user *)arg, sizeof(vol_db))) {
+            ret = -EFAULT;
+            break;
+        }
+
+        /* Clamp to valid range */
+        if (vol_db > 0)
+            vol_db = 0;
+        if (vol_db < -96)
+            vol_db = -96;
+
+        frame_len = apex_build_frame(APEX_CMD_AUDIO_VOLUME,
+                                      (const uint8_t *)&vol_db,
+                                      sizeof(vol_db), frame,
+                                      APEX_SPI_FRAME_SIZE_MAX);
+        if (frame_len < 0) {
+            ret = frame_len;
+            break;
+        }
+
+        ret = apex_spi_xfer(dev, frame, frame_len, rx_buf,
+                             APEX_SPI_FRAME_SIZE_MAX);
+        break;
+    }
+
+    case APEX_IOC_AUDIO_MIC_GAIN: {
+        /*
+         * Set ES8388 ADC/PGA microphone gain via RP2350B SPI bridge.
+         *
+         * arg: pointer to __u8 — gain in dB, 0–24 (3 dB steps; values
+         * between steps are rounded down by the ES8388 register encoding).
+         * Payload to MCU: 1 byte, unsigned (APEX_CMD_AUDIO_MIC_GAIN / 0x09).
+         */
+        uint8_t gain_db;
+
+        if (copy_from_user(&gain_db, (__u8 __user *)arg, sizeof(gain_db))) {
+            ret = -EFAULT;
+            break;
+        }
+
+        /* Clamp to valid range (ES8388 PGA caps at 24 dB) */
+        if (gain_db > 24)
+            gain_db = 24;
+
+        frame_len = apex_build_frame(APEX_CMD_AUDIO_MIC_GAIN,
+                                      &gain_db, sizeof(gain_db),
+                                      frame, APEX_SPI_FRAME_SIZE_MAX);
+        if (frame_len < 0) {
+            ret = frame_len;
+            break;
+        }
+
+        ret = apex_spi_xfer(dev, frame, frame_len, rx_buf,
+                             APEX_SPI_FRAME_SIZE_MAX);
+        break;
+    }
+
+    case APEX_IOC_AUDIO_PTT: {
+        /*
+         * Assert or release push-to-talk on the RP2350B.
+         *
+         * arg: pointer to struct apex_audio_ptt.
+         *   .mode:   radio backend (0=off, 1=SDR, 2=CC1101, 3=WiFi, 4=BT)
+         *   .active: 1=TX begin (unmute ES8388, gate LMS7002M/CC1101 TX),
+         *            0=TX end (mute, return to receive mode)
+         * Payload to MCU: 2 bytes [mode, active] (APEX_CMD_AUDIO_PTT / 0x0A).
+         */
+        struct apex_audio_ptt ptt;
+
+        if (copy_from_user(&ptt, (struct apex_audio_ptt __user *)arg,
+                           sizeof(ptt))) {
+            ret = -EFAULT;
+            break;
+        }
+
+        /* Validate mode — 4 is the highest defined PTT mode (BT) */
+        if (ptt.mode > 4) {
+            dev_err(&dev->spi->dev,
+                    "AUDIO_PTT: invalid mode %u (max 4)\n", ptt.mode);
+            ret = -EINVAL;
+            break;
+        }
+
+        /* Normalise active to 0/1 */
+        ptt.active = ptt.active ? 1 : 0;
+
+        frame_len = apex_build_frame(APEX_CMD_AUDIO_PTT,
+                                      (const uint8_t *)&ptt, sizeof(ptt),
+                                      frame, APEX_SPI_FRAME_SIZE_MAX);
+        if (frame_len < 0) {
+            ret = frame_len;
+            break;
+        }
+
+        ret = apex_spi_xfer(dev, frame, frame_len, rx_buf,
+                             APEX_SPI_FRAME_SIZE_MAX);
         break;
     }
 

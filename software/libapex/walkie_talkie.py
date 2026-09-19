@@ -386,7 +386,6 @@ class WalkieTalkie:
             try:
                 self._apex.audio_ptt(int(mode), active)
             except AttributeError:
-                # audio_ptt not yet in pyapex — will be added in follow-up
                 pass
         else:
             print(f"[WalkieTalkie] [SIM] apex_ptt mode={mode.name} active={active}")
