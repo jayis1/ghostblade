@@ -263,8 +263,8 @@ static void collect_telemetry(void)
 {
     uint16_t vbat_mv = 0;
     int16_t temp_c_x10 = 0;
-    uint16_t rssi_dbm_x10 = 0;
-    uint16_t cc_rssi_x10 = 0;
+    int16_t rssi_dbm_x10 = 0;
+    int16_t cc_rssi_x10 = 0;
     uint16_t nfc_field_mv = 0;
 
     /* Battery and temperature from ADC */
@@ -275,15 +275,14 @@ static void collect_telemetry(void)
     }
 
     /* SDR RSSI from LMS7002M — read when SDR is active.
-     * lms7002m_read_rssi() returns dBm × 10 as a signed value.
-     * Cast to uint16_t for the telemetry wire format. */
+     * lms7002m_read_rssi() returns a signed dBm × 10 value. */
     if (g_state.sdr_dma_ready) {
-        rssi_dbm_x10 = (uint16_t)lms7002m_read_rssi();
+        rssi_dbm_x10 = lms7002m_read_rssi();
     }
 
     /* CC1101 RSSI — get_rssi_x10 reads the register internally */
     if (g_state.cc1101_ready) {
-        cc_rssi_x10 = (uint16_t)cc1101_get_rssi_x10();
+        cc_rssi_x10 = cc1101_get_rssi_x10();
     }
 
     /* NFC field strength */
@@ -293,7 +292,7 @@ static void collect_telemetry(void)
 
     /* Update protocol handler telemetry cache */
     spi_protocol_update_telemetry(rssi_dbm_x10,
-                                   (uint16_t)temp_c_x10,
+                                   temp_c_x10,
                                    vbat_mv,
                                    cc_rssi_x10,
                                    nfc_field_mv);
