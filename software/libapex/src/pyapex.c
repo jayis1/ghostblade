@@ -103,6 +103,16 @@ struct apex_sg_status {
 #define APEX_IOC_SG_GET_STATUS _IOR(APEX_IOC_MAGIC, 11, struct apex_sg_status)
 #define APEX_IOC_SOFT_RESET    _IOW(APEX_IOC_MAGIC, 12, uint32_t)
 
+/* Audio codec ioctl commands */
+struct apex_audio_ptt {
+    uint8_t mode;
+    uint8_t active;
+} __attribute__((packed));
+
+#define APEX_IOC_AUDIO_VOLUME   _IOW(APEX_IOC_MAGIC, 13, int8_t)
+#define APEX_IOC_AUDIO_MIC_GAIN _IOW(APEX_IOC_MAGIC, 14, uint8_t)
+#define APEX_IOC_AUDIO_PTT      _IOW(APEX_IOC_MAGIC, 15, struct apex_audio_ptt)
+
 #define APEX_RESET_MAGIC       0x52534554UL
 
 /* ========================================================================
@@ -545,6 +555,83 @@ static PyObject *ApexBridge_read_iq(ApexBridgeObject *self, PyObject *args) {
 }
 
 /* ========================================================================
+ * ApexBridge.audio_volume(vol_db) — Set ES8388 DAC output volume
+ * ======================================================================== */
+
+static PyObject *ApexBridge_audio_volume(ApexBridgeObject *self, PyObject *args) {
+    int vol_db_int;
+    int8_t vol_db;
+
+    if (!PyArg_ParseTuple(args, "i", &vol_db_int))
+        return NULL;
+
+    /* Clamp to valid ES8388 range */
+    if (vol_db_int > 0)   vol_db_int = 0;
+    if (vol_db_int < -96) vol_db_int = -96;
+    vol_db = (int8_t)vol_db_int;
+
+    if (ioctl(self->fd, APEX_IOC_AUDIO_VOLUME, &vol_db) < 0) {
+        PyErr_Format(PyExc_OSError, "audio_volume failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.audio_mic_gain(gain_db) — Set ES8388 PGA gain
+ * ======================================================================== */
+
+static PyObject *ApexBridge_audio_mic_gain(ApexBridgeObject *self, PyObject *args) {
+    unsigned int gain_db_uint;
+    uint8_t gain_db;
+
+    if (!PyArg_ParseTuple(args, "I", &gain_db_uint))
+        return NULL;
+
+    /* Clamp to valid ES8388 PGA range (0-24 dB in 3 dB steps) */
+    if (gain_db_uint > 24) gain_db_uint = 24;
+    gain_db = (uint8_t)gain_db_uint;
+
+    if (ioctl(self->fd, APEX_IOC_AUDIO_MIC_GAIN, &gain_db) < 0) {
+        PyErr_Format(PyExc_OSError, "audio_mic_gain failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
+ * ApexBridge.audio_ptt(mode, active) — Assert or release push-to-talk
+ * ======================================================================== */
+
+static PyObject *ApexBridge_audio_ptt(ApexBridgeObject *self, PyObject *args) {
+    unsigned int mode;
+    int active;
+    struct apex_audio_ptt ptt;
+
+    if (!PyArg_ParseTuple(args, "Ip", &mode, &active))
+        return NULL;
+
+    /* Validate mode (0=off, 1=SDR, 2=CC1101, 3=WiFi, 4=BT) */
+    if (mode > 4) {
+        PyErr_Format(PyExc_ValueError,
+                     "audio_ptt: mode %u out of range (0-4)", mode);
+        return NULL;
+    }
+
+    ptt.mode   = (uint8_t)mode;
+    ptt.active = active ? 1 : 0;
+
+    if (ioctl(self->fd, APEX_IOC_AUDIO_PTT, &ptt) < 0) {
+        PyErr_Format(PyExc_OSError, "audio_ptt failed: %s", strerror(errno));
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+/* ========================================================================
  * Method Table
  * ======================================================================== */
 
@@ -622,6 +709,22 @@ static PyMethodDef ApexBridge_methods[] = {
      "Args:\n"
      "    size (int): Maximum bytes to read (default 4096)\n\n"
      "Returns: bytes - raw IQ data (I16Q16 format)\n"},
+
+    {"audio_volume",    (PyCFunction)ApexBridge_audio_volume,     METH_VARARGS,
+     "Set ES8388 DAC output volume.\n\n"
+     "Args:\n"
+     "    vol_db (int): Volume in dB, -96 (minimum) to 0 (full scale)\n"},
+
+    {"audio_mic_gain",  (PyCFunction)ApexBridge_audio_mic_gain,   METH_VARARGS,
+     "Set ES8388 ADC/PGA microphone gain.\n\n"
+     "Args:\n"
+     "    gain_db (int): Gain in dB, 0-24 (applied in 3 dB steps)\n"},
+
+    {"audio_ptt",       (PyCFunction)ApexBridge_audio_ptt,        METH_VARARGS,
+     "Assert or release push-to-talk.\n\n"
+     "Args:\n"
+     "    mode (int): Radio backend: 0=off, 1=SDR, 2=CC1101, 3=WiFi, 4=BT\n"
+     "    active (bool): True to begin TX, False to return to RX\n"},
 
     {NULL}  /* Sentinel */
 };
