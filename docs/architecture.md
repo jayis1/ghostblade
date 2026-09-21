@@ -87,7 +87,7 @@ graph TB
 
     subgraph Power["Power Management"]
         PMIC["RK817 PMIC<br/>4× BUCK + LDOs"]
-        BAT["5000 mAh Li-Po<br/>3.7 V nominal"]
+        BAT["10000 mAh Li-Po<br/>3.7 V nominal"]
     end
 
     %% RK3576 ↔ RP2350B

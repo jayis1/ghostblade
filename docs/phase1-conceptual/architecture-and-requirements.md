@@ -47,7 +47,7 @@ The device targets an "oversized smartphone" form factor — pocketable but thic
 | Thickness | 18 mm | RF shielding can height (5mm) + battery (6mm) + PCB stack (1.6mm) + display (2mm) + frame (3.4mm) |
 | Mass (target) | 320 g | Battery (80g) + PCB+components (110g) + frame (70g) + display (60g) |
 | Display | 6.4" IPS 1080x2400 | 400 nits, Gorilla Glass 5 |
-| Battery | 5000 mAh Li-Po (3.85V nominal) | 19.25 Wh; ~4h active SDR, ~12h light compute |
+| Battery | 10000 mAh Li-Po (3.85V nominal) | 38.5 Wh; ~8–12h active pentesting, extended field ops |
 | I/O Ports | USB-C 3.2 Gen1 (OTG + DP alt), μSD card slot | USB-C for charging + host/device; μSD for boot rescue |
 | Antenna Connectors | 2x SMA (primary MIMO), 1x u.FL (sub-GHz), internal NFC coil | SMA on top edge; NFC loop antenna integrated in rear case |
 | Buttons | Volume rocker, Power, 3x programmable GPIO buttons | GPIO buttons: PWR held 2s = force-off; dual-press = recovery mode |
@@ -215,8 +215,8 @@ Each SPI transaction consists of a 16-byte command frame, with optional data pay
                     │  └──────────┘                               │  │
                     │                                             │  │
                     │  ┌─────────────────────────────────────────┐ │  │
-                    │  │ 5000 mAh Li-Po Battery                  │ │  │
-                    │  │ (3.85V nominal, 19.25 Wh)              │ │  │
+                    │  │ 10000 mAh Li-Po Battery                 │ │  │
+                    │  │ (3.85V nominal, 38.5 Wh)               │ │  │
                     │  └─────────────────────────────────────────┘ │  │
                     └──────────────────────────────────────────────────┘
 ```

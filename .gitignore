@@ -86,6 +86,7 @@ tests/test_peripheral_power
 tests/test_cc1101_lms7002m
 tests/test_sleep_wake
 tests/test_crc_validation
+tests/test_es8388_audio
 
 # Coverage / analysis
 *.gcda

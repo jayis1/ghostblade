@@ -108,6 +108,6 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | Sub-GHz | CC1101 (300–928 MHz, OOK/FSK/GFSK) |
 | NFC | ST25R3916 (ISO 14443 A/B, 15693, FeliCa) |
 | Wi-Fi/BT | MT7922 (Wi-Fi 6E 2×2, BT 5.4) |
-| Battery | 5000 mAh Li-Po (19.25 Wh) |
+| Battery | 10000 mAh Li-Po (38.5 Wh) |
 | Form Factor | 162 × 76 × 18 mm, ~320 g |
 | PCB | 6-layer FR-4 (Isola 370HR), 1.6 mm, IPC Class 3 |

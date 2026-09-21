@@ -112,7 +112,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ## Current Repository State
 
-Validated locally on 2026-09-17:
+Validated locally on 2026-09-21:
 
 - `python3 tools/check_internal_links.py` → no broken internal links
 - `python3 tools/validate_dts.py` → DTS cross-reference checks passed
@@ -487,6 +487,7 @@ Screen glow illuminates the front face. No background — pure black void.
 | [Power Sequencing Timing](docs/power-sequencing-timing.md) | Cold boot, warm reset, sleep/wake, and shutdown timing |
 | [Reset Circuit Design](docs/reset-circuit-design.md) | Reset circuits for all processors and peripherals |
 | [SPI Protocol & Timing](docs/spi-protocol-timing.md) | Bridge protocol, frame format, timing diagrams |
+| [Audio Subsystem](docs/audio-subsystem.md) | ES8388 codec driver, PTT flow, SPI audio commands, unit tests |
 | [Timing Diagrams](docs/timing-diagrams.md) | Mermaid sequence diagrams for boot, power, SPI, and recovery |
 | [Board Quick-Start](docs/board-quickstart.md) | TL;DR — from unpowered to operational in 10 minutes |
 | [Sysfs Attributes](docs/sysfs-attributes.md) | Driver telemetry attributes, usage examples |
