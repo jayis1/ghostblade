@@ -81,7 +81,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ### 🧠 Linux Host (RK3576)
 - 4× Cortex-A72 + 4× Cortex-A53 @ up to 2.2 GHz, **6 TOPS** NPU for on-device ML inference
-- 16 GB LPDDR5 + 32 GB eMMC + M.2 NVMe slot — runs a full Debian/Kali Linux environment
+- 8 GB LPDDR5 + 32 GB eMMC + M.2 NVMe slot — runs a full Debian/Kali Linux environment
 - Pre-loaded pentesting tools: GNU Radio, SoapySDR, GqRX, Aircrack-ng, Hashcat, Kismet, Wireshark, Nmap, Metasploit and more
 - `libapex` Python library exposes SDR, sub-GHz, and NFC as a clean Python API
 
@@ -112,7 +112,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ## Current Repository State
 
-Validated locally on 2026-09-13:
+Validated locally on 2026-09-17:
 
 - `python3 tools/check_internal_links.py` → no broken internal links
 - `python3 tools/validate_dts.py` → DTS cross-reference checks passed
@@ -171,7 +171,7 @@ graph TB
     NFC[ST25R3916 NFC<br/>ISO 14443/15693]
     MT[MT7922 Wi-Fi 6E<br/>BT 5.4]
     ANT[PE42422 Antenna Switch]
-    DDR[16 GB LPDDR5]
+    DDR["8 GB LPDDR5"]
     eMMC[32 GB eMMC 5.1]
     NVMe[M.2 2230 NVMe]
     PMIC[RK817 PMIC]
@@ -390,7 +390,7 @@ ghostblade/
 |-----------|-------|
 | Primary SoC | Rockchip RK3576 (4× A72 + 4× A53, 6 TOPS NPU) |
 | Coprocessor | RP2350B (2× Cortex-M33 / Hazard3 RISC-V @ 150 MHz) |
-| RAM | 16 GB LPDDR5 @ 3200 MT/s |
+| RAM | 8 GB LPDDR5 @ 3200 MT/s |
 | Storage | 32 GB eMMC 5.1 + M.2 2230 NVMe (PCIe Gen3 ×2) |
 | Display | 5.5-inch 1920×1080 IPS touchscreen, 10-point capacitive, 400 nit, Gorilla Glass |
 | SDR | LMS7002M (100 kHz – 3.8 GHz, 2×2 MIMO, 12-bit) |
