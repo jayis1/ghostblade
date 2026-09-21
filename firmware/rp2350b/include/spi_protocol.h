@@ -212,16 +212,16 @@ void spi_protocol_send_telemetry(void);
 /**
  * spi_protocol_update_telemetry — Update the cached telemetry values
  *
- * @rssi_dbm_x10:   SDR RSSI in dBm × 10 (0 if N/A)
- * @temp_c_x10:     Die temperature in °C × 10
+ * @rssi_dbm_x10:   SDR RSSI in dBm × 10 (signed; 0 if N/A)
+ * @temp_c_x10:     Die temperature in °C × 10 (signed)
  * @vbat_mv:        Battery voltage in mV
- * @cc_rssi_x10:    CC1101 RSSI in dBm × 10 (0 if N/A)
+ * @cc_rssi_x10:    CC1101 RSSI in dBm × 10 (signed; 0 if N/A)
  * @nfc_field_mv:   NFC field strength in mV (0 if N/A)
  */
-void spi_protocol_update_telemetry(uint16_t rssi_dbm_x10,
-                                    uint16_t temp_c_x10,
+void spi_protocol_update_telemetry(int16_t rssi_dbm_x10,
+                                    int16_t temp_c_x10,
                                     uint16_t vbat_mv,
-                                    uint16_t cc_rssi_x10,
+                                    int16_t cc_rssi_x10,
                                     uint16_t nfc_field_mv);
 
 /**

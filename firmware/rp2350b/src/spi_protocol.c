@@ -939,8 +939,12 @@ static int validate_frame_payload(void) {
 static void handle_cmd_audio_volume(const uint8_t *payload, uint16_t len)
 {
     if (len < 1) {
+        /* Short payload on a known command — log the framing error but
+         * do not increment cmd_unknown_rx: the opcode is recognised.
+         * Incrementing the unknown counter would misrepresent the
+         * protocol statistics and make it harder to distinguish genuine
+         * unknown-opcode errors from framing truncation bugs. */
         printf("AUDIO_VOLUME: short payload (%u bytes, need 1)\r\n", len);
-        proto_stats.cmd_unknown_rx++;
         return;
     }
 
@@ -949,9 +953,12 @@ static void handle_cmd_audio_volume(const uint8_t *payload, uint16_t len)
     if (ret != 0) {
         printf("AUDIO_VOLUME: es8388_set_volume(%d) failed (%d)\r\n",
                vol_db, ret);
-    } else {
-        printf("AUDIO_VOLUME: DAC volume set to %d dB\r\n", vol_db);
     }
+    /* Success path: do not emit a printf on every volume change.
+     * This handler may fire many times per second during active
+     * walkie-talkie operation; per-call logging floods the UART
+     * and makes other diagnostics harder to read. Errors are still
+     * reported above. */
 }
 
 /**
@@ -963,8 +970,9 @@ static void handle_cmd_audio_volume(const uint8_t *payload, uint16_t len)
 static void handle_cmd_audio_mic_gain(const uint8_t *payload, uint16_t len)
 {
     if (len < 1) {
+        /* Short payload on a known command — log the framing error but
+         * do not increment cmd_unknown_rx (see handle_cmd_audio_volume). */
         printf("AUDIO_MIC_GAIN: short payload (%u bytes, need 1)\r\n", len);
-        proto_stats.cmd_unknown_rx++;
         return;
     }
 
@@ -973,10 +981,8 @@ static void handle_cmd_audio_mic_gain(const uint8_t *payload, uint16_t len)
     if (ret != 0) {
         printf("AUDIO_MIC_GAIN: es8388_set_mic_gain(%u) failed (%d)\r\n",
                gain_db, ret);
-    } else {
-        printf("AUDIO_MIC_GAIN: PGA gain set to %u dB\r\n",
-               (unsigned int)(gain_db > 24u ? 24u : gain_db));
     }
+    /* Success path: suppress per-call printf (see handle_cmd_audio_volume). */
 }
 
 /**
@@ -1001,8 +1007,9 @@ static void handle_cmd_audio_mic_gain(const uint8_t *payload, uint16_t len)
 static void handle_cmd_audio_ptt(const uint8_t *payload, uint16_t len)
 {
     if (len < 2) {
+        /* Short payload on a known command — log but do not increment
+         * cmd_unknown_rx (see handle_cmd_audio_volume). */
         printf("AUDIO_PTT: short payload (%u bytes, need 2)\r\n", len);
-        proto_stats.cmd_unknown_rx++;
         return;
     }
 
@@ -1011,9 +1018,13 @@ static void handle_cmd_audio_ptt(const uint8_t *payload, uint16_t len)
 
     /* Validate mode range before casting to the enum */
     if (mode_raw > (uint8_t)ES8388_PTT_BT) {
+        /* Invalid mode is a protocol-level validation failure on a known
+         * command, not an unknown command.  Do not increment cmd_unknown_rx;
+         * that counter is reserved for unrecognised opcodes (default: branch
+         * in dispatch_frame).  An incorrect mode byte on CMD_AUDIO_PTT should
+         * not skew unknown-command statistics. */
         printf("AUDIO_PTT: invalid mode %u (max %u)\r\n",
                mode_raw, (uint8_t)ES8388_PTT_BT);
-        proto_stats.cmd_unknown_rx++;
         return;
     }
 
@@ -1392,10 +1403,10 @@ void spi_protocol_get_stats(struct proto_stats_report *report) {
  *
  * Call from ADC/battery monitor and other sensor reading functions.
  */
-void spi_protocol_update_telemetry(uint16_t rssi_dbm_x10,
-                                    uint16_t temp_c_x10,
+void spi_protocol_update_telemetry(int16_t rssi_dbm_x10,
+                                    int16_t temp_c_x10,
                                     uint16_t vbat_mv,
-                                    uint16_t cc_rssi_x10,
+                                    int16_t cc_rssi_x10,
                                     uint16_t nfc_field_mv) {
     device_state.last_rssi_dbm_x10 = rssi_dbm_x10;
     device_state.last_temp_c_x10   = temp_c_x10;
