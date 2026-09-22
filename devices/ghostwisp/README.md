@@ -4,7 +4,7 @@
 
 **Author: jayis1**
 
-GhostWisp is a pocketable, microcontroller-first hacker companion that lives inside the GhostBlade repository as a quiet sister project. GhostBlade is a Linux computer and mobile lab; GhostWisp is deliberately simpler: instant-on, deterministic, inexpensive, and focused on playful physical interfaces.
+GhostWisp is a pocketable, microcontroller-first hacker companion that lives inside the GhostBlade repository as a quiet sister project. GhostBlade is a Linux computer and mobile lab; GhostWisp is deliberately simpler: instant-on, deterministic, inexpensive, and focused on playful physical interfaces. They are designed as one highly interconnected system: GhostBlade supplies compute, analysis, storage, networking, and rich UI while GhostWisp supplies detachable real-time sensing, radio/NFC/IR interaction, physical controls, and hardware I/O.
 
 It is not a separate Git branch. The project lives at `devices/ghostwisp/` on the repository's default branch so its design cannot drift or disappear on a long-lived branch.
 
@@ -12,7 +12,7 @@ It is not a separate Git branch. The project lives at `devices/ghostwisp/` on th
 
 - **GhostBlade:** powerful computer, wideband SDR, Linux tools, local AI, large screen.
 - **GhostWisp:** small appliance, no Linux, no package manager, no cloud requirement, physical controls, fast boot.
-- **Together:** GhostWisp can act as a pocket remote, real-time I/O probe, and field accessory for GhostBlade.
+- **Together:** they form a mothership-and-edge pair. GhostWisp is GhostBlade's detachable hands, ears, and control surface; GhostBlade is GhostWisp's analysis engine, long-term memory, network gateway, and high-level orchestrator.
 
 ## Target capabilities
 
@@ -71,18 +71,27 @@ Firmware is a small event-driven appliance rather than a general-purpose OS:
 
 Risk-bearing actions require a physical confirmation gesture and show frequency, target mode, duration, and region/profile before execution. A global radio-disable setting and a receive-only mode are first-class features.
 
-## GhostBlade companion mode
+## GhostBlade interconnection
 
-Over USB, GhostWisp can:
+The interconnection is a primary product feature, not an optional accessory mode. USB-C is the baseline data, power, update, and recovery link; later revisions may add a mechanically keyed dock or short-range authenticated transport without changing the application protocol.
+
+GhostBlade remains frozen in its current form and behavior. Integration work adds a backward-compatible companion feature around it; it must not redesign, remove, rename, or regress existing GhostBlade hardware, firmware, drivers, APIs, tools, or workflows.
+
+When connected, the pair can:
 
 - expose sanitized captures and device metadata;
 - accept signed profiles and firmware updates;
 - perform timing-sensitive I/O while GhostBlade handles analysis;
 - act as a detachable control surface;
-- stream low-rate sub-GHz/NFC/IR observations;
-- use a versioned, length-bounded protocol with integrity checks and explicit capability negotiation.
+- stream sub-GHz/NFC/IR observations into GhostBlade tools and storage;
+- let GhostBlade correlate observations, prepare bounded actions, and return human-readable explanations;
+- synchronize clock, device profiles, region policy, capture indexes, and audit records;
+- route GhostWisp data into GhostBlade's `libapex`/Python-facing tooling through a dedicated companion service;
+- use a versioned, length-bounded protocol with integrity checks, authenticated pairing, explicit capability negotiation, reconnect/resume, and visible degraded-state handling.
 
-GhostWisp must remain useful when GhostBlade is absent.
+GhostWisp retains a reduced offline toolkit when detached, but its full workflow, analysis depth, storage, profile management, and cross-capability automation come from its close connection to GhostBlade. Risk-bearing actions use dual consent: GhostBlade may prepare and request an action, but GhostWisp requires local physical confirmation before execution.
+
+See [GhostBlade integration](docs/ghostblade-integration.md) for the shared architecture and interface contract.
 
 ## Repository layout
 
@@ -91,6 +100,7 @@ devices/ghostwisp/
 ├── README.md
 └── docs/
     ├── architecture.md
+    ├── ghostblade-integration.md
     └── roadmap.md
 ```
 
@@ -98,7 +108,7 @@ Future work should add `hardware/`, `firmware/`, `tests/`, and `tools/` only whe
 
 ## Definition of success
 
-A first usable revision should boot in under two seconds, navigate without a host, safely inspect at least one sub-GHz protocol, read an NFC tag, learn an IR remote, provide a USB serial/bus-console mode, save captures to microSD, and exchange a versioned status message with GhostBlade.
+A first usable revision should boot in under two seconds, provide a reduced detached UI, safely inspect at least one sub-GHz protocol, read an NFC tag, learn an IR remote, and provide a USB serial/bus-console mode. In connected mode it must pair with GhostBlade, negotiate capabilities, synchronize time and policy, stream a capture into GhostBlade storage, accept a bounded profile, survive disconnect/reconnect, and complete a dual-consent action request with an auditable result.
 
 ## License
 

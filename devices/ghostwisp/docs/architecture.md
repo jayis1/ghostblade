@@ -4,7 +4,15 @@
 
 ## Design rule
 
-GhostWisp is a bounded instrument, not a small computer. Every feature must fit an RP2350B-class event-driven system, have an explicit user-facing state, and fail safely when storage, radio, or the companion host is unavailable.
+GhostWisp is a bounded instrument, not a small computer. Every feature must fit an RP2350B-class event-driven system, have an explicit user-facing state, and fail safely when storage, radio, or the GhostBlade link is unavailable. The normal high-capability operating model is nevertheless a tightly coupled two-device system rather than two independent products.
+
+## System-of-two architecture
+
+GhostBlade owns compute-heavy analysis, rich visualization, networking, large storage, profile authoring, fleet history, and orchestration. GhostWisp owns deterministic timing, physical controls, nearby RF/NFC/IR interaction, bus access, and final local confirmation of active operations. Neither silently assumes the other's responsibilities.
+
+GhostBlade is a frozen baseline. Companion support must be additive and backward-compatible: new service/modules, namespaced APIs, schemas, UI surfaces, and tests may be added, but existing GhostBlade functions and physical design must continue to operate unchanged when GhostWisp is absent.
+
+The shared system must expose connection state as `detached`, `pairing`, `connected`, `degraded`, `armed`, or `recovery`. Applications must never display a stale connected result as live.
 
 ## Functional blocks
 
@@ -58,11 +66,15 @@ Initial applications:
 - CRC for transport integrity;
 - monotonically increasing request identifier;
 - capability negotiation;
+- authenticated device pairing and persistent device identity;
+- time, region-policy, profile-index, and audit-record synchronization;
+- resumable transfer with explicit disconnect/reconnect behavior;
 - explicit arm/confirm/execute state machine for active operations;
+- request preparation on GhostBlade plus physical confirmation on GhostWisp;
 - no arbitrary memory access, shell, or native-code upload;
 - signed firmware update flow separate from normal commands.
 
-The detailed frame format is intentionally deferred until use cases, maximum payloads, and USB transport choice are frozen.
+The application protocol must remain transport-neutral, with USB-C vendor bulk plus CDC diagnostics as the Rev A baseline. The detailed frame format is defined in `ghostblade-integration.md` and must evolve together with the corresponding GhostBlade host service and tests.
 
 ## Power states
 
