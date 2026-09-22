@@ -15,6 +15,45 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Added
 
+- **ADC calibration flash persistence** (`firmware/rp2350b/src/adc_calibration.c`,
+  `firmware/rp2350b/include/adc_calibration.h`): Implemented the two firmware
+  TODO stubs that left the factory calibration system non-functional at runtime.
+
+  `adc_cal_init()` now calls `adc_cal_load_from_flash()`, which reads an
+  `adc_cal_record` from flash XIP offset `FLASH_CAL_OFFSET` (0x10F000), validates
+  the magic sentinel (`ADC_CAL_MAGIC` = 0xADCA), format version (must be 1), and
+  an 8-bit additive checksum over all preceding bytes.  On success the
+  per-board factory coefficients replace the unity defaults; the function now
+  returns 1 when calibration is loaded and 0 when defaults are in effect.
+
+  `adc_cal_factory_calibrate()` now persists coefficients via
+  `adc_cal_store_to_flash()`, which: assembles the record in SRAM; pads to
+  `FLASH_PAGE_SIZE` (256 bytes) with 0xFF; disables interrupts (Pico SDK
+  requirement for flash API calls); calls `flash_range_erase()` to erase the
+  4 KB calibration sector; calls `flash_range_program()` to write the page;
+  re-enables interrupts; then reads the record back through the XIP window and
+  re-validates.  Returns -2 if readback fails (indicates faulty flash).
+
+  Both functions compile out on non-device builds (`PICO_ON_DEVICE` not defined),
+  preserving full host-side unit-test compatibility.
+
+  `adc_calibration.h` additions:
+  - `FLASH_CAL_OFFSET` (0x10F000) constant with alignment and linker-script note.
+  - `adc_cal_init()` return-value contract documented (1/0/<0).
+  - `adc_cal_is_calibrated()` inline helper for callers needing a simple bool.
+  - `adc_cal_factory_calibrate()` docstring updated with flash steps, watchdog
+    kick requirement, and return-code table.
+
+- **ADC calibration flash record tests** (`tests/test_adc_calibration.c`):
+  11 new tests covering the `adc_cal_record` validation contract:
+  `test_flash_record_valid`, `test_flash_record_bad_magic`,
+  `test_flash_record_bad_version`, `test_flash_record_bad_checksum`,
+  `test_flash_record_erased`, `test_flash_record_all_zeros`,
+  `test_flash_record_checksum_coverage`, `test_flash_record_round_trip`,
+  `test_flash_record_struct_size`, `test_flash_cal_offset_alignment`,
+  `test_flash_checksum_all_bit_flips` (exhaustive byte coverage).
+  Test count: 84 assertions (up from 45). All 16 test suites pass (4151 total).
+
 - **Audio ioctl path — kernel driver + Python bindings** (`software/linux-drivers/`
   and `software/libapex/`): The audio control commands (AUDIO_VOLUME 0x08,
   AUDIO_MIC_GAIN 0x09, AUDIO_PTT 0x0A) were already fully implemented in the
