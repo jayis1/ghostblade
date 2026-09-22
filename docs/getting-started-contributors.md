@@ -39,10 +39,10 @@ All userspace tests use a simple Makefile-based build system:
 ```bash
 cd tests
 make                # Build all userspace tests
-make run            # Build and run all userspace tests
+make run            # Build and run all userspace tests (including Python tests)
 make check          # Same as 'make run'
 
-# Build individual tests
+# Build individual C tests
 make test_spi_protocol
 make test_sdr_dma
 make test_spi0_isr
@@ -53,6 +53,10 @@ make test_st25r3916_init
 ./test_sdr_dma
 ./test_spi0_isr
 ./test_st25r3916_init
+
+# Run Python unit tests (no build step needed)
+python3 test_walkie_talkie.py
+make test_walkie_talkie
 ```
 
 The kernel module test (`test_apex_bridge.c`) must be built and loaded on the RK3576 target:
@@ -174,6 +178,8 @@ Every code change should include appropriate tests:
 - **NFC controller**: Add tests to `test_st25r3916_init.c`
 - **Kernel driver**: Add tests to `test_apex_bridge.c` (must run on target)
 - **Userspace library**: Add tests to `test_libapex.c`
+- **Python/walkie-talkie module**: Add tests to `test_walkie_talkie.py` — no build step,
+  runs on any host with Python 3.8+; run with `python3 test_walkie_talkie.py`
 
 All userspace tests should build with:
 ```bash

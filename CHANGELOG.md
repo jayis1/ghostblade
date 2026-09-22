@@ -13,7 +13,38 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
-### Changed (2026-09-22)
+### Added (2026-09-22)
+
+- **Walkie-talkie Python unit tests** (`tests/test_walkie_talkie.py`): 72
+  host-runnable unit tests covering `software/libapex/walkie_talkie.py` —
+  a module that previously had no test coverage. Tests verify:
+  - `PTTMode` enum values match SPI wire encoding (must align with RP2350B
+    `es8388_ptt_mode_t` and `apex_bridge_regs.h`).
+  - `SDR_MODES` dict completeness, bandwidth sanity, and description presence
+    for all eight voice modes (nfm, wfm, am, usb, lsb, dmr, p25, freedv).
+  - Frequency constants are non-zero, distinct, and within LMS7002M/ISM range.
+  - `configure_sdr()` accepts all valid modes, raises `ValueError` with the
+    mode name for invalid inputs, and respects bandwidth overrides without
+    mutating the global `SDR_MODES` dict.
+  - `configure_cc1101()` and `configure_voip()` store parameters correctly.
+  - `set_volume()` and `set_mic_gain()` clamp inputs to hardware limits
+    ([-96, 0] dB and [0, 24] dB respectively) before forwarding to the ioctl.
+  - PTT state machine: start/stop transitions, double-start raises
+    `RuntimeError` with the active mode in the message, idle stop is a no-op.
+  - `ptt()` context manager: PTT released on clean exit and on exception.
+  - `close()` stops active PTT; double-close is safe.
+  - Context manager protocol (`__enter__`/`__exit__`).
+  - Full simulation mode: all 72 tests pass without a real `apex_bridge`
+    device or `pyapex` module installed.
+
+- **tests/Makefile updates**: Added `test_walkie_talkie` phony target;
+  integrated into `make run` / `make check`; updated help text and comments.
+
+- **docs/getting-started-contributors.md**: Added Python test instructions
+  (`python3 test_walkie_talkie.py`, `make test_walkie_talkie`) and the
+  walkie-talkie entry in the "Testing" section for contributors.
+
+### Changed (2026-09-22) — prior entry
 
 - `GhostBlade.mf` manifest: Corrected `Author` field from placeholder to `jayis1`.
 - `tools/update_stats.py`: Dynamic date generation — `last_updated` in `stats.json` now uses `date.today().isoformat()` instead of a hardcoded date string; refreshed `stats.json` to 2026-09-22.

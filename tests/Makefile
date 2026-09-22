@@ -21,6 +21,7 @@
 #   test_cc1101_lms7002m  — CC1101 and LMS7002M initialization unit tests
 #   test_crc_validation  — SPI protocol CRC-64/CRC-32 validation tests
 #   test_es8388_audio    — ES8388 audio codec driver and SPI command tests
+#   test_walkie_talkie   — Walkie-talkie module PTT state machine and config tests (Python)
 #   all                   — Build all userspace tests
 #   clean                 — Remove build artifacts
 #
@@ -128,6 +129,11 @@ test_crc_validation: test_crc_validation.c
 test_es8388_audio: test_es8388_audio.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
+.PHONY: test_walkie_talkie
+test_walkie_talkie:
+	@echo "=== Running Walkie-Talkie Python Unit Tests ==="
+	@python3 test_walkie_talkie.py
+
 run: $(USERSPACE_TARGETS)
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol
@@ -176,6 +182,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running ES8388 Audio Codec Unit Tests ==="
 	@./test_es8388_audio
+	@echo ""
+	@echo "=== Running Walkie-Talkie Python Unit Tests ==="
+	@python3 test_walkie_talkie.py
 	@echo ""
 
 check: run
