@@ -138,6 +138,7 @@ static int g_tests_failed = 0;
 #define ADC_CAL_VBAT_DENOMINATOR   1000000UL
 #define ADC_CAL_VBAT_ROUNDING      500UL
 #define ADC_CAL_MAGIC               0xADCA
+#define FLASH_CAL_OFFSET            0x10F000UL
 
 /* ── Calibration coefficient structure ─────────────────────────────────────── */
 
@@ -150,6 +151,16 @@ struct adc_cal_coeffs {
     uint8_t  cal_version;
     uint16_t reserved;
 };
+
+/* ── Flash calibration record structure ────────────────────────────────────── */
+
+struct adc_cal_record {
+    uint16_t            magic;
+    uint8_t             version;
+    struct adc_cal_coeffs coeffs;
+    uint32_t            timestamp;
+    uint8_t             checksum;
+} __attribute__((packed));
 
 /* ── Inline implementations of calibration math ────────────────────────────── */
 
@@ -664,6 +675,218 @@ static void test_boundary_conditions(void)
     ASSERT_INT16_EQ(-400, adc_cal_apply_temp(-400, &coeffs));
 }
 
+/* ── Flash calibration record tests ─────────────────────────────────────── */
+
+/*
+ * Helper: compute additive checksum over [data, data+len) — mirrors the
+ * implementation in adc_calibration.c so the tests verify the contract.
+ */
+static uint8_t test_compute_checksum(const void *data, size_t len)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    uint32_t sum = 0;
+    for (size_t i = 0; i < len; i++)
+        sum += p[i];
+    return (uint8_t)(sum & 0xFFU);
+}
+
+/*
+ * Helper: populate a valid adc_cal_record and set its checksum field.
+ */
+static void make_valid_record(struct adc_cal_record *rec,
+                               int16_t offset_mv, uint16_t gain_x1000)
+{
+    memset(rec, 0, sizeof(*rec));
+    rec->magic              = ADC_CAL_MAGIC;
+    rec->version            = 1;
+    rec->coeffs.vbat_offset_mv    = offset_mv;
+    rec->coeffs.vbat_gain_x1000   = gain_x1000;
+    rec->coeffs.temp_offset_dcx10 = 0;
+    rec->coeffs.temp_gain_x1000   = 1000;
+    rec->coeffs.calibrated        = true;
+    rec->coeffs.cal_version       = 1;
+    rec->timestamp          = 0;
+    rec->checksum = test_compute_checksum(rec,
+                                          sizeof(*rec) - sizeof(rec->checksum));
+}
+
+/*
+ * Helper: validate a record (mirrors validate_cal_record in adc_calibration.c).
+ * Returns true if valid.
+ */
+static bool record_is_valid(const struct adc_cal_record *rec)
+{
+    uint8_t expected;
+    if (!rec)                       return false;
+    if (rec->magic != ADC_CAL_MAGIC) return false;
+    if (rec->version != 1)          return false;
+    expected = test_compute_checksum(rec,
+                                      sizeof(*rec) - sizeof(rec->checksum));
+    return rec->checksum == expected;
+}
+
+/**
+ * test_flash_record_valid — A correctly assembled record passes validation.
+ */
+static void test_flash_record_valid(void)
+{
+    struct adc_cal_record rec;
+    make_valid_record(&rec, -20, 1010);  /* typical calibration values */
+    ASSERT_INT_EQ(1, (int)record_is_valid(&rec));
+}
+
+/**
+ * test_flash_record_bad_magic — Wrong magic byte fails validation.
+ */
+static void test_flash_record_bad_magic(void)
+{
+    struct adc_cal_record rec;
+    make_valid_record(&rec, 0, 1000);
+    rec.magic = 0xDEAD;
+    ASSERT_INT_EQ(0, (int)record_is_valid(&rec));
+}
+
+/**
+ * test_flash_record_bad_version — Unknown version fails validation.
+ */
+static void test_flash_record_bad_version(void)
+{
+    struct adc_cal_record rec;
+    make_valid_record(&rec, 0, 1000);
+    rec.version = 2;  /* only version 1 is defined */
+    /* checksum now stale — but version check fires first */
+    ASSERT_INT_EQ(0, (int)record_is_valid(&rec));
+}
+
+/**
+ * test_flash_record_bad_checksum — Single-byte corruption detected by checksum.
+ */
+static void test_flash_record_bad_checksum(void)
+{
+    struct adc_cal_record rec;
+    make_valid_record(&rec, 50, 995);
+    /* Corrupt one byte of the gain field */
+    rec.coeffs.vbat_gain_x1000 ^= 0x01;
+    ASSERT_INT_EQ(0, (int)record_is_valid(&rec));
+}
+
+/**
+ * test_flash_record_erased — Erased flash (all 0xFF) is rejected.
+ *
+ * After erase, flash reads as 0xFF.  The magic field would be 0xFFFF ≠
+ * ADC_CAL_MAGIC, so validation must fail.
+ */
+static void test_flash_record_erased(void)
+{
+    struct adc_cal_record rec;
+    memset(&rec, 0xFF, sizeof(rec));  /* simulate erased sector */
+    ASSERT_INT_EQ(0, (int)record_is_valid(&rec));
+}
+
+/**
+ * test_flash_record_all_zeros — All-zeros record (uninitialized memory) rejected.
+ */
+static void test_flash_record_all_zeros(void)
+{
+    struct adc_cal_record rec;
+    memset(&rec, 0x00, sizeof(rec));  /* magic = 0x0000 ≠ ADC_CAL_MAGIC */
+    ASSERT_INT_EQ(0, (int)record_is_valid(&rec));
+}
+
+/**
+ * test_flash_record_checksum_coverage — Checksum covers all bytes before it.
+ *
+ * Two records with identical data except one byte should have different
+ * checksums.
+ */
+static void test_flash_record_checksum_coverage(void)
+{
+    struct adc_cal_record rec_a, rec_b;
+    make_valid_record(&rec_a, 10, 1005);
+    make_valid_record(&rec_b, 10, 1005);
+
+    /* Initially identical and valid */
+    ASSERT_INT_EQ(1, (int)record_is_valid(&rec_a));
+    ASSERT_INT_EQ(1, (int)record_is_valid(&rec_b));
+    ASSERT_INT_EQ((int)rec_a.checksum, (int)rec_b.checksum);
+
+    /* Modify one byte in rec_b without updating checksum */
+    rec_b.coeffs.temp_gain_x1000 = 999;
+    ASSERT_INT_EQ(0, (int)record_is_valid(&rec_b));
+    ASSERT_INT_EQ(1, (int)record_is_valid(&rec_a));  /* rec_a untouched */
+}
+
+/**
+ * test_flash_record_round_trip — build, validate, extract, re-validate.
+ *
+ * Simulates the adc_cal_factory_calibrate() → (memcpy into page) →
+ * adc_cal_init() load path without flash hardware.
+ */
+static void test_flash_record_round_trip(void)
+{
+    struct adc_cal_record original, loaded;
+
+    make_valid_record(&original, -30, 1008);
+    ASSERT_INT_EQ(1, (int)record_is_valid(&original));
+
+    /* Simulate flash page program + read: byte-copy into loaded */
+    memcpy(&loaded, &original, sizeof(loaded));
+    ASSERT_INT_EQ(1, (int)record_is_valid(&loaded));
+
+    /* Coefficients survive the round-trip */
+    ASSERT_INT_EQ(-30, (int)loaded.coeffs.vbat_offset_mv);
+    ASSERT_INT_EQ(1008, (int)loaded.coeffs.vbat_gain_x1000);
+    ASSERT_INT_EQ(1,  (int)loaded.coeffs.calibrated);
+    ASSERT_INT_EQ(1,  (int)loaded.coeffs.cal_version);
+}
+
+/**
+ * test_flash_record_struct_size — Record fits in one flash page (256 bytes).
+ *
+ * adc_cal_store_to_flash() uses a single FLASH_PAGE_SIZE buffer.  The struct
+ * must not exceed 256 bytes, otherwise the store function returns -1.
+ */
+static void test_flash_record_struct_size(void)
+{
+    ASSERT_INT_EQ(1, (int)(sizeof(struct adc_cal_record) <= 256));
+}
+
+/**
+ * test_flash_cal_offset_alignment — FLASH_CAL_OFFSET is sector-aligned (4 KB).
+ *
+ * flash_range_erase() requires the offset to be a multiple of FLASH_SECTOR_SIZE
+ * (4096 = 0x1000).  Verify the constant satisfies this.
+ */
+static void test_flash_cal_offset_alignment(void)
+{
+    ASSERT_INT_EQ(0, (int)(FLASH_CAL_OFFSET % 4096UL));
+}
+
+/**
+ * test_flash_checksum_all_bit_flips — Every single-byte corruption detected.
+ *
+ * Flip each byte of a valid record (except checksum) one at a time and
+ * confirm validation fails.  This exercises 100% of covered bytes.
+ */
+static void test_flash_checksum_all_bit_flips(void)
+{
+    struct adc_cal_record rec;
+    make_valid_record(&rec, 5, 1002);
+
+    size_t covered_bytes = sizeof(rec) - sizeof(rec.checksum);
+    uint8_t *raw = (uint8_t *)&rec;
+
+    for (size_t i = 0; i < covered_bytes; i++) {
+        raw[i] ^= 0xFF;  /* flip all bits in byte i */
+        /* Should fail — either magic, version, or checksum check */
+        ASSERT_INT_EQ(0, (int)record_is_valid(&rec));
+        raw[i] ^= 0xFF;  /* restore */
+    }
+
+    /* After all restores the record is valid again */
+    ASSERT_INT_EQ(1, (int)record_is_valid(&rec));
+}
+
 /* ── Main test runner ─────────────────────────────────────────────────────── */
 
 int main(void)
@@ -684,6 +907,17 @@ int main(void)
     RUN_TEST(test_divider_ratio_accuracy);
     RUN_TEST(test_temperature_negative_values);
     RUN_TEST(test_boundary_conditions);
+    RUN_TEST(test_flash_record_valid);
+    RUN_TEST(test_flash_record_bad_magic);
+    RUN_TEST(test_flash_record_bad_version);
+    RUN_TEST(test_flash_record_bad_checksum);
+    RUN_TEST(test_flash_record_erased);
+    RUN_TEST(test_flash_record_all_zeros);
+    RUN_TEST(test_flash_record_checksum_coverage);
+    RUN_TEST(test_flash_record_round_trip);
+    RUN_TEST(test_flash_record_struct_size);
+    RUN_TEST(test_flash_cal_offset_alignment);
+    RUN_TEST(test_flash_checksum_all_bit_flips);
 
     TEST_SUITE_END();
 }

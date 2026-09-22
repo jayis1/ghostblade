@@ -107,6 +107,21 @@ struct adc_cal_coeffs {
 #define ADC_CAL_MAGIC                  0xADCA  /* "ADCA" */
 
 /**
+ * FLASH_CAL_OFFSET — Byte offset from XIP_BASE for the calibration sector
+ *
+ * The calibration sector occupies one 4 KB flash sector at this XIP offset.
+ * The physical QSPI flash address is XIP_BASE + FLASH_CAL_OFFSET.
+ *
+ * This address is well above typical GhostBlade firmware size (~600 KB)
+ * and within the 16 MB QSPI flash window.  It is only used by
+ * adc_cal_init() (load) and adc_cal_factory_calibrate() (store).
+ *
+ * If the firmware binary grows past this offset, the linker script
+ * (rp2350b_memmap.ld) must be updated to move the calibration sector.
+ */
+#define FLASH_CAL_OFFSET               0x10F000UL
+
+/**
  * struct adc_cal_record — Flash-stored calibration record
  *
  * Written to flash during factory calibration. Read at boot time.
@@ -131,13 +146,36 @@ struct adc_cal_record {
 /**
  * adc_cal_init — Initialize ADC calibration module
  *
- * Loads calibration coefficients from flash. If no valid calibration
- * data is found, uses nominal values (offset = 0, gain = 1000).
+ * Attempts to load per-board factory calibration coefficients from flash
+ * sector 0x10F000 (XIP offset FLASH_CAL_OFFSET).  The record is validated
+ * against ADC_CAL_MAGIC, version 1, and an 8-bit additive checksum before
+ * the coefficients are accepted.
  *
- * Returns: 0 on success (calibration data found or using defaults),
- *          negative on flash read error
+ * If no valid calibration record exists (first boot, erased flash, or a
+ * corrupted record), unity-gain / zero-offset defaults are used and the
+ * module operates in uncalibrated mode.
+ *
+ * Callers may check adc_cal_is_calibrated() after init to determine whether
+ * factory calibration data was successfully loaded.
+ *
+ * Returns:  1  — factory calibration loaded from flash
+ *           0  — no valid flash record; running with default coefficients
+ *          <0  — reserved for future flash-read error codes
  */
 int adc_cal_init(void);
+
+/**
+ * adc_cal_is_calibrated — Query whether factory calibration is active
+ *
+ * Returns: true if cal_coeffs were loaded from a valid flash record,
+ *          false if the module is using default (uncalibrated) coefficients.
+ */
+static inline bool adc_cal_is_calibrated(void) {
+    struct adc_cal_coeffs c;
+    extern void adc_cal_get_coeffs(struct adc_cal_coeffs *out);
+    adc_cal_get_coeffs(&c);
+    return c.calibrated;
+}
 
 /**
  * adc_cal_apply_vbat — Apply calibration to a raw VBAT ADC reading
@@ -181,20 +219,34 @@ void adc_cal_get_coeffs(struct adc_cal_coeffs *out);
 /**
  * adc_cal_factory_calibrate — Perform factory ADC calibration
  *
- * This function performs a two-point calibration of the ADC:
- *   1. Apply VBAT_LOW (3.300V) and read the ADC average
- *   2. Apply VBAT_HIGH (4.100V) and read the ADC average
- *   3. Compute offset and gain corrections from the two points
- *   4. Store the calibration record in flash
+ * Two-point calibration using a precision voltage source:
+ *   1. With VBAT = vbat_low_mv applied, read 64-sample ADC average.
+ *   2. With VBAT = vbat_high_mv applied, read 64-sample ADC average.
+ *   3. Compute linear offset and gain corrections from the two points.
+ *   4. Persist the calibration record to flash at FLASH_CAL_OFFSET via
+ *      adc_cal_store_to_flash():
+ *        a. Assemble adc_cal_record (magic + version + coeffs + timestamp
+ *           + additive checksum) in SRAM.
+ *        b. Disable interrupts (required by Pico SDK flash APIs).
+ *        c. flash_range_erase(FLASH_CAL_OFFSET, FLASH_SECTOR_SIZE).
+ *        d. flash_range_program(FLASH_CAL_OFFSET, buf, FLASH_PAGE_SIZE).
+ *        e. Re-enable interrupts.
+ *        f. Read the written record back via XIP and re-validate.
  *
- * This function must be called with a precision voltage source
- * connected to the VBAT input. It blocks for approximately 500ms
- * during the calibration measurement.
+ * Prerequisites:
+ *   - A precision voltage source (≤0.1% accuracy) must be connected to VBAT.
+ *   - The watchdog must be kicked immediately before this call — the combined
+ *     erase (~50 ms) + program (~0.5 ms) window runs with interrupts disabled
+ *     and will exceed typical watchdog kick intervals if the watchdog is tight.
+ *   - vbat_low_mv and vbat_high_mv must be distinct (vbat_high_mv > vbat_low_mv).
  *
- * @vbat_low_mv:  Known low voltage (e.g., 3300 mV)
- * @vbat_high_mv: Known high voltage (e.g., 4100 mV)
+ * @vbat_low_mv:  Known low reference voltage in mV (e.g., 3300 mV)
+ * @vbat_high_mv: Known high reference voltage in mV (e.g., 4100 mV)
  *
- * Returns: 0 on success, negative on error
+ * Returns:  0  — success; calibration stored in flash and active
+ *          -1  — vbat_low == vbat_high (division by zero guard), or struct
+ *                too large for one flash page (developer error)
+ *          -2  — flash readback validation failed (flash may be faulty)
  */
 int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv);
 

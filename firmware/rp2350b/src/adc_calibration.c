@@ -7,12 +7,61 @@
  * Implements per-board ADC calibration with flash storage.
  * Provides self-test, factory calibration, and runtime correction
  * of battery voltage and temperature readings.
+ *
+ * Flash layout for calibration data (RP2350B QSPI flash, 16 MB):
+ *
+ *   0x10000000 (XIP_BASE) ─── firmware code + rodata
+ *   ...
+ *   0x1010F000            ─── ADC calibration sector (4 KB)
+ *                              struct adc_cal_record at the sector start
+ *   0x1010FFFF            ─── end of calibration sector
+ *   ...
+ *   0x11000000            ─── end of QSPI flash
+ *
+ * FLASH_SECTOR_SIZE  = 4096 bytes (must erase a full sector at a time)
+ * FLASH_PAGE_SIZE    = 256 bytes  (must program in page-aligned blocks)
+ *
+ * Flash offset (from XIP_BASE) used for calibration:
+ *   FLASH_CAL_OFFSET = 0x10F000
+ *
+ * This places calibration data well above typical firmware size (~600 KB)
+ * and safely within the 16 MB flash window.
  */
 
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 #include "adc_calibration.h"
+
+/* Pull in Pico SDK flash and XIP definitions when building on device */
+#ifdef PICO_ON_DEVICE
+#  include "hardware/flash.h"  /* flash_range_erase(), flash_range_program() */
+#  include "hardware/sync.h"   /* save_and_disable_interrupts(), restore_interrupts() */
+#  include "pico/stdlib.h"     /* XIP_BASE */
+#endif
+
+/* ========================================================================
+ * Flash Sector Address for Calibration Data
+ * ======================================================================== */
+
+/*
+ * Byte offset from the start of QSPI flash (i.e., from XIP_BASE).
+ * Must be aligned to FLASH_SECTOR_SIZE (4096 bytes).
+ */
+#define FLASH_CAL_OFFSET    0x10F000UL
+
+/*
+ * XIP virtual address where calibration data can be read directly
+ * without calling flash_range_program():
+ *   XIP_BASE + FLASH_CAL_OFFSET
+ *
+ * On RP2350B, XIP_BASE = 0x10000000.
+ */
+#ifndef XIP_BASE
+#  define XIP_BASE 0x10000000UL  /* Fallback for host-side compilation */
+#endif
+
+#define FLASH_CAL_XIP_ADDR  (XIP_BASE + FLASH_CAL_OFFSET)
 
 /* ========================================================================
  * ADC Register Definitions (matches battery_monitor.c)
@@ -41,6 +90,186 @@ static struct adc_cal_coeffs cal_coeffs = {
     .cal_version       = 1,
     .reserved          = 0,
 };
+
+/* ========================================================================
+ * Calibration Record Checksum
+ * ======================================================================== */
+
+/*
+ * compute_checksum — Compute an 8-bit additive checksum over a byte range.
+ *
+ * Sums all bytes in [data, data+len) and returns the lower 8 bits.
+ * The caller stores this value in adc_cal_record.checksum; on load, the
+ * checksum field is excluded from the check (the stored value is compared
+ * against a freshly computed sum of the preceding bytes).
+ *
+ * This is an intentionally simple integrity check — the primary protection
+ * against flash corruption is the ADC_CAL_MAGIC sentinel. The checksum
+ * catches single-byte bit-flip errors that would pass the magic check.
+ *
+ * @data: Pointer to the byte range to checksum
+ * @len:  Number of bytes
+ *
+ * Returns: 8-bit sum (modulo 256)
+ */
+static uint8_t compute_checksum(const void *data, size_t len) {
+    const uint8_t *p = (const uint8_t *)data;
+    uint32_t sum = 0;
+    for (size_t i = 0; i < len; i++)
+        sum += p[i];
+    return (uint8_t)(sum & 0xFFU);
+}
+
+/*
+ * validate_cal_record — Verify an adc_cal_record read from flash.
+ *
+ * Checks:
+ *   1. magic == ADC_CAL_MAGIC
+ *   2. version == 1  (only format version we know)
+ *   3. checksum matches bytes [0, sizeof(record)-1)
+ *
+ * @rec: Pointer to the flash-resident record
+ *
+ * Returns: true if valid, false if magic mismatch, unknown version, or
+ *          checksum error.
+ */
+static bool validate_cal_record(const struct adc_cal_record *rec) {
+    uint8_t expected;
+
+    if (!rec)
+        return false;
+
+    /* Magic sentinel */
+    if (rec->magic != ADC_CAL_MAGIC)
+        return false;
+
+    /* Version check — only version 1 is defined */
+    if (rec->version != 1)
+        return false;
+
+    /* Checksum: covers all bytes except the checksum field itself.
+     * sizeof(*rec) - sizeof(rec->checksum) = all preceding bytes. */
+    expected = compute_checksum(rec, sizeof(*rec) - sizeof(rec->checksum));
+    if (rec->checksum != expected)
+        return false;
+
+    return true;
+}
+
+/* ========================================================================
+ * Flash Load / Store  (device-only; stubbed for host unit tests)
+ * ======================================================================== */
+
+/*
+ * adc_cal_load_from_flash — Read calibration record from flash.
+ *
+ * On RP2350B hardware, the calibration sector is directly readable via
+ * the XIP interface without any flash driver call — we just cast the
+ * XIP address to a pointer.  The validate_cal_record() guard ensures we
+ * do not accept erased flash (0xFF fill) or corrupted data.
+ *
+ * Returns: true and populates cal_coeffs if a valid record is found,
+ *          false otherwise (caller keeps the default unity coefficients).
+ */
+static bool adc_cal_load_from_flash(void) {
+#ifdef PICO_ON_DEVICE
+    /* Read directly through the XIP window — no flash unlock required. */
+    const struct adc_cal_record *rec =
+        (const struct adc_cal_record *)FLASH_CAL_XIP_ADDR;
+
+    if (!validate_cal_record(rec))
+        return false;
+
+    cal_coeffs = rec->coeffs;
+    return true;
+#else
+    /* Host build — no flash hardware; always return "not found" so tests
+     * exercise the default-coefficients path. */
+    return false;
+#endif
+}
+
+/*
+ * adc_cal_store_to_flash — Persist current calibration coefficients to flash.
+ *
+ * Steps:
+ *   1. Assemble an adc_cal_record in SRAM.
+ *   2. Disable interrupts (required by flash_range_erase/program).
+ *   3. Erase one 4 KB sector at FLASH_CAL_OFFSET.
+ *   4. Program one 256-byte page at FLASH_CAL_OFFSET.
+ *   5. Re-enable interrupts.
+ *   6. Read the written data back through XIP and re-validate.
+ *
+ * The program buffer is padded to FLASH_PAGE_SIZE with 0xFF to satisfy
+ * the page-aligned write requirement and to avoid corrupting bytes
+ * beyond the struct boundary.
+ *
+ * @uptime_ms: Current MCU uptime in milliseconds, stored as the record
+ *             timestamp for diagnostics.  Pass 0 when an RTC is absent.
+ *
+ * Returns: 0 on success, -1 on parameter error, -2 on readback failure.
+ */
+static int adc_cal_store_to_flash(uint32_t uptime_ms) {
+#ifdef PICO_ON_DEVICE
+    /*
+     * Build the record in SRAM.  We must not write directly from a struct
+     * that lives in flash (XIP cache) — use a stack or SRAM buffer.
+     */
+    struct adc_cal_record record;
+    /* Pad the page buffer with 0xFF (erased-flash value) before filling. */
+    uint8_t page_buf[FLASH_PAGE_SIZE];
+    uint32_t saved_interrupts;
+
+    if (sizeof(struct adc_cal_record) > FLASH_PAGE_SIZE)
+        return -1;  /* Struct grew beyond one flash page — developer error */
+
+    /* Assemble the record */
+    record.magic     = ADC_CAL_MAGIC;
+    record.version   = 1;
+    record.coeffs    = cal_coeffs;
+    record.timestamp = uptime_ms;  /* seconds-accurate RTC would be ideal */
+    record.checksum  = compute_checksum(&record,
+                                         sizeof(record) - sizeof(record.checksum));
+
+    /* Copy into a full-page buffer; remainder stays 0xFF */
+    memset(page_buf, 0xFF, sizeof(page_buf));
+    memcpy(page_buf, &record, sizeof(record));
+
+    /*
+     * Disable interrupts for the duration of flash erase/program.
+     *
+     * flash_range_erase() and flash_range_program() both require that no
+     * code executing from XIP flash fires an interrupt while the flash
+     * controller is busy.  save_and_disable_interrupts() + restore_interrupts()
+     * is the standard Pico SDK idiom for this.
+     *
+     * The combined erase (~50 ms) + program (~0.5 ms) window is longer than
+     * typical watchdog kick intervals, so the caller (adc_cal_factory_calibrate)
+     * should kick the watchdog immediately before calling this function.
+     */
+    saved_interrupts = save_and_disable_interrupts();
+    flash_range_erase(FLASH_CAL_OFFSET, FLASH_SECTOR_SIZE);
+    flash_range_program(FLASH_CAL_OFFSET, page_buf, FLASH_PAGE_SIZE);
+    restore_interrupts(saved_interrupts);
+
+    /*
+     * Readback verification: re-read through the XIP window and validate.
+     * The XIP cache may still hold the pre-erase content; the Pico SDK's
+     * flash_range_program() invalidates the XIP cache before returning,
+     * so a direct pointer read here sees the freshly written data.
+     */
+    const struct adc_cal_record *written =
+        (const struct adc_cal_record *)FLASH_CAL_XIP_ADDR;
+    if (!validate_cal_record(written))
+        return -2;  /* Readback mismatch — flash may be faulty */
+
+    return 0;
+#else
+    /* Host build — no flash hardware; pretend success. */
+    (void)uptime_ms;
+    return 0;
+#endif
+}
 
 /* ========================================================================
  * ADC Read Helper (shared with battery_monitor.c)
@@ -126,8 +355,8 @@ uint16_t adc_cal_compute_vref(void) {
 
 int adc_cal_init(void) {
     /* Initialize with default (uncalibrated) coefficients.
-     * In a production system, this would load calibration data
-     * from flash. For now, we use nominal values. */
+     * These are used as the fallback if flash holds no valid record
+     * (e.g., first boot after manufacturing, or after flash erase). */
     cal_coeffs.vbat_offset_mv    = 0;
     cal_coeffs.vbat_gain_x1000   = 1000;
     cal_coeffs.temp_offset_dcx10 = 0;
@@ -135,14 +364,23 @@ int adc_cal_init(void) {
     cal_coeffs.calibrated        = false;
     cal_coeffs.cal_version       = 1;
 
-    /* TODO: Load calibration from flash (flash sector 0x10F000)
-     * struct adc_cal_record record;
-     * flash_read(FLASH_CAL_SECTOR, &record, sizeof(record));
-     * if (record.magic == ADC_CAL_MAGIC && verify_checksum(&record)) {
-     *     cal_coeffs = record.coeffs;
-     * } */
+    /* Attempt to load factory calibration data from flash sector 0x10F000.
+     *
+     * adc_cal_load_from_flash() reads the adc_cal_record stored in the
+     * calibration sector, validates the magic sentinel (ADC_CAL_MAGIC),
+     * checks the format version (must be 1), and verifies the additive
+     * checksum.  If all checks pass, cal_coeffs is populated with the
+     * factory-measured values and this function returns 1; otherwise the
+     * defaults set above remain in effect and 0 is returned.
+     *
+     * On the host (unit tests), adc_cal_load_from_flash() always returns
+     * false so tests always exercise the uncalibrated path. */
+    if (adc_cal_load_from_flash()) {
+        /* Loaded factory calibration — cal_coeffs.calibrated is now true */
+        return 1;  /* Positive: calibration data found and loaded */
+    }
 
-    return 0;
+    return 0;  /* Zero: running with default (uncalibrated) coefficients */
 }
 
 uint16_t adc_cal_apply_vbat(uint16_t raw_mv) {
@@ -190,6 +428,7 @@ int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv) {
     uint16_t adc_low, adc_high;
     int32_t raw_low_mv, raw_high_mv;
     int32_t offset, gain_x1000;
+    int flash_ret;
 
     /* Step 1: Read ADC at known low voltage */
     adc_low = adc_read_averaged(0, ADC_CAL_CALIBRATION_SAMPLES);
@@ -224,7 +463,7 @@ int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv) {
 
     offset = (int32_t)vbat_low_mv * 1000 / gain_x1000 - raw_low_mv;
 
-    /* Store calibration coefficients */
+    /* Store calibration coefficients in RAM */
     cal_coeffs.vbat_offset_mv    = (int16_t)offset;
     cal_coeffs.vbat_gain_x1000   = (uint16_t)gain_x1000;
     cal_coeffs.calibrated         = true;
@@ -236,14 +475,29 @@ int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv) {
     cal_coeffs.temp_offset_dcx10 = 0;
     cal_coeffs.temp_gain_x1000   = 1000;
 
-    /* TODO: Store calibration data to flash
-     * struct adc_cal_record record;
-     * record.magic = ADC_CAL_MAGIC;
-     * record.version = 1;
-     * record.coeffs = cal_coeffs;
-     * record.timestamp = get_unix_timestamp(); // Requires RTC
-     * record.checksum = compute_checksum(&record);
-     * flash_write(FLASH_CAL_SECTOR, &record, sizeof(record)); */
+    /* Step 4: Persist calibration coefficients to flash sector 0x10F000.
+     *
+     * adc_cal_store_to_flash() performs:
+     *   1. Assemble an adc_cal_record in SRAM (magic + version + coeffs +
+     *      timestamp + additive checksum).
+     *   2. Disable interrupts (required by Pico SDK flash APIs).
+     *   3. flash_range_erase() — erase the 4 KB calibration sector.
+     *   4. flash_range_program() — write a 256-byte page with the record.
+     *   5. Re-enable interrupts.
+     *   6. Readback via XIP to verify written data passes validate_cal_record().
+     *
+     * Passing 0 for uptime_ms is acceptable; a real RTC timestamp would
+     * require a system clock that isn't available during factory calibration.
+     * The timestamp field is diagnostic only.
+     *
+     * Return codes from adc_cal_store_to_flash():
+     *   0  — success
+     *  -1  — struct too large for one flash page (developer error)
+     *  -2  — readback validation failed (flash may be faulty)
+     */
+    flash_ret = adc_cal_store_to_flash(0);
+    if (flash_ret != 0)
+        return flash_ret;  /* Propagate flash error to caller */
 
     return 0;
 }
