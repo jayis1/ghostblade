@@ -146,7 +146,45 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ### Fixed
 
-- **DTS memory capacity mismatch**: Corrected the base board `memory@0` range from 2 GiB to the manifest-specified 8 GiB LPDDR5 capacity. `tools/validate_dts.py` now parses the 64-bit memory range and rejects future manifest/DTS capacity drift.
+- **SDR stream blocked during brownout** (`firmware/rp2350b/src/spi_protocol.c`):
+  `handle_cmd_sdr_stream()` now refuses to start the SDR LNA and DMA engine
+  when `device_state.brownout_active` is set. Starting the SDR receiver under
+  an undervoltage condition draws ~100 mA additional current, which can deepen
+  the voltage sag, corrupt in-flight SPI frames, and cause uncontrolled resets.
+  The host already receives the `TELEM_FLAG_LOW_BATTERY` bit in telemetry and
+  should not attempt streaming; this guard makes the firmware fail-safe even if
+  the host ignores the flag. Stop commands are still processed normally to allow
+  recovery if streaming was active when brownout began.
+
+- **Kernel driver frame-validation log noise** (`software/linux-drivers/src/apex_bridge.c`):
+  `apex_validate_frame()` used `pr_err()` for every bad SPI frame, flooding the
+  kernel log at error level during normal bus noise or glitches. Changed to
+  `pr_warn_ratelimited()` which rate-limits repeated messages. Removed raw CRC
+  and sync-byte values from the log messages to avoid leaking protocol frame
+  internals into the system log.
+
+- **Redundant cdev.ops assignment** (`software/linux-drivers/src/apex_bridge.c`):
+  `cdev_init(&dev->cdev, &apex_bridge_fops)` already sets `cdev.ops`; the
+  subsequent `dev->cdev.ops = &apex_bridge_fops` was a no-op duplicate that
+  caused confusion. Removed.
+
+- **pyapex: variadic ioctl call missing argument** (`software/libapex/src/pyapex.c`):
+  `ioctl(self->fd, APEX_IOC_SG_STOP)` invoked the variadic `ioctl()` syscall
+  wrapper with only two arguments. `APEX_IOC_SG_STOP` is a `_IO()` macro and
+  the kernel ignores the third argument, but calling a variadic function with
+  fewer arguments than needed is implementation-defined in C. Added `NULL` as
+  the third argument to make the call well-defined.
+
+- **Python tools: missing timeout on subprocess.run calls**
+  (`software/libapex/walkie_talkie.py`): Two `subprocess.run()` calls
+  (`bluetoothctl connect-sco`, `mumble-ctl`) had no `timeout` parameter,
+  meaning a hung Bluetooth stack or Mumble control socket could block the PTT
+  thread indefinitely. Added `timeout=5` and `timeout=3` respectively.
+
+- **Module author attribution** (`software/linux-drivers/src/apex_bridge.c`):
+  Updated `MODULE_AUTHOR` from the generic project placeholder to `jayis1`.
+
+
 - **Documentation-index table syntax**: Repaired malformed Markdown table delimiters in the validation-tools section so it renders consistently across Markdown viewers.
 
 ### Changed

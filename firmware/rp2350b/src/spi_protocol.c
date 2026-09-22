@@ -641,6 +641,13 @@ static void handle_cmd_sdr_stream(const uint8_t *payload, uint16_t len) {
     uint8_t enable = payload[0];
 
     if (enable && !device_state.sdr_streaming) {
+        /* Refuse to start SDR streaming during brownout: the SDR LNA and
+         * DMA engine draw significant current that could worsen undervoltage,
+         * corrupt in-flight SPI frames, and cause data loss. The host will
+         * see the LOW_BATTERY flag in telemetry and should not stream. */
+        if (device_state.brownout_active)
+            return;
+
         /* Start SDR IQ streaming */
         device_state.sdr_streaming = true;
         device_state.sdr_rx_enabled = true;

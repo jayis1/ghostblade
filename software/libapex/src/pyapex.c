@@ -476,7 +476,7 @@ static PyObject *ApexBridge_sg_start(ApexBridgeObject *self, PyObject *args) {
 
 static PyObject *ApexBridge_sg_stop(ApexBridgeObject *self,
                                       PyObject *Py_UNUSED(ignored)) {
-    if (ioctl(self->fd, APEX_IOC_SG_STOP) < 0) {
+    if (ioctl(self->fd, APEX_IOC_SG_STOP, NULL) < 0) {
         PyErr_Format(PyExc_OSError, "SG stop failed: %s", strerror(errno));
         return NULL;
     }

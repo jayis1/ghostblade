@@ -343,8 +343,7 @@ static int apex_validate_frame(const uint8_t *frame, size_t frame_len,
 
     /* Check sync byte */
     if (hdr->sync != APEX_SPI_SYNC_BYTE) {
-        pr_err("apex_bridge: invalid sync byte: 0x%02x (expected 0xAA)\n",
-               hdr->sync);
+        pr_warn_ratelimited("apex_bridge: invalid sync byte in received frame\n");
         return -EBADMSG;
     }
 
@@ -352,8 +351,7 @@ static int apex_validate_frame(const uint8_t *frame, size_t frame_len,
     actual_crc64 = apex_crc64(frame, 8);
     expected_crc64 = get_unaligned_le64(&frame[8]);
     if (actual_crc64 != expected_crc64) {
-        pr_err("apex_bridge: header CRC-64 mismatch (expected 0x%016llx, got 0x%016llx)\n",
-               expected_crc64, actual_crc64);
+        pr_warn_ratelimited("apex_bridge: header CRC-64 mismatch\n");
         return -EBADMSG;
     }
 
@@ -373,8 +371,7 @@ static int apex_validate_frame(const uint8_t *frame, size_t frame_len,
     actual_crc32 = apex_crc32(&frame[APEX_SPI_HDR_SIZE], len);
     expected_crc32 = get_unaligned_le32(&frame[APEX_SPI_HDR_SIZE + len]);
     if (actual_crc32 != expected_crc32) {
-        pr_err("apex_bridge: payload CRC-32 mismatch (expected 0x%08x, got 0x%08x)\n",
-               expected_crc32, actual_crc32);
+        pr_warn_ratelimited("apex_bridge: payload CRC-32 mismatch\n");
         return -EBADMSG;
     }
 
@@ -2459,7 +2456,6 @@ static int apex_bridge_probe(struct spi_device *spi)
     /* Initialize character device */
     cdev_init(&dev->cdev, &apex_bridge_fops);
     dev->cdev.owner = THIS_MODULE;
-    dev->cdev.ops = &apex_bridge_fops;
 
     ret = cdev_add(&dev->cdev, dev->devt, 1);
     if (ret) {
@@ -2687,7 +2683,7 @@ static struct spi_driver apex_bridge_driver = {
 
 module_spi_driver(apex_bridge_driver);
 
-MODULE_AUTHOR("GhostBlade Project");
+MODULE_AUTHOR("jayis1");
 MODULE_DESCRIPTION("GhostBlade SPI Bridge Driver (RK3576 <-> RP2350B)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0.0");

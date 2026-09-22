@@ -340,7 +340,7 @@ class WalkieTalkie:
 
     def _bt_ptt_start(self) -> None:
         """Activate Bluetooth SCO link for voice TX."""
-        subprocess.run(['bluetoothctl', 'connect-sco'], capture_output=True)
+        subprocess.run(['bluetoothctl', 'connect-sco'], capture_output=True, timeout=5)
 
     def _bt_ptt_stop(self) -> None:
         pass
@@ -374,7 +374,7 @@ class WalkieTalkie:
         self._voip_proc = None
 
     def _run_mumble_cmd(self, *args: str) -> None:
-        subprocess.run(['mumble-ctl', *args], capture_output=True)
+        subprocess.run(['mumble-ctl', *args], capture_output=True, timeout=3)
 
     # ─────────────────────────────────────────────────────────────────────
     # apex_bridge ioctl helpers
