@@ -13,6 +13,16 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
+### Changed (2026-09-22)
+
+- `GhostBlade.mf` manifest: Corrected `Author` field from placeholder to `jayis1`.
+- `tools/update_stats.py`: Dynamic date generation — `last_updated` in `stats.json` now uses `date.today().isoformat()` instead of a hardcoded date string; refreshed `stats.json` to 2026-09-22.
+- `README.md`: Updated local-validation date stamp to 2026-09-22.
+- `docs/glossary.md`: Marked `apex-ctl` as planned/not-yet-implemented with a note to use `pyapex` bindings until the CLI is available.
+- `docs/board-quickstart.md`: Added `apex-ctl` status notes at Method 3 (kernel driver flash) and Quick Smoke Tests sections, directing users to `pyapex` bindings in the interim.
+
+### Previous changelog entries below
+
 ### Added
 
 - **ADC calibration flash persistence** (`firmware/rp2350b/src/adc_calibration.c`,

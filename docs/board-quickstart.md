@@ -87,6 +87,9 @@ openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
 
 ### Method 3: Kernel Driver Managed Flash
 
+> **Note:** `apex-ctl` is a planned CLI utility, not yet implemented. Use the
+> Python bindings (`pyapex`) for programmatic control until apex-ctl is available.
+
 ```bash
 apex-ctl --mcu-reset
 sleep 0.5
@@ -151,6 +154,9 @@ All subsystems operational!
 ---
 
 ## 6. Quick Smoke Tests
+
+> **Note:** `apex-ctl` shown below is a planned CLI utility, not yet available.
+> Use the Python bindings (`pyapex`) for equivalent scripted control.
 
 ```bash
 # SDR tune test

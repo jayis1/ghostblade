@@ -47,8 +47,9 @@ def main():
                 counts[key] += n
                 total_lines += n
 
+    from datetime import date
     stats = {**counts, 'bom_components': 67, 'total_files': total_files,
-             'total_lines': total_lines, 'last_updated': '2026-09-21'}
+             'total_lines': total_lines, 'last_updated': date.today().isoformat()}
     with open('stats.json', 'w') as fh:
         json.dump(stats, fh, indent=2)
         fh.write('\n')

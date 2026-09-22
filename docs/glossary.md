@@ -42,7 +42,7 @@ throughout the GhostBlade documentation.
 | **apex_bridge** | Linux kernel driver that provides `/dev/apex_bridge0` and sysfs attributes for the SPI bridge |
 | **libapex** | Userspace C library wrapping the apex_bridge ioctl interface |
 | **pyapex** | Python bindings for libapex |
-| **apex-ctl** | Command-line utility for managing the GhostBlade device |
+| **apex-ctl** | Command-line utility for managing the GhostBlade device *(planned — not yet implemented; use the pyapex Python bindings for scripting until apex-ctl is available)* |
 | **SPI bridge protocol** | The CRC-64/CRC-32 framed protocol used between RK3576 and RP2350B over SPI0 |
 | **SG DMA** | Scatter-gather DMA engine in the kernel driver for high-throughput SDR IQ streaming |
 | **MCU_READY** | Signal from RP2350B to RK3576 indicating the MCU firmware has completed initialization |

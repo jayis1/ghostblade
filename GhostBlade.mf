@@ -2,7 +2,7 @@
 DeviceName        = "GhostBlade"
 Codename          = "Project NullSpectre"
 TargetClass       = "Advanced Mobile Pentesting Lab"
-Author            = "Hardware/Software Co-Design Engine"
+Author            = "jayis1"
 Date              = "2026-06-14"
 Revision          = "1.0"
 License           = "CERN-OHL-S v2 (hardware), GPL-2.0+ (software), CC-BY-SA 4.0 (docs)"
