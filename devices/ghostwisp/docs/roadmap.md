@@ -34,8 +34,8 @@ Work proceeds in evidence-producing increments. A phase is complete only when it
 
 ## Phase 3 — Firmware foundation
 
-- [ ] Add a buildable RP2350B project and reproducible toolchain instructions.
-- [ ] Implement board initialization, watchdog, power states, and recovery.
+- [x] Add a buildable RP2350B project and reproducible toolchain instructions.
+- [x] Implement board initialization, watchdog, power states, and recovery.
 - [ ] Implement display/input shell and action broker.
 - [ ] Add bounded storage/profile parsers with host-side tests.
 - [ ] Add A/B signed-update metadata and rollback behavior.

@@ -11,6 +11,7 @@
 
 # Firmware build
 firmware/rp2350b/build/
+devices/ghostwisp/firmware/rp2350b/build/
 firmware/rp2350b/.vscode/
 *.uf2
 *.hex
@@ -87,6 +88,7 @@ tests/test_cc1101_lms7002m
 tests/test_sleep_wake
 tests/test_crc_validation
 tests/test_es8388_audio
+tests/test_ghostwisp_boot
 
 # Coverage / analysis
 *.gcda
