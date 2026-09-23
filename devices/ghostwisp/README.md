@@ -101,8 +101,12 @@ devices/ghostwisp/
 └── docs/
     ├── architecture.md
     ├── ghostblade-integration.md
+    ├── pcb-layout-review.md
     └── roadmap.md
 ```
+
+The [PCB layout review](docs/pcb-layout-review.md) records the current no-go gate and the evidence required for
+a geometry-based re-review.
 
 Future work should add `hardware/`, `firmware/`, `tests/`, and `tools/` only when each contains buildable or verifiable artifacts.
 
