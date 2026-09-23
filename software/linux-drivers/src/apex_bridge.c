@@ -493,7 +493,7 @@ static void apex_rx_work_handler(struct work_struct *work)
 
     tx_frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
     if (!tx_frame) {
-        kfree(rx_frame);
+        kfree_sensitive(rx_frame);  /* rx_frame may hold protocol data */
         goto out_pm_put;
     }
 
@@ -580,8 +580,8 @@ static void apex_rx_work_handler(struct work_struct *work)
     }
 
 out_free:
-    kfree(rx_frame);
-    kfree(tx_frame);
+    kfree_sensitive(rx_frame);  /* may hold NFC/IQ frame data */
+    kfree_sensitive(tx_frame);  /* may hold plaintext protocol frame */
 out_pm_put:
     pm_runtime_mark_last_busy(&dev->spi->dev);
     pm_runtime_put_autosuspend(&dev->spi->dev);
@@ -849,7 +849,7 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
 
     rx_buf = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
     if (!rx_buf) {
-        kfree(frame);
+        kfree_sensitive(frame);  /* frame may already hold partial header */
         return -ENOMEM;
     }
 
@@ -1391,7 +1391,7 @@ static ssize_t rssi_dbm_x10_show(struct device *dev,
     val = adev->last_telem.rssi_dbm_x10;
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "%d\n", (int16_t)le16_to_cpu(val));
+    return sysfs_emit(buf, "%d\n", (int16_t)le16_to_cpu(val));
 }
 static DEVICE_ATTR_RO(rssi_dbm_x10);
 
@@ -1408,7 +1408,7 @@ static ssize_t temp_c_x10_show(struct device *dev,
     val = adev->last_telem.temp_c_x10;
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "%d\n", (int16_t)le16_to_cpu(val));
+    return sysfs_emit(buf, "%d\n", (int16_t)le16_to_cpu(val));
 }
 static DEVICE_ATTR_RO(temp_c_x10);
 
@@ -1425,7 +1425,7 @@ static ssize_t vbat_mv_show(struct device *dev,
     val = adev->last_telem.vbat_mv;
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "%u\n", le16_to_cpu(val));
+    return sysfs_emit(buf, "%u\n", le16_to_cpu(val));
 }
 static DEVICE_ATTR_RO(vbat_mv);
 
@@ -1442,7 +1442,7 @@ static ssize_t cc1101_rssi_x10_show(struct device *dev,
     val = adev->last_telem.cc1101_rssi_x10;
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "%d\n", (int16_t)le16_to_cpu(val));
+    return sysfs_emit(buf, "%d\n", (int16_t)le16_to_cpu(val));
 }
 static DEVICE_ATTR_RO(cc1101_rssi_x10);
 
@@ -1459,7 +1459,7 @@ static ssize_t nfc_field_mv_show(struct device *dev,
     val = adev->last_telem.nfc_field_mv;
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "%u\n", le16_to_cpu(val));
+    return sysfs_emit(buf, "%u\n", le16_to_cpu(val));
 }
 static DEVICE_ATTR_RO(nfc_field_mv);
 
@@ -1476,7 +1476,7 @@ static ssize_t mcu_flags_show(struct device *dev,
     val = adev->last_telem.flags;
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "0x%04x\n", le16_to_cpu(val));
+    return sysfs_emit(buf, "0x%04x\n", le16_to_cpu(val));
 }
 static DEVICE_ATTR_RO(mcu_flags);
 
@@ -1493,7 +1493,7 @@ static ssize_t uptime_ms_show(struct device *dev,
     val = adev->last_telem.uptime_ms;
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "%u\n", le32_to_cpu(val));
+    return sysfs_emit(buf, "%u\n", le32_to_cpu(val));
 }
 static DEVICE_ATTR_RO(uptime_ms);
 
@@ -1513,7 +1513,7 @@ static ssize_t driver_status_show(struct device *dev,
     if (test_bit(APEX_STATE_SPI_ERROR, &adev->flags))
         status |= BIT(2);
 
-    return sprintf(buf, "0x%08x\n", status);
+    return sysfs_emit(buf, "0x%08x\n", status);
 }
 static DEVICE_ATTR_RO(driver_status);
 
@@ -1525,7 +1525,7 @@ static ssize_t spi_errors_show(struct device *dev,
     if (!adev)
         return -ENODEV;
 
-    return sprintf(buf, "%u\n", atomic_read(&adev->spi_err_count));
+    return sysfs_emit(buf, "%u\n", atomic_read(&adev->spi_err_count));
 }
 static DEVICE_ATTR_RO(spi_errors);
 
@@ -1542,7 +1542,7 @@ static ssize_t rx_fifo_count_show(struct device *dev,
     count = kfifo_len(&adev->rx_fifo);
     spin_unlock(&adev->rx_lock);
 
-    return sprintf(buf, "%u\n", count);
+    return sysfs_emit(buf, "%u\n", count);
 }
 static DEVICE_ATTR_RO(rx_fifo_count);
 
@@ -1559,7 +1559,7 @@ static ssize_t tx_fifo_count_show(struct device *dev,
     count = kfifo_len(&adev->tx_fifo);
     spin_unlock(&adev->tx_lock);
 
-    return sprintf(buf, "%u\n", count);
+    return sysfs_emit(buf, "%u\n", count);
 }
 static DEVICE_ATTR_RO(tx_fifo_count);
 
@@ -1576,7 +1576,7 @@ static ssize_t brownout_count_show(struct device *dev,
      * cleared to set, the counter increments. This gives a persistent
      * count of how many brownout events have occurred since boot.
      * Use atomic_read for lockless access to the atomic counter. */
-    return sprintf(buf, "%u\n", atomic_read(&adev->brownout_count));
+    return sysfs_emit(buf, "%u\n", atomic_read(&adev->brownout_count));
 }
 static DEVICE_ATTR_RO(brownout_count);
 
@@ -1588,7 +1588,7 @@ static ssize_t low_battery_show(struct device *dev,
     if (!adev)
         return -ENODEV;
 
-    return sprintf(buf, "%u\n",
+    return sysfs_emit(buf, "%u\n",
                    test_bit(APEX_STATE_LOW_BATTERY, &adev->flags) ? 1 : 0);
 }
 static DEVICE_ATTR_RO(low_battery);
@@ -1604,7 +1604,7 @@ static ssize_t overtemp_count_show(struct device *dev,
     /* Return cumulative overtemperature event count (rising-edge
      * transitions of the OVERTEMP flag). Each time the MCU reports
      * overtemperature (temp > 85°C), this counter increments. */
-    return sprintf(buf, "%u\n", atomic_read(&adev->overtemp_count));
+    return sysfs_emit(buf, "%u\n", atomic_read(&adev->overtemp_count));
 }
 static DEVICE_ATTR_RO(overtemp_count);
 
@@ -1620,7 +1620,7 @@ static ssize_t irq_count_show(struct device *dev,
      * Useful for diagnosing communication issues — a high IRQ count
      * with low frames_rx indicates the MCU is asserting INT_REQ but
      * the SPI transfers are failing. */
-    return sprintf(buf, "%u\n", atomic_read(&adev->irq_count));
+    return sysfs_emit(buf, "%u\n", atomic_read(&adev->irq_count));
 }
 static DEVICE_ATTR_RO(irq_count);
 
@@ -1638,7 +1638,7 @@ static ssize_t overtemp_show(struct device *dev,
     spin_unlock(&adev->rx_lock);
 
     /* APEX_FLAG_OVERTEMP is BIT(6) in the telemetry flags bitmap */
-    return sprintf(buf, "%u\n",
+    return sysfs_emit(buf, "%u\n",
                    (le16_to_cpu(flags) & APEX_FLAG_OVERTEMP) ? 1 : 0);
 }
 static DEVICE_ATTR_RO(overtemp);
@@ -1646,7 +1646,7 @@ static DEVICE_ATTR_RO(overtemp);
 static ssize_t firmware_version_show(struct device *dev,
                                        struct device_attribute *attr, char *buf)
 {
-    return sprintf(buf, "%s\n", APEX_FIRMWARE_VERSION);
+    return sysfs_emit(buf, "%s\n", APEX_FIRMWARE_VERSION);
 }
 static DEVICE_ATTR_RO(firmware_version);
 
@@ -1679,7 +1679,7 @@ static ssize_t sg_state_show(struct device *dev,
         break;
     }
 
-    return sprintf(buf, "%s\n", state_str);
+    return sysfs_emit(buf, "%s\n", state_str);
 }
 static DEVICE_ATTR_RO(sg_state);
 
@@ -1696,7 +1696,7 @@ static ssize_t sg_total_bytes_show(struct device *dev,
     total_transferred = adev->sg_engine.total_transferred;
     mutex_unlock(&adev->sg_engine.sg_lock);
 
-    return sprintf(buf, "%llu\n", total_transferred);
+    return sysfs_emit(buf, "%llu\n", total_transferred);
 }
 static DEVICE_ATTR_RO(sg_total_bytes);
 
@@ -1713,7 +1713,7 @@ static ssize_t sg_overruns_show(struct device *dev,
     overruns = adev->sg_engine.overruns;
     mutex_unlock(&adev->sg_engine.sg_lock);
 
-    return sprintf(buf, "%u\n", overruns);
+    return sysfs_emit(buf, "%u\n", overruns);
 }
 static DEVICE_ATTR_RO(sg_overruns);
 
@@ -1730,7 +1730,7 @@ static ssize_t sg_errors_show(struct device *dev,
     errors = adev->sg_engine.errors;
     mutex_unlock(&adev->sg_engine.sg_lock);
 
-    return sprintf(buf, "%u\n", errors);
+    return sysfs_emit(buf, "%u\n", errors);
 }
 static DEVICE_ATTR_RO(sg_errors);
 
@@ -1747,7 +1747,7 @@ static ssize_t sg_frames_rx_show(struct device *dev,
     frames_rx = adev->sg_engine.frames_rx;
     mutex_unlock(&adev->sg_engine.sg_lock);
 
-    return sprintf(buf, "%u\n", frames_rx);
+    return sysfs_emit(buf, "%u\n", frames_rx);
 }
 static DEVICE_ATTR_RO(sg_frames_rx);
 
@@ -1764,7 +1764,7 @@ static ssize_t sg_buf_count_show(struct device *dev,
     buf_count = adev->sg_engine.buf_count;
     mutex_unlock(&adev->sg_engine.sg_lock);
 
-    return sprintf(buf, "%u\n", buf_count);
+    return sysfs_emit(buf, "%u\n", buf_count);
 }
 static DEVICE_ATTR_RO(sg_buf_count);
 
@@ -1781,7 +1781,7 @@ static ssize_t sg_buf_size_show(struct device *dev,
     buf_size = adev->sg_engine.buf_size;
     mutex_unlock(&adev->sg_engine.sg_lock);
 
-    return sprintf(buf, "%u\n", buf_size);
+    return sysfs_emit(buf, "%u\n", buf_size);
 }
 static DEVICE_ATTR_RO(sg_buf_size);
 
@@ -1798,7 +1798,7 @@ static ssize_t sg_frames_crc_err_show(struct device *dev,
     frames_crc_err = adev->sg_engine.frames_crc_err;
     mutex_unlock(&adev->sg_engine.sg_lock);
 
-    return sprintf(buf, "%u\n", frames_crc_err);
+    return sysfs_emit(buf, "%u\n", frames_crc_err);
 }
 static DEVICE_ATTR_RO(sg_frames_crc_err);
 

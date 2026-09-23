@@ -210,14 +210,22 @@ int es8388_ptt_set(es8388_ptt_mode_t mode, bool active)
                  * The Linux host handles the actual I2S audio routing
                  * and GNU Radio SDR TX pipeline — we just gate the RF */
                 gpio_put(PIN_AUDIO_PTT, 1);
+                /* Debug only: suppress per-event printf in production to
+                 * avoid UART flooding during walkie-talkie PTT use */
+#ifdef APEX_DEBUG_AUDIO
                 printf("ES8388: PTT active — SDR TX (LMS7002M TX enable asserted)\r\n");
+#endif
             } else {
+#ifdef APEX_DEBUG_AUDIO
                 printf("ES8388: PTT active — CC1101 sub-GHz TX\r\n");
+#endif
             }
         } else {
             /* Wi-Fi and BT are full-duplex — speaker stays on */
+#ifdef APEX_DEBUG_AUDIO
             printf("ES8388: PTT active — %s (full-duplex)\r\n",
                    mode == ES8388_PTT_WIFI ? "Wi-Fi 6E VoIP" : "Bluetooth SCO/HFP");
+#endif
         }
     } else {
         /* Releasing TX — return to RX */
@@ -228,7 +236,9 @@ int es8388_ptt_set(es8388_ptt_mode_t mode, bool active)
         /* Unmute speaker for RX audio playback */
         es8388_set_mute(false);
 
+#ifdef APEX_DEBUG_AUDIO
         printf("ES8388: PTT released — RX mode\r\n");
+#endif
         g_es8388.ptt_mode = ES8388_PTT_OFF;
     }
 
