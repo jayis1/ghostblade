@@ -102,11 +102,14 @@ devices/ghostwisp/
     ├── architecture.md
     ├── ghostblade-integration.md
     ├── pcb-layout-review.md
+    ├── rf-engineering.md
     └── roadmap.md
 ```
 
 The [PCB layout review](docs/pcb-layout-review.md) records the current no-go gate and the evidence required for
-a geometry-based re-review.
+a geometry-based re-review. The [RF engineering](docs/rf-engineering.md) document resolves the Phase 1 RF gates:
+CC1101 868/915 MHz regional matching, the ST25R3916 NFC loop geometry, and antenna separation and enclosure
+keepout zones for the 56 × 42 mm board.
 
 Future work should add `hardware/`, `firmware/`, `tests/`, and `tools/` only when each contains buildable or verifiable artifacts.
 

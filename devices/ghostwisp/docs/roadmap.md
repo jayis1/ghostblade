@@ -18,7 +18,7 @@ Work proceeds in evidence-producing increments. A phase is complete only when it
 
 - [ ] Create the power budget and operating-state table.
 - [ ] Allocate RP2350B pins and buses without conflicts.
-- [ ] Define regional CC1101 front-end variants.
+- [x] Define regional CC1101 front-end variants. (RF engineering: [rf-engineering.md](rf-engineering.md))
 - [ ] Define NFC and IR electrical interfaces.
 - [ ] Freeze the GhostBlade companion transport and frame requirements on both devices.
 - [ ] Define the GhostBlade companion daemon, `libapex`/Python surface, and shared capture/profile schemas.
