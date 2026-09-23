@@ -44,11 +44,19 @@ set(PICO_STDIO_UART 1)
 # ── Firmware source files ─────────────────────────────────────────────────────
 set(FW_SOURCES
     src/ghostwisp_boot.c
+    src/ghostwisp_gpio.c
+    src/ghostwisp_i2c.c
+    src/ghostwisp_spi.c
+    src/ghostwisp_uart.c
 )
 
 set(FW_HEADERS
     include/ghostwisp_pins.h
     include/ghostwisp_boot.h
+    include/ghostwisp_gpio.h
+    include/ghostwisp_i2c.h
+    include/ghostwisp_spi.h
+    include/ghostwisp_uart.h
 )
 
 # ── Create executable ─────────────────────────────────────────────────────────

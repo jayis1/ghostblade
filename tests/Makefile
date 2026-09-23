@@ -45,7 +45,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_libapex_framing test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation test_es8388_audio test_ghostwisp_boot
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_libapex_framing test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation test_es8388_audio test_ghostwisp_boot test_ghostwisp_peripherals
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -76,6 +76,7 @@ help:
 	@echo "  test_crc_validation  - Build SPI protocol CRC validation tests"
 	@echo "  test_es8388_audio    - Build ES8388 audio codec unit tests"
 	@echo "  test_ghostwisp_boot  - Build GhostWisp boot sequence unit tests"
+	@echo "  test_ghostwisp_peripherals - Build GhostWisp peripheral driver unit tests"
 	@echo "  run / check           - Build and run all userspace tests"
 	@echo "  clean                 - Remove build artifacts"
 	@echo ""
@@ -133,6 +134,14 @@ test_es8388_audio: test_es8388_audio.c
 test_ghostwisp_boot: test_ghostwisp_boot.c
 	$(CC) $(CFLAGS) -DBOOT_HOST_TEST -I$(CURDIR)/../devices/ghostwisp/firmware/rp2350b/include -o $@ $< ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_boot.c $(LDFLAGS)
 
+test_ghostwisp_peripherals: test_ghostwisp_peripherals.c
+	$(CC) $(CFLAGS) -DDRIVER_HOST_TEST -I$(CURDIR)/../devices/ghostwisp/firmware/rp2350b/include -o $@ $< \
+		../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_gpio.c \
+		../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_i2c.c \
+		../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_spi.c \
+		../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_uart.c \
+		$(LDFLAGS)
+
 .PHONY: test_walkie_talkie
 test_walkie_talkie:
 	@echo "=== Running Walkie-Talkie Python Unit Tests ==="
@@ -189,6 +198,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running GhostWisp Boot Sequence Unit Tests ==="
 	@./test_ghostwisp_boot
+	@echo ""
+	@echo "=== Running GhostWisp Peripheral Driver Unit Tests ==="
+	@./test_ghostwisp_peripherals
 	@echo ""
 	@echo "=== Running Walkie-Talkie Python Unit Tests ==="
 	@python3 test_walkie_talkie.py
