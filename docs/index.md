@@ -87,6 +87,15 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [Contributor Onboarding](getting-started-contributors.md) | Step-by-step checklist for new contributors |
 | [Security Policy](../SECURITY.md) | Vulnerability reporting and responsible disclosure |
 
+## Sister Device — GhostWisp (Project Little Spectre)
+
+| Document | Description |
+|----------|-------------|
+| [GhostWisp Overview](../devices/ghostwisp/README.md) | Project Little Spectre — pocketable MCU-first hacker companion |
+| [GhostWisp Architecture](../devices/ghostwisp/docs/architecture.md) | Hardware architecture, component selection, power model |
+| [GhostBlade ↔ GhostWisp Integration](../devices/ghostwisp/docs/ghostblade-integration.md) | Mothership/edge pairing protocol and USB/UART bridge |
+| [GhostWisp Roadmap](../devices/ghostwisp/docs/roadmap.md) | Rev A milestones and component status |
+
 ## Engineering Phases (Detailed Design)
 
 | Phase | Document | Description |

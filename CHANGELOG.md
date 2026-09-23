@@ -13,6 +13,30 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
+### Added (2026-09-23)
+
+- **README: GhostWisp sister device** — added `devices/ghostwisp/` subtree to
+  the repository structure diagram and documentation index, reflecting the
+  GhostWisp (Project Little Spectre) files introduced on 2026-09-22.
+- **README: test file inventory** — added missing entries for all test files
+  added since the last README sync: `test_crc_validation.c`,
+  `test_es8388_audio.c`, `test_sleep_wake.c`, `test_libapex_framing.c`,
+  `test_walkie_talkie.py`, `hil_nfc_test.sh`, `hil_sdr_dma_stream_test.sh`,
+  and `hitl_test.sh`.
+- **README: documentation index** — added links to `docs/memory-map.md`,
+  `docs/gpio-cross-reference.md`, `docs/glossary.md`,
+  `docs/power-sequencing.md`, and `devices/ghostwisp/README.md` which were
+  present in the repo but missing from the index table.
+- **docs/index.md: GhostWisp section** — new "Sister Device — GhostWisp
+  (Project Little Spectre)" table linking all four `devices/ghostwisp/`
+  documents (README, architecture, ghostblade-integration, roadmap).
+
+### Changed (2026-09-23)
+
+- `README.md` — updated validation date stamp to 2026-09-23.
+- `stats.json` — refreshed line counts to 2026-09-23 (docs: 12686, total
+  lines: 50458).
+
 ### Added (2026-09-22)
 
 - **Walkie-talkie Python unit tests** (`tests/test_walkie_talkie.py`): 72

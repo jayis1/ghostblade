@@ -112,7 +112,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ## Current Repository State
 
-Validated locally on 2026-09-22:
+Validated locally on 2026-09-23:
 
 - `python3 tools/check_internal_links.py` → no broken internal links
 - `python3 tools/validate_dts.py` → DTS cross-reference checks passed
@@ -360,7 +360,15 @@ ghostblade/
 │   ├── test_adc_calibration.c                # ADC calibration & voltage divider tests
 │   ├── test_peripheral_power.c              # Peripheral power management tests
 │   ├── test_cc1101_lms7002m.c              # CC1101 + LMS7002M integration tests
-│   └── hil_spi_bridge_test.sh                 # HIL SPI bridge test script
+│   ├── test_crc_validation.c                  # SPI protocol CRC-64/CRC-32 validation tests
+│   ├── test_es8388_audio.c                    # ES8388 audio codec driver and SPI command tests
+│   ├── test_sleep_wake.c                      # Sleep/wake state machine unit tests
+│   ├── test_libapex_framing.c                 # libapex frame serialization unit tests
+│   ├── test_walkie_talkie.py                  # Walkie-talkie PTT state machine tests (Python)
+│   ├── hil_spi_bridge_test.sh                 # HIL SPI bridge test script
+│   ├── hil_nfc_test.sh                        # HIL NFC (ST25R3916) test script
+│   ├── hil_sdr_dma_stream_test.sh             # HIL SDR DMA streaming test script
+│   └── hitl_test.sh                           # Hardware-in-the-loop combined integration test
 ├── tools/
 │   ├── generate_gerbers.py                    # Gerber/fab-note generation script
 │   ├── check_links.py                         # External markdown link checker
@@ -379,7 +387,14 @@ ghostblade/
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── SECURITY.md
-└── README.md
+├── README.md
+└── devices/
+    └── ghostwisp/                              # GhostWisp (Project Little Spectre) — sister device
+        ├── README.md                           # Overview, capabilities, hardware spec
+        └── docs/
+            ├── architecture.md                 # GhostWisp hardware architecture
+            ├── ghostblade-integration.md       # GhostBlade ↔ GhostWisp integration protocol
+            └── roadmap.md                      # Rev A component selection and milestones
 ```
 
 ---
@@ -497,6 +512,11 @@ Screen glow illuminates the front face. No background — pure black void.
 | [Hardware Contributor Guide](docs/hardware-contributor-guide.md) | Schematic/PCB design guidelines, DRC rules |
 | [Contributing](docs/contributing.md) | Code, documentation, and hardware contribution workflow |
 | [Contributor Onboarding](docs/getting-started-contributors.md) | Step-by-step checklist for new contributors |
+| [Memory Map & Registers](docs/memory-map.md) | Register reference, SPI bridge protocol, DMA, ioctl interfaces |
+| [GPIO Cross-Reference](docs/gpio-cross-reference.md) | RK3576 DTS ↔ RP2350B board_pins.h ↔ schematic net name mapping |
+| [Glossary](docs/glossary.md) | Project-specific terms, acronyms, and abbreviations |
+| [Power Sequencing Overview](docs/power-sequencing.md) | Multi-rail power architecture and sequencing constraints |
+| [GhostWisp (Project Little Spectre)](devices/ghostwisp/README.md) | Sister device overview and GhostBlade integration |
 
 ## Engineering Phases
 
