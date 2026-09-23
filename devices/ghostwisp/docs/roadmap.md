@@ -36,7 +36,7 @@ Work proceeds in evidence-producing increments. A phase is complete only when it
 
 - [x] Add a buildable RP2350B project and reproducible toolchain instructions.
 - [x] Implement board initialization, watchdog, power states, and recovery.
-- [x] Implement peripheral driver stack: I2C, SPI, UART, GPIO with host-runnable unit tests.
+- [x] Implement peripheral driver stack: I2C, SPI, UART, GPIO with host-runnable unit tests. (API reference: [peripheral-drivers.md](peripheral-drivers.md))
 - [ ] Implement display/input shell and action broker.
 - [ ] Add bounded storage/profile parsers with host-side tests.
 - [ ] Add A/B signed-update metadata and rollback behavior.
