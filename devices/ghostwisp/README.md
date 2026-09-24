@@ -98,12 +98,36 @@ See [GhostBlade integration](docs/ghostblade-integration.md) for the shared arch
 ```text
 devices/ghostwisp/
 ├── README.md
-└── docs/
-    ├── architecture.md
-    ├── ghostblade-integration.md
-    ├── pcb-layout-review.md
-    ├── rf-engineering.md
-    └── roadmap.md
+├── docs/
+│   ├── architecture.md
+│   ├── ghostblade-integration.md
+│   ├── pcb-layout-review.md
+│   ├── peripheral-drivers.md
+│   ├── rf-engineering.md
+│   └── roadmap.md
+├── firmware/
+│   └── rp2350b/
+│       ├── include/
+│       │   ├── ghostwisp_boot.h
+│       │   ├── ghostwisp_gpio.h
+│       │   ├── ghostwisp_i2c.h
+│       │   ├── ghostwisp_pins.h
+│       │   ├── ghostwisp_protocol.h
+│       │   ├── ghostwisp_spi.h
+│       │   └── ghostwisp_uart.h
+│       └── src/
+│           ├── ghostwisp_boot.c
+│           ├── ghostwisp_gpio.c
+│           ├── ghostwisp_i2c.c
+│           ├── ghostwisp_spi.c
+│           └── ghostwisp_uart.c
+├── protocol/
+│   ├── __init__.py
+│   ├── frame.py            (Python codec — canonical reference implementation)
+│   ├── schema.py           (payload schemas for all message families)
+│   └── golden_vectors.py   (frozen wire-format test vectors)
+└── tests/
+    └── test_protocol.py    (36 unit tests: CRC, round-trip, error handling, safety invariants)
 ```
 
 The [PCB layout review](docs/pcb-layout-review.md) records the current no-go gate and the evidence required for

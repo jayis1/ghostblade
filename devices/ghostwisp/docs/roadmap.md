@@ -20,8 +20,8 @@ Work proceeds in evidence-producing increments. A phase is complete only when it
 - [ ] Allocate RP2350B pins and buses without conflicts.
 - [x] Define regional CC1101 front-end variants. (RF engineering: [rf-engineering.md](rf-engineering.md))
 - [ ] Define NFC and IR electrical interfaces.
-- [ ] Freeze the GhostBlade companion transport and frame requirements on both devices.
-- [ ] Define the GhostBlade companion daemon, `libapex`/Python surface, and shared capture/profile schemas.
+- [x] Freeze the GhostBlade companion transport and frame requirements on both devices. (Protocol codec: [protocol/frame.py](../protocol/frame.py), C header: [firmware/rp2350b/include/ghostwisp_protocol.h](../firmware/rp2350b/include/ghostwisp_protocol.h))
+- [x] Define the GhostBlade companion daemon, `libapex`/Python surface, and shared capture/profile schemas. (Schema: [protocol/schema.py](../protocol/schema.py), Golden vectors: [protocol/golden_vectors.py](../protocol/golden_vectors.py), Tests: [tests/test_protocol.py](../tests/test_protocol.py))
 - [ ] Record a threat model for USB, profiles, firmware update, and active RF actions.
 
 ## Phase 2 — Verifiable design
