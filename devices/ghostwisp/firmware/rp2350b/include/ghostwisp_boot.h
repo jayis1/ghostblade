@@ -13,7 +13,7 @@
  *   1. System clocks (150 MHz core, 48 MHz peripheral, 133 MHz XIP)
  *   2. FPU enable (Cortex-M33 CP10/CP11)
  *   3. GPIO pin muxing for all peripherals
- *   4. UART0 debug console (115200 8N1)
+ *   4. UART1 debug console (115200 8N1)
  *   5. USB CDC enumeration
  *   6. Watchdog configuration (5 s timeout, bark interrupt)
  *   7. Battery/fuel gauge I2C check
@@ -188,7 +188,7 @@ boot_result_t boot_phase_gpio(void);
 /**
  * boot_phase_uart — Initialize debug UART console (Phase 4)
  *
- * Configures UART0 at 115200 8N1 on the debug/expansion pins.
+ * Configures UART1 at 115200 8N1 on the debug/expansion pins.
  *
  * Returns BOOT_OK on success, BOOT_ERR_UART on failure.
  */

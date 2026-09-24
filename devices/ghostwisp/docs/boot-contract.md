@@ -43,7 +43,7 @@ and calls `boot_enter_recovery()` for the failure classes listed below.
 | 1 | BOOT_PHASE_CLOCKS (1) | System clocks (150/48/133 MHz) | Fatal |
 | 2 | BOOT_PHASE_FPU (2) | ARM Cortex-M33 FPU enable | Fatal |
 | 3 | BOOT_PHASE_GPIO (3) | GPIO pin muxing | Fatal |
-| 4 | BOOT_PHASE_UART (4) | UART0 debug console (115200 8N1) | Fatal |
+| 4 | BOOT_PHASE_UART (4) | UART1 debug console (115200 8N1) | Fatal |
 | 5 | BOOT_PHASE_USB (5) | USB CDC enumeration | Fatal |
 | 6 | BOOT_PHASE_WATCHDOG (6) | Watchdog arm (5 s timeout) | Fatal |
 | 7 | BOOT_PHASE_BATTERY (7) | Battery/fuel gauge check | Non-fatal if VBUS present; fatal otherwise |
@@ -116,8 +116,8 @@ All pins must be configured in Phase 3 before any peripheral is used.
 | USB VBUS sense | 4 | SIO | Input | None |
 | USB host enable | 5 | SIO | Output | - |
 | Battery I2C SDA/SCL | 0,1 | I2C | - | Pull-up |
-| Expansion UART | 35,36 | UART | - | - |
-| Expansion GPIO | 37,38,39 | SIO | Input | None |
+| Expansion UART | 36,37 | UART1 | - | - |
+| Expansion GPIO | 35,38,39 | SIO | Input | None |
 | RGB LED | 40 | PIO1 | - | - |
 | Buzzer | 41 | PWM | - | - |
 | Vibration | 42 | SIO | Output | - |
@@ -202,7 +202,7 @@ The following cannot be verified without hardware and are **NOT automated**:
 
 - Actual system clock frequencies (150/48/133 MHz) measured on oscilloscope
 - Watchdog fires after exactly 5 s under hardware reset conditions
-- UART0 output on UART1 GPIO 35/36 at 115200 baud
+- UART1 output on GPIO 36/37 at 115200 baud
 - USB CDC enumerates on a real host (lsusb / dmesg)
 - POST SPI reads return correct JEDEC/chip-ID for CC1101, ST25R3916, QSPI flash
 - Brownout detection fires under actual voltage drop below threshold
@@ -211,7 +211,7 @@ The following cannot be verified without hardware and are **NOT automated**:
 - Radio disable pin (GPIO 45) measures HIGH throughout boot until application releases
 - End-to-end boot time < 2 s (phases 0–6 < 1 s)
 - RP2350B ARM Secure entry point confirmed by `picotool` inspection
-- `ghostwisp` board definition accepted by Pico SDK (UART1 pins 35/36, 16 MiB QSPI)
+- `ghostwisp` board definition accepted by Pico SDK (UART1 pins 36/37, 16 MiB QSPI)
 
 ---
 

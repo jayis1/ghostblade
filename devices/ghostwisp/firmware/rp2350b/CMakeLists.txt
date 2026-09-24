@@ -20,6 +20,11 @@
 
 cmake_minimum_required(VERSION 3.21)
 
+# Select the custom RP2350B board before importing/initializing the SDK.
+list(APPEND PICO_BOARD_HEADER_DIRS "${CMAKE_CURRENT_LIST_DIR}/include/boards")
+set(PICO_BOARD "ghostwisp" CACHE STRING "Target board" FORCE)
+set(PICO_PLATFORM "rp2350" CACHE STRING "Target platform" FORCE)
+
 # Pull in Pico SDK — required at configure time
 include(pico_sdk_import.cmake)
 
@@ -27,40 +32,24 @@ project(ghostwisp_firmware C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-# ── Pico SDK board configuration ──────────────────────────────────────────────
-# GhostWisp is a custom board, not a Pico board.
-# The board definition lives in include/ and the pin map in ghostwisp_pins.h.
-
-set(PICO_PLATFORM "rp2350" CACHE STRING "Target platform" FORCE)
-
-# UART for debug output (default 115200 baud on expansion header pins)
-set(PICO_DEFAULT_UART 1)
-set(PICO_DEFAULT_UART_BAUD_RATE 115200)
-
-# Enable USB CDC as secondary stdio (companion link + debug)
-set(PICO_STDIO_USB 1)
-set(PICO_STDIO_UART 1)
+pico_sdk_init()
 
 # ── Firmware source files ─────────────────────────────────────────────────────
 set(FW_SOURCES
+    src/main.c
+    src/ghostwisp_platform.c
     src/ghostwisp_boot.c
-    src/ghostwisp_gpio.c
-    src/ghostwisp_i2c.c
-    src/ghostwisp_spi.c
-    src/ghostwisp_uart.c
 )
 
 set(FW_HEADERS
     include/ghostwisp_pins.h
     include/ghostwisp_boot.h
-    include/ghostwisp_gpio.h
-    include/ghostwisp_i2c.h
-    include/ghostwisp_spi.h
-    include/ghostwisp_uart.h
 )
 
 # ── Create executable ─────────────────────────────────────────────────────────
-pico_add_executable(ghostwisp ${FW_SOURCES})
+add_executable(ghostwisp ${FW_SOURCES})
+pico_set_program_name(ghostwisp "GhostWisp")
+pico_set_program_version(ghostwisp "0.1.0")
 
 # Add include path for project headers
 target_include_directories(ghostwisp PRIVATE
@@ -68,19 +57,18 @@ target_include_directories(ghostwisp PRIVATE
 )
 
 # ── Compiler flags ────────────────────────────────────────────────────────────
-target_compile_options(ghostwisp PRIVATE
-    -Wall -Wextra -Wpedantic -Wconversion
-    -fno-strict-aliasing
-    -fstack-usage
-    -Wstack-usage=4096
-    $<$<CONFIG:Release>:-Os>
-    $<$<CONFIG:Debug>:-Og -g3>
+# Apply project warnings only to GhostWisp sources. Pico SDK sources are added to
+# this target by the SDK and must not inherit project-only warning policy.
+set_source_files_properties(${FW_SOURCES} PROPERTIES COMPILE_OPTIONS
+    "-Wall;-Wextra;-Wpedantic;-Wconversion;-fno-strict-aliasing;-fstack-usage;-Wstack-usage=4096;$<$<CONFIG:Release>:-Os>;$<$<CONFIG:Debug>:-Og;-g3>"
 )
 
 # ── Link libraries ────────────────────────────────────────────────────────────
 target_link_libraries(ghostwisp PRIVATE
     pico_stdlib
     hardware_watchdog
+    hardware_clocks
+    hardware_uart
     hardware_gpio
     hardware_spi
     hardware_i2c
@@ -89,6 +77,9 @@ target_link_libraries(ghostwisp PRIVATE
     hardware_irq
     pico_bootrom
 )
+
+pico_enable_stdio_usb(ghostwisp 1)
+pico_enable_stdio_uart(ghostwisp 1)
 
 # ── Generate UF2, HEX, BIN, MAP outputs ───────────────────────────────────────
 pico_add_extra_outputs(ghostwisp)
@@ -131,6 +122,6 @@ message(STATUS "  Platform:          ${PICO_PLATFORM}")
 message(STATUS "  Build type:        ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C compiler:        ${CMAKE_C_COMPILER}")
 message(STATUS "  Pico SDK path:     ${PICO_SDK_PATH}")
-message(STATUS "  UART baud:         ${PICO_DEFAULT_UART_BAUD_RATE}")
+message(STATUS "  UART baud:         115200")
 message(STATUS "  Sources:           ${FW_SOURCES}")
 message(STATUS "")

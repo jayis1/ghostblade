@@ -27,7 +27,7 @@
  * Requirements that CANNOT be verified here (require physical board):
  *   - Actual clock frequencies (150 MHz core, 48 MHz peri, 133 MHz XIP)
  *   - Hardware watchdog fires after 5 s timeout
- *   - UART0 produces correct BAUD on UART1 GPIO 35/36
+ *   - UART1 produces correct BAUD on GPIO 36/37
  *   - USB CDC enumeration on real host
  *   - POST peripheral register reads (CC1101, ST25R3916, QSPI flash)
  *   - Brownout detection via actual voltage collapse

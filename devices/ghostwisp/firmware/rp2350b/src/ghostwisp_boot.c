@@ -39,6 +39,15 @@
 #include "ghostwisp_boot.h"
 #include "ghostwisp_pins.h"
 
+#ifndef BOOT_HOST_TEST
+#include "hardware/clocks.h"
+#include "hardware/gpio.h"
+#include "hardware/structs/watchdog.h"
+#include "hardware/uart.h"
+#include "hardware/watchdog.h"
+#include "pico/time.h"
+#endif
+
 /* ========================================================================
  * RP2350B Register Base Addresses
  * ======================================================================== */
@@ -172,14 +181,9 @@ static uint32_t boot_get_time_ms(void) { return g_host_time_ms; }
 void boot_test_set_time_ms(uint32_t t) { g_host_time_ms = t; }
 void boot_test_advance_time_ms(uint32_t delta) { g_host_time_ms += delta; }
 #else
-/* Target mode: use RP2350B timer (to_ms_since_boot) */
+/* Target mode: use the Pico SDK monotonic timer. */
 static uint32_t boot_get_time_ms(void) {
-    /* In the real firmware, this calls to_ms_since_boot(get_absolute_time())
-     * from the Pico SDK. For compilation without the SDK, we use a
-     * simple SysTick-based counter. The boot sequence is short enough
-     * that SysTick rollover is not a concern. */
-    extern uint32_t ghostwisp_get_uptime_ms(void);
-    return ghostwisp_get_uptime_ms();
+    return to_ms_since_boot(get_absolute_time());
 }
 #endif
 
@@ -190,58 +194,44 @@ static uint32_t boot_get_time_ms(void) {
 #ifndef BOOT_HOST_TEST
 
 /**
- * gpio_set_function — Set the function select for a GPIO pin
+ * boot_gpio_set_function — Set the function select for a GPIO pin
  */
-static void gpio_set_function(uint8_t pin, uint32_t func_sel) {
-    volatile uint32_t *ctrl = (volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x04 + (uint32_t)pin * 8);
-    *ctrl = func_sel & 0x1FU;
-    __asm__ volatile ("dmb" ::: "memory");
+static void boot_gpio_set_function(uint8_t pin, uint32_t func_sel) {
+    gpio_set_function(pin, (gpio_function_t)(func_sel & 0x1FU));
 }
 
 /**
- * gpio_set_pull_up — Enable or disable pull-up on a GPIO pin
+ * boot_gpio_set_pull_up — Enable or disable pull-up on a GPIO pin
  */
-static void gpio_set_pull_up(uint8_t pin, bool enable) {
-    volatile uint32_t *pad = (volatile uint32_t *)(RP2350B_PADS_BASE + 0x04 + (uint32_t)pin * 4);
-    if (enable)
-        *pad |= (1U << 2);
-    else
-        *pad &= ~(1U << 2);
-    __asm__ volatile ("dmb" ::: "memory");
+static void boot_gpio_set_pull_up(uint8_t pin, bool enable) {
+    if (enable) gpio_pull_up(pin);
+    else gpio_disable_pulls(pin);
 }
 
 /**
- * gpio_set_pull_down — Enable or disable pull-down on a GPIO pin
+ * boot_gpio_set_pull_down — Enable or disable pull-down on a GPIO pin
  */
-static void gpio_set_pull_down(uint8_t pin, bool enable) {
-    volatile uint32_t *pad = (volatile uint32_t *)(RP2350B_PADS_BASE + 0x04 + (uint32_t)pin * 4);
-    if (enable)
-        *pad |= (1U << 3);
-    else
-        *pad &= ~(1U << 3);
-    __asm__ volatile ("dmb" ::: "memory");
+static void boot_gpio_set_pull_down(uint8_t pin, bool enable) {
+    if (enable) gpio_pull_down(pin);
+    else gpio_disable_pulls(pin);
 }
 
 /**
- * gpio_set_input — Configure a pin as input with optional pull-up
+ * boot_gpio_set_input — Configure a pin as input with optional pull-up
  */
-static void gpio_set_input(uint8_t pin, bool pull_up) {
-    gpio_set_function(pin, GPIO_FUNC_SIO);
-    volatile uint32_t *pad = (volatile uint32_t *)(RP2350B_PADS_BASE + 0x04 + (uint32_t)pin * 4);
-    *pad |= (1U << 0);  /* Input-only: output disable */
-    __asm__ volatile ("dmb" ::: "memory");
-    if (pull_up)
-        gpio_set_pull_up(pin, true);
+static void boot_gpio_set_input(uint8_t pin, bool pull_up) {
+    gpio_init(pin);
+    gpio_set_dir(pin, GPIO_IN);
+    if (pull_up) gpio_pull_up(pin);
+    else gpio_disable_pulls(pin);
 }
 
 /**
- * gpio_set_output — Configure a pin as SIO output
+ * boot_gpio_set_output — Configure a pin as SIO output
  */
-static void gpio_set_output(uint8_t pin) {
-    gpio_set_function(pin, GPIO_FUNC_SIO);
-    volatile uint32_t *pad = (volatile uint32_t *)(RP2350B_PADS_BASE + 0x04 + (uint32_t)pin * 4);
-    *pad &= ~(1U << 0);  /* Output driver enabled */
-    __asm__ volatile ("dmb" ::: "memory");
+static void boot_gpio_set_output(uint8_t pin) {
+    gpio_init(pin);
+    gpio_set_dir(pin, GPIO_OUT);
 }
 
 #else /* BOOT_HOST_TEST */
@@ -253,23 +243,23 @@ static bool g_gpio_pulldown[48];
 static bool g_gpio_is_input[48];
 static bool g_gpio_is_output[48];
 
-static void gpio_set_function(uint8_t pin, uint32_t func_sel) {
+static void boot_gpio_set_function(uint8_t pin, uint32_t func_sel) {
     if (pin < 48) g_gpio_func[pin] = func_sel & 0x1FU;
 }
-static void gpio_set_pull_up(uint8_t pin, bool enable) {
+static void boot_gpio_set_pull_up(uint8_t pin, bool enable) {
     if (pin < 48) g_gpio_pullup[pin] = enable;
 }
-static void gpio_set_pull_down(uint8_t pin, bool enable) {
+static void boot_gpio_set_pull_down(uint8_t pin, bool enable) {
     if (pin < 48) g_gpio_pulldown[pin] = enable;
 }
-static void gpio_set_input(uint8_t pin, bool pull_up) {
+static void boot_gpio_set_input(uint8_t pin, bool pull_up) {
     if (pin < 48) {
         g_gpio_is_input[pin] = true;
         g_gpio_is_output[pin] = false;
         g_gpio_pullup[pin] = pull_up;
     }
 }
-static void gpio_set_output(uint8_t pin) {
+static void boot_gpio_set_output(uint8_t pin) {
     if (pin < 48) {
         g_gpio_is_output[pin] = true;
         g_gpio_is_input[pin] = false;
@@ -302,13 +292,17 @@ static uint8_t read_boot_strap(void) {
     uint8_t strap = 0;
 
 #ifndef BOOT_HOST_TEST
-    /* Read physical GPIO pins */
-    volatile uint32_t *pad0 = (volatile uint32_t *)(RP2350B_PADS_BASE + 0x04 + (uint32_t)PIN_BOOT_STRAP0 * 4);
-    volatile uint32_t *pad1 = (volatile uint32_t *)(RP2350B_PADS_BASE + 0x04 + (uint32_t)PIN_BOOT_STRAP1 * 4);
-    /* Read the input state from the SIO input register */
-    volatile uint32_t *sio_in = (volatile uint32_t *)0xD0000004UL;
-    if (*sio_in & (1U << PIN_BOOT_STRAP0)) strap |= 0x01;
-    if (*sio_in & (1U << PIN_BOOT_STRAP1)) strap |= 0x02;
+    /* Configure straps before sampling because boot_init() precedes the full
+     * GPIO phase. Floating straps therefore deterministically mean normal. */
+    gpio_init(PIN_BOOT_STRAP0);
+    gpio_set_dir(PIN_BOOT_STRAP0, GPIO_IN);
+    gpio_pull_down(PIN_BOOT_STRAP0);
+    gpio_init(PIN_BOOT_STRAP1);
+    gpio_set_dir(PIN_BOOT_STRAP1, GPIO_IN);
+    gpio_pull_down(PIN_BOOT_STRAP1);
+    busy_wait_us_32(10U);
+    if (gpio_get(PIN_BOOT_STRAP0)) strap |= 0x01;
+    if (gpio_get(PIN_BOOT_STRAP1)) strap |= 0x02;
 #else
     /* Host test: read from a test-settable variable */
     extern uint8_t boot_test_strap_value(void);
@@ -323,23 +317,28 @@ static uint8_t read_boot_strap(void) {
  * ======================================================================== */
 
 #ifndef BOOT_HOST_TEST
+static uint32_t g_watchdog_timeout_ms = GHOSTWISP_WATCHDOG_TIMEOUT_MS;
+static bool g_watchdog_active = false;
+
 static void watchdog_load(uint32_t us) {
-    REG32(RP2350B_WATCHDOG_BASE + WD_LOAD) = us;
+    g_watchdog_timeout_ms = us / 1000U;
+    if (g_watchdog_active) watchdog_update();
 }
 static uint32_t watchdog_read_reason(void) {
-    return REG32(RP2350B_WATCHDOG_BASE + WD_REASON);
+    return watchdog_hw->reason;
 }
 static void watchdog_clear_reason(uint32_t bits) {
-    REG32(RP2350B_WATCHDOG_BASE + WD_REASON) = bits;
+    (void)bits; /* RP2350 reset reason is read-only and clears on the next reset. */
 }
 static uint32_t watchdog_read_scratch(uint8_t idx) {
-    return REG32(RP2350B_WATCHDOG_BASE + WD_SCRATCH0 + (uint32_t)idx * 4);
+    return (idx < 8U) ? watchdog_hw->scratch[idx] : 0U;
 }
 static void watchdog_write_scratch(uint8_t idx, uint32_t val) {
-    REG32(RP2350B_WATCHDOG_BASE + WD_SCRATCH0 + (uint32_t)idx * 4) = val;
+    if (idx < 8U) watchdog_hw->scratch[idx] = val;
 }
 static void watchdog_enable_ctrl(void) {
-    REG32(RP2350B_WATCHDOG_BASE + WD_CTRL) = WD_CTRL_ENABLE | WD_CTRL_PAUSE_DBG0 | WD_CTRL_PAUSE_JTAG;
+    watchdog_enable(g_watchdog_timeout_ms, true);
+    g_watchdog_active = true;
 }
 #else
 /* Host test stubs */
@@ -493,29 +492,12 @@ boot_result_t boot_phase_clocks(void) {
     g_boot_state.current_phase = BOOT_PHASE_CLOCKS;
 
 #ifndef BOOT_HOST_TEST
-    /* Configure XOSC (12 MHz crystal) and PLLs */
-    /* PLL_SYS: 12 MHz * 125 / 6 / 2 = 125 MHz → boost to 150 MHz via divider */
-    /* PLL_USB: 12 MHz * 100 / 6 / 2 = 100 MHz → 48 MHz via divider */
-
-    /* 1. Enable XOSC and wait for stable */
-    volatile uint32_t *xosc_ctrl = (volatile uint32_t *)0x400B0000UL;
-    volatile uint32_t *xosc_status = (volatile uint32_t *)0x400B0004UL;
-    *xosc_ctrl = (47 << 0) | (0xFAB << 12);  /* FREQ_RANGE=1MHZ_15MHZ, ENABLE */
-    while ((*xosc_status & (1U << 31)) == 0) { /* Wait for stable */
-        __asm__ volatile ("nop");
+    /* The SDK performs the safe source switch and PLL programming, including
+     * bounded lock waits and voltage-aware sequencing for RP2350. */
+    if (!set_sys_clock_hz(GHOSTWISP_SYS_CLOCK_HZ, true)) {
+        g_boot_state.phase_times_ms[BOOT_PHASE_CLOCKS] = boot_get_time_ms() - t0;
+        return BOOT_ERR_CLOCK;
     }
-
-    /* 2. Switch system clock to PLL_SYS */
-    REG32(RP2350B_CLOCKS_BASE + CLOCKS_SYS_CTRL) = CLOCKS_CLK_SRC_PLL_SYS;
-    REG32(RP2350B_CLOCKS_BASE + CLOCKS_SYS_DIV) = (1U << 8) | 0;  /* Integer div = 1 */
-
-    /* 3. Switch peripheral clock to PLL_USB (48 MHz) */
-    REG32(RP2350B_CLOCKS_BASE + CLOCKS_PERI_CTRL) = CLOCKS_CLK_SRC_PLL_USB;
-    REG32(RP2350B_CLOCKS_BASE + CLOCKS_PERI_DIV) = (1U << 8) | 0;
-
-    /* 4. Switch XIP clock to PLL_SYS for 133 MHz flash access */
-    REG32(RP2350B_CLOCKS_BASE + CLOCKS_XIP_CTRL) = CLOCKS_CLK_SRC_PLL_SYS;
-    REG32(RP2350B_CLOCKS_BASE + CLOCKS_XIP_DIV) = (1U << 8) | 1;  /* Div by 2 from 266 MHz PLL */
 #endif
 
     g_boot_state.phase_times_ms[BOOT_PHASE_CLOCKS] = boot_get_time_ms() - t0;
@@ -549,97 +531,86 @@ boot_result_t boot_phase_gpio(void) {
     uint32_t t0 = boot_get_time_ms();
     g_boot_state.current_phase = BOOT_PHASE_GPIO;
 
-#ifndef BOOT_HOST_TEST
-    /* Unreset pads and IO bank */
-    volatile uint32_t *resets = (volatile uint32_t *)(RP2350B_RESETS_BASE + RESETS_RESET);
-    *resets &= ~(RESETS_PADS_BANK0_RESET | RESETS_IO_BANK0_RESET);
-    while ((REG32(RP2350B_RESETS_BASE + RESETS_RESET_DONE) &
-            (RESETS_PADS_BANK0_RESET | RESETS_IO_BANK0_RESET)) == 0) {
-        __asm__ volatile ("nop");
-    }
-#endif
 
     /* --- SPI0: CC1101 sub-GHz radio --- */
-    gpio_set_function(PIN_CC_SPI_SCK, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_CC_SPI_TX,  GPIO_FUNC_SPI);
-    gpio_set_function(PIN_CC_SPI_RX,  GPIO_FUNC_SPI);
-    gpio_set_output(PIN_CC_SPI_CSN);   /* CSn controlled by SIO */
-    gpio_set_input(PIN_CC_GDO0, false);
-    gpio_set_input(PIN_CC_GDO2, false);
+    boot_gpio_set_function(PIN_CC_SPI_SCK, GPIO_FUNC_SPI);
+    boot_gpio_set_function(PIN_CC_SPI_TX,  GPIO_FUNC_SPI);
+    boot_gpio_set_function(PIN_CC_SPI_RX,  GPIO_FUNC_SPI);
+    boot_gpio_set_output(PIN_CC_SPI_CSN);   /* CSn controlled by SIO */
+    boot_gpio_set_input(PIN_CC_GDO0, false);
+    boot_gpio_set_input(PIN_CC_GDO2, false);
 
     /* --- SPI1: ST25R3916 NFC --- */
-    gpio_set_function(PIN_NFC_SPI_SCK, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_NFC_SPI_TX,  GPIO_FUNC_SPI);
-    gpio_set_function(PIN_NFC_SPI_RX,  GPIO_FUNC_SPI);
-    gpio_set_output(PIN_NFC_SPI_CSN);
-    gpio_set_input(PIN_NFC_IRQ, true); /* Active-low IRQ, pull-up */
+    boot_gpio_set_function(PIN_NFC_SPI_SCK, GPIO_FUNC_SPI);
+    boot_gpio_set_function(PIN_NFC_SPI_TX,  GPIO_FUNC_SPI);
+    boot_gpio_set_function(PIN_NFC_SPI_RX,  GPIO_FUNC_SPI);
+    boot_gpio_set_output(PIN_NFC_SPI_CSN);
+    boot_gpio_set_input(PIN_NFC_IRQ, true); /* Active-low IRQ, pull-up */
 
     /* --- SPI2: microSD --- */
-    gpio_set_function(PIN_SD_SPI_SCK, GPIO_FUNC_SPI);
-    gpio_set_function(PIN_SD_SPI_TX,  GPIO_FUNC_SPI);
-    gpio_set_function(PIN_SD_SPI_RX,  GPIO_FUNC_SPI);
-    gpio_set_output(PIN_SD_SPI_CSN);
-    gpio_set_input(PIN_SD_CD, true);   /* Active-low card detect, pull-up */
+    boot_gpio_set_function(PIN_SD_SPI_SCK, GPIO_FUNC_SPI);
+    boot_gpio_set_function(PIN_SD_SPI_TX,  GPIO_FUNC_SPI);
+    boot_gpio_set_function(PIN_SD_SPI_RX,  GPIO_FUNC_SPI);
+    boot_gpio_set_output(PIN_SD_SPI_CSN);
+    boot_gpio_set_input(PIN_SD_CD, true);   /* Active-low card detect, pull-up */
 
     /* --- Display (SPI3 / PIO) --- */
-    gpio_set_function(PIN_DISP_SPI_SCK, GPIO_FUNC_PIO0);
-    gpio_set_function(PIN_DISP_SPI_TX,  GPIO_FUNC_PIO0);
-    gpio_set_output(PIN_DISP_SPI_CSN);
-    gpio_set_output(PIN_DISP_DC);
-    gpio_set_output(PIN_DISP_RST);
-    gpio_set_output(PIN_DISP_BL);
+    boot_gpio_set_function(PIN_DISP_SPI_SCK, GPIO_FUNC_PIO0);
+    boot_gpio_set_function(PIN_DISP_SPI_TX,  GPIO_FUNC_PIO0);
+    boot_gpio_set_output(PIN_DISP_SPI_CSN);
+    boot_gpio_set_output(PIN_DISP_DC);
+    boot_gpio_set_output(PIN_DISP_RST);
+    boot_gpio_set_output(PIN_DISP_BL);
 
     /* --- User input buttons (active-low, pull-up) --- */
-    gpio_set_input(PIN_BTN_UP, true);
-    gpio_set_input(PIN_BTN_DOWN, true);
-    gpio_set_input(PIN_BTN_LEFT, true);
-    gpio_set_input(PIN_BTN_RIGHT, true);
-    gpio_set_input(PIN_BTN_CENTER, true);
-    gpio_set_input(PIN_BTN_A, true);
-    gpio_set_input(PIN_BTN_B, true);
+    boot_gpio_set_input(PIN_BTN_UP, true);
+    boot_gpio_set_input(PIN_BTN_DOWN, true);
+    boot_gpio_set_input(PIN_BTN_LEFT, true);
+    boot_gpio_set_input(PIN_BTN_RIGHT, true);
+    boot_gpio_set_input(PIN_BTN_CENTER, true);
+    boot_gpio_set_input(PIN_BTN_A, true);
+    boot_gpio_set_input(PIN_BTN_B, true);
 
     /* --- IR --- */
-    gpio_set_output(PIN_IR_TX);
-    gpio_set_input(PIN_IR_RX, false);
+    boot_gpio_set_output(PIN_IR_TX);
+    boot_gpio_set_input(PIN_IR_RX, false);
 
     /* --- USB control signals --- */
-    gpio_set_input(PIN_USB_VBUS_SENSE, false);
-    gpio_set_output(PIN_USB_HOST_EN);
+    boot_gpio_set_input(PIN_USB_VBUS_SENSE, false);
+    boot_gpio_set_output(PIN_USB_HOST_EN);
 
     /* --- I2C0: fuel gauge --- */
-    gpio_set_function(PIN_BATT_I2C_SDA, GPIO_FUNC_I2C);
-    gpio_set_function(PIN_BATT_I2C_SCL, GPIO_FUNC_I2C);
-    gpio_set_pull_up(PIN_BATT_I2C_SDA, true);
-    gpio_set_pull_up(PIN_BATT_I2C_SCL, true);
+    boot_gpio_set_function(PIN_BATT_I2C_SDA, GPIO_FUNC_I2C);
+    boot_gpio_set_function(PIN_BATT_I2C_SCL, GPIO_FUNC_I2C);
+    boot_gpio_set_pull_up(PIN_BATT_I2C_SDA, true);
+    boot_gpio_set_pull_up(PIN_BATT_I2C_SCL, true);
 
     /* --- Expansion header --- */
-    gpio_set_function(PIN_EXP_UART_TX, GPIO_FUNC_UART);
-    gpio_set_function(PIN_EXP_UART_RX, GPIO_FUNC_UART);
-    gpio_set_input(PIN_EXP_GPIO0, false);
-    gpio_set_input(PIN_EXP_GPIO1, false);
-    gpio_set_input(PIN_EXP_GPIO2, false);
+    boot_gpio_set_function(PIN_EXP_UART_TX, GPIO_FUNC_UART);
+    boot_gpio_set_function(PIN_EXP_UART_RX, GPIO_FUNC_UART);
+    boot_gpio_set_input(PIN_EXP_GPIO0, false);
+    boot_gpio_set_input(PIN_EXP_GPIO1, false);
+    boot_gpio_set_input(PIN_EXP_GPIO2, false);
 
     /* --- Feedback --- */
-    gpio_set_function(PIN_RGB_LED, GPIO_FUNC_PIO1);
-    gpio_set_function(PIN_BUZZER, GPIO_FUNC_PWM);
-    gpio_set_output(PIN_VIBRATION);
+    boot_gpio_set_function(PIN_RGB_LED, GPIO_FUNC_PIO1);
+    boot_gpio_set_function(PIN_BUZZER, GPIO_FUNC_PWM);
+    boot_gpio_set_output(PIN_VIBRATION);
 
     /* --- Power management --- */
-    gpio_set_input(PIN_POWER_SWITCH, false);
-    gpio_set_input(PIN_CHARGE_STAT, true);
-    gpio_set_output(PIN_RADIO_DISABLE);
+    boot_gpio_set_input(PIN_POWER_SWITCH, false);
+    boot_gpio_set_input(PIN_CHARGE_STAT, true);
+    boot_gpio_set_output(PIN_RADIO_DISABLE);
 
     /* --- Boot straps (input with pull-down) --- */
-    gpio_set_input(PIN_BOOT_STRAP0, false);
-    gpio_set_pull_down(PIN_BOOT_STRAP0, true);
-    gpio_set_input(PIN_BOOT_STRAP1, false);
-    gpio_set_pull_down(PIN_BOOT_STRAP1, true);
+    boot_gpio_set_input(PIN_BOOT_STRAP0, false);
+    boot_gpio_set_pull_down(PIN_BOOT_STRAP0, true);
+    boot_gpio_set_input(PIN_BOOT_STRAP1, false);
+    boot_gpio_set_pull_down(PIN_BOOT_STRAP1, true);
 
     /* --- Assert radio disable high during boot (safe state) --- */
 #ifndef BOOT_HOST_TEST
-    volatile uint32_t *sio_out_set = (volatile uint32_t *)0xD0000014UL;
-    *sio_out_set = (1U << PIN_RADIO_DISABLE);
-    __asm__ volatile ("dmb" ::: "memory");
+    gpio_put(PIN_RADIO_DISABLE, true);
 #endif
 
     g_boot_state.phase_times_ms[BOOT_PHASE_GPIO] = boot_get_time_ms() - t0;
@@ -647,7 +618,7 @@ boot_result_t boot_phase_gpio(void) {
 }
 
 /* ========================================================================
- * Boot Phase 4: Initialize UART0 debug console
+ * Boot Phase 4: Initialize UART1 debug console
  * ======================================================================== */
 
 boot_result_t boot_phase_uart(void) {
@@ -655,26 +626,15 @@ boot_result_t boot_phase_uart(void) {
     g_boot_state.current_phase = BOOT_PHASE_UART;
 
 #ifndef BOOT_HOST_TEST
-    /* Unreset UART0 */
-    REG32(RP2350B_RESETS_BASE + RESETS_RESET) &= ~RESETS_UART0_RESET;
-    while ((REG32(RP2350B_RESETS_BASE + RESETS_RESET_DONE) & RESETS_UART0_RESET) == 0) {
-        __asm__ volatile ("nop");
+    const uint actual_baud = uart_init(uart1, 115200U);
+    gpio_set_function(PIN_DEBUG_UART_TX, GPIO_FUNC_UART);
+    gpio_set_function(PIN_DEBUG_UART_RX, GPIO_FUNC_UART);
+    uart_set_format(uart1, 8U, 1U, UART_PARITY_NONE);
+    uart_set_fifo_enabled(uart1, true);
+    if (actual_baud == 0U) {
+        g_boot_state.phase_times_ms[BOOT_PHASE_UART] = boot_get_time_ms() - t0;
+        return BOOT_ERR_UART;
     }
-
-    /* Configure UART0: 115200 8N1
-     * UART clock = 48 MHz peripheral clock
-     * BAUD_DIV = 48000000 / (16 * 115200) = 26.041...
-     * IBRD = 26, FBRD = round(0.041... * 64) = 3 */
-    volatile uint32_t *uart_cr = (volatile uint32_t *)(RP2350B_UART0_BASE + UART0_CR);
-    volatile uint32_t *uart_lcrh = (volatile uint32_t *)(RP2350B_UART0_BASE + UART0_LCR_H);
-    volatile uint32_t *uart_ibrd = (volatile uint32_t *)(RP2350B_UART0_BASE + UART0_IBRD);
-    volatile uint32_t *uart_fbrd = (volatile uint32_t *)(RP2350B_UART0_BASE + UART0_FBRD);
-
-    *uart_cr = 0;                    /* Disable UART during config */
-    *uart_ibrd = 26;                 /* Integer part of baud divisor */
-    *uart_fbrd = 3;                  /* Fractional part */
-    *uart_lcrh = (0x3U << 5);       /* 8 bits, no parity, 1 stop, FIFOs enabled */
-    *uart_cr = (1U << 0) | (1U << 8) | (1U << 9);  /* UART enable, TX enable, RX enable */
 #endif
 
     g_boot_state.phase_times_ms[BOOT_PHASE_UART] = boot_get_time_ms() - t0;
@@ -690,17 +650,8 @@ boot_result_t boot_phase_usb(void) {
     g_boot_state.current_phase = BOOT_PHASE_USB;
 
 #ifndef BOOT_HOST_TEST
-    /* Unreset USB controller */
-    REG32(RP2350B_RESETS_BASE + RESETS_RESET) &= ~RESETS_USB_RESET;
-    while ((REG32(RP2350B_RESETS_BASE + RESETS_RESET_DONE) & RESETS_USB_RESET) == 0) {
-        __asm__ volatile ("nop");
-    }
-
-    /* USB CDC initialization is handled by the Pico SDK's stdio_usb
-     * in the full firmware. Here we just ensure the USB controller
-     * is unreset and the phy is enabled. */
-    volatile uint32_t *usb_regs = (volatile uint32_t *)RP2350B_USB_BASE;
-    (void)usb_regs;  /* Full USB CDC init done in main.c via stdio_init_all() */
+    /* USB CDC initialization is owned by stdio_init_all() in main(). Avoid
+     * resetting the controller after TinyUSB has already configured it. */
 #endif
 
     g_boot_state.phase_times_ms[BOOT_PHASE_USB] = boot_get_time_ms() - t0;
@@ -745,8 +696,7 @@ boot_result_t boot_phase_battery(void) {
      * If the fuel gauge is not responding, check if VBUS is present
      * (USB power). If VBUS is present, continue boot with a warning.
      * If no VBUS and no battery, fail. */
-    volatile uint32_t *sio_in = (volatile uint32_t *)0xD0000004UL;
-    bool vbus_present = (*sio_in & (1U << PIN_USB_VBUS_SENSE)) != 0;
+    bool vbus_present = gpio_get(PIN_USB_VBUS_SENSE);
 
     /* I2C read attempt: send address 0x36, check ACK */
     /* For now, we accept boot if either battery or VBUS is present.
@@ -884,15 +834,12 @@ void boot_kick_watchdog(void) {
  * ======================================================================== */
 
 void boot_enter_recovery(void) {
-    /* Disable all radios (assert radio disable) */
+    /* Disable all radios (assert radio disable). */
 #ifndef BOOT_HOST_TEST
-    volatile uint32_t *sio_out_set = (volatile uint32_t *)0xD0000014UL;
-    *sio_out_set = (1U << PIN_RADIO_DISABLE);
-    __asm__ volatile ("dmb" ::: "memory");
+    gpio_put(PIN_RADIO_DISABLE, true);
 #endif
 
-    /* Mark recovery mode in boot state */
-    g_boot_state.result = BOOT_OK;
+    /* Preserve the failure result for diagnostics while marking recovery. */
     g_boot_state.boot_strap = BOOT_STRAP_RECOVERY;
 
     /* In recovery mode, only USB update and diagnostics are available.

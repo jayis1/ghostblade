@@ -115,9 +115,9 @@
  * Expansion Header — 3.3V UART/SPI/I2C/GPIO
  * ======================================================================== */
 
-#define PIN_EXP_UART_TX   35    /* Expansion header UART TX */
-#define PIN_EXP_UART_RX   36    /* Expansion header UART RX */
-#define PIN_EXP_GPIO0     37    /* Expansion header GPIO 0 */
+#define PIN_EXP_UART_TX   36    /* Expansion header UART1 TX */
+#define PIN_EXP_UART_RX   37    /* Expansion header UART1 RX */
+#define PIN_EXP_GPIO0     35    /* Expansion header GPIO 0 */
 #define PIN_EXP_GPIO1     38    /* Expansion header GPIO 1 */
 #define PIN_EXP_GPIO2     39    /* Expansion header GPIO 2 */
 
@@ -138,14 +138,12 @@
 #define PIN_RADIO_DISABLE 45    /* Global radio hardware disable (active-high) */
 
 /* ========================================================================
- * Debug — UART0 Console
+ * Debug — UART1 Console
  * 115200 8N1
  * ======================================================================== */
 
-/* UART0 uses the same pins as I2C0 on RP2350B by default. We remap
- * debug UART to a separate pin pair so the fuel gauge I2C bus is
- * always available. In practice, debug UART is on the expansion header
- * during development and disabled in production. */
+/* UART1 is routed to a dedicated expansion-header pair so the fuel-gauge
+ * I2C0 bus remains available. Debug UART may be disabled in production. */
 #define PIN_DEBUG_UART_TX PIN_EXP_UART_TX
 #define PIN_DEBUG_UART_RX PIN_EXP_UART_RX
 

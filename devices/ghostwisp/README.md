@@ -112,6 +112,7 @@ devices/ghostwisp/
 │   └── rp2350b/
 │       ├── CMakeLists.txt  (Pico SDK cross-build: produces ghostwisp.uf2/.elf/.hex)
 │       ├── include/
+│       │   ├── boards/ghostwisp.h
 │       │   ├── ghostwisp_boot.h
 │       │   ├── ghostwisp_gpio.h
 │       │   ├── ghostwisp_i2c.h
@@ -121,10 +122,12 @@ devices/ghostwisp/
 │       │   └── ghostwisp_uart.h
 │       └── src/
 │           ├── ghostwisp_boot.c
+│           ├── ghostwisp_platform.c
 │           ├── ghostwisp_gpio.c
 │           ├── ghostwisp_i2c.c
 │           ├── ghostwisp_spi.c
-│           └── ghostwisp_uart.c
+│           ├── ghostwisp_uart.c
+│           └── main.c
 ├── protocol/
 │   ├── __init__.py
 │   ├── frame.py            (Python codec — canonical reference implementation)
@@ -139,6 +142,19 @@ devices/ghostwisp/
 runs host boot tests (157/157), GhostBlade isolation checks, and header sanity checks.
 Set `PICO_SDK_PATH=...` to also probe the cross-compile.
 See [boot-contract.md](docs/boot-contract.md) for what requires physical-board HIL verification.
+
+Build the RP2350B image with Pico SDK 2.0 or newer. The committed `ghostwisp`
+board definition selects RP2350B, 16 MiB QSPI, and UART1 on GPIO36/GPIO37:
+
+```sh
+cmake -S devices/ghostwisp/firmware/rp2350b -B build/ghostwisp \
+  -DPICO_SDK_PATH=/path/to/pico-sdk -DCMAKE_BUILD_TYPE=Release
+cmake --build build/ghostwisp
+```
+
+The build emits `ghostwisp.elf`, `.uf2`, `.hex`, `.bin`, and `.map`. Signature
+verification is deliberately fail-closed until the signed-update module supplies
+its verifier; unsigned images remain in radio-disabled USB recovery.
 
 ## Definition of success
 

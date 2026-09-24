@@ -36,13 +36,13 @@ if (NOT PICO_SDK_PATH)
 endif()
 
 # Validate the Pico SDK path
-if (NOT EXISTS "${PICO_SDK_PATH}/pico_sdk.cmake")
+if (NOT EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
     message(FATAL_ERROR
         "Pico SDK not found at ${PICO_SDK_PATH}\n"
-        "Expected ${PICO_SDK_PATH}/pico_sdk.cmake to exist.\n"
+        "Expected ${PICO_SDK_PATH}/pico_sdk_init.cmake to exist.\n"
         "Set PICO_SDK_PATH to the root of the Pico SDK checkout."
     )
 endif()
 
 # Include the Pico SDK
-include(${PICO_SDK_PATH}/pico_sdk.cmake)
+include(${PICO_SDK_PATH}/pico_sdk_init.cmake)
