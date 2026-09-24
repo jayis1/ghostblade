@@ -98,8 +98,11 @@ See [GhostBlade integration](docs/ghostblade-integration.md) for the shared arch
 ```text
 devices/ghostwisp/
 ├── README.md
+├── Makefile                (host test build + automated check suite)
+├── check.sh                (isolation, header, and cross-compile checks)
 ├── docs/
 │   ├── architecture.md
+│   ├── boot-contract.md    (boot ordering, watchdog, GPIO, recovery, HIL requirements)
 │   ├── ghostblade-integration.md
 │   ├── pcb-layout-review.md
 │   ├── peripheral-drivers.md
@@ -107,6 +110,7 @@ devices/ghostwisp/
 │   └── roadmap.md
 ├── firmware/
 │   └── rp2350b/
+│       ├── CMakeLists.txt  (Pico SDK cross-build: produces ghostwisp.uf2/.elf/.hex)
 │       ├── include/
 │       │   ├── ghostwisp_boot.h
 │       │   ├── ghostwisp_gpio.h
@@ -127,15 +131,14 @@ devices/ghostwisp/
 │   ├── schema.py           (payload schemas for all message families)
 │   └── golden_vectors.py   (frozen wire-format test vectors)
 └── tests/
-    └── test_protocol.py    (36 unit tests: CRC, round-trip, error handling, safety invariants)
+    ├── test_ghostwisp_boot.c  (157 host-side boot contract assertions — run with `make test`)
+    └── test_protocol.py       (36 unit tests: CRC, round-trip, error handling, safety invariants)
 ```
 
-The [PCB layout review](docs/pcb-layout-review.md) records the current no-go gate and the evidence required for
-a geometry-based re-review. The [RF engineering](docs/rf-engineering.md) document resolves the Phase 1 RF gates:
-CC1101 868/915 MHz regional matching, the ST25R3916 NFC loop geometry, and antenna separation and enclosure
-keepout zones for the 56 × 42 mm board.
-
-Future work should add `hardware/`, `firmware/`, `tests/`, and `tools/` only when each contains buildable or verifiable artifacts.
+**Boot checks:** `cd devices/ghostwisp && make check`
+runs host boot tests (157/157), GhostBlade isolation checks, and header sanity checks.
+Set `PICO_SDK_PATH=...` to also probe the cross-compile.
+See [boot-contract.md](docs/boot-contract.md) for what requires physical-board HIL verification.
 
 ## Definition of success
 

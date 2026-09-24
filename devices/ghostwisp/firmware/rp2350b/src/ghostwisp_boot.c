@@ -360,6 +360,7 @@ void boot_test_set_wd_reason(uint32_t reason) { g_wd_reason = reason; }
 void boot_test_set_wd_scratch(uint8_t idx, uint32_t val) { if (idx < 8) g_wd_scratch[idx] = val; }
 uint32_t boot_test_get_wd_load(void) { return g_wd_load_val; }
 bool boot_test_wd_enabled(void) { return g_wd_enabled; }
+void boot_test_reset_wd_enabled(void) { g_wd_enabled = false; }
 #endif
 
 /* ========================================================================

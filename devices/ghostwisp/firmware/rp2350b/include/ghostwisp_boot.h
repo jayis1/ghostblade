@@ -303,4 +303,12 @@ const char *boot_result_name(boot_result_t result);
  */
 const char *boot_reset_reason_name(reset_reason_t reason);
 
+/**
+ * boot_test_reset_wd_enabled — Reset the watchdog enabled state for tests
+ *
+ * Clears the stub g_wd_enabled flag so each test starts clean.
+ * Only available when BOOT_HOST_TEST is defined.
+ */
+void boot_test_reset_wd_enabled(void);
+
 #endif /* GHOSTWISP_BOOT_H */
