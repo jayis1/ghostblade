@@ -112,7 +112,7 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ## Current Repository State
 
-Validated locally on 2026-09-23:
+Validated locally on 2026-09-24:
 
 - `python3 tools/check_internal_links.py` → no broken internal links
 - `python3 tools/validate_dts.py` → DTS cross-reference checks passed
@@ -391,10 +391,25 @@ ghostblade/
 └── devices/
     └── ghostwisp/                              # GhostWisp (Project Little Spectre) — sister device
         ├── README.md                           # Overview, capabilities, hardware spec
-        └── docs/
-            ├── architecture.md                 # GhostWisp hardware architecture
-            ├── ghostblade-integration.md       # GhostBlade ↔ GhostWisp integration protocol
-            └── roadmap.md                      # Rev A component selection and milestones
+        ├── Makefile                            # Host test build + automated check suite
+        ├── check.sh                            # Isolation, header, and cross-compile checks
+        ├── docs/
+        │   ├── architecture.md                 # GhostWisp hardware architecture
+        │   ├── boot-contract.md                # Boot ordering, watchdog, GPIO, recovery, HIL requirements
+        │   ├── ghostblade-integration.md       # GhostBlade ↔ GhostWisp integration protocol
+        │   ├── pcb-layout-review.md            # PCB layout notes and review checklist
+        │   ├── peripheral-drivers.md           # Peripheral driver notes (CC1101, NFC, IR, display)
+        │   ├── rf-engineering.md               # RF engineering notes and antenna design
+        │   └── roadmap.md                      # Rev A component selection and milestones
+        ├── firmware/
+        │   └── rp2350b/                        # RP2350B firmware (CMake, Pico SDK)
+        │       ├── CMakeLists.txt
+        │       ├── include/                    # ghostwisp_boot.h, gpio, i2c, pins, protocol, spi, uart
+        │       └── src/                        # ghostwisp_boot.c, gpio, i2c, spi, uart
+        ├── protocol/                           # Python codec and wire-format test vectors
+        └── tests/
+            ├── test_ghostwisp_boot.c           # 157 host-side boot contract assertions
+            └── test_protocol.py                # 36 unit tests: CRC, round-trip, error handling
 ```
 
 ---
@@ -517,6 +532,10 @@ Screen glow illuminates the front face. No background — pure black void.
 | [Glossary](docs/glossary.md) | Project-specific terms, acronyms, and abbreviations |
 | [Power Sequencing Overview](docs/power-sequencing.md) | Multi-rail power architecture and sequencing constraints |
 | [GhostWisp (Project Little Spectre)](devices/ghostwisp/README.md) | Sister device overview and GhostBlade integration |
+| [GhostWisp Boot Contract](devices/ghostwisp/docs/boot-contract.md) | RP2350B boot ordering, watchdog, GPIO, recovery, HIL requirements |
+| [GhostWisp PCB Layout Review](devices/ghostwisp/docs/pcb-layout-review.md) | PCB layout notes and review checklist |
+| [GhostWisp Peripheral Drivers](devices/ghostwisp/docs/peripheral-drivers.md) | Peripheral driver notes — CC1101, NFC, IR, display |
+| [GhostWisp RF Engineering](devices/ghostwisp/docs/rf-engineering.md) | RF engineering notes, antenna design, regulatory notes |
 
 ## Engineering Phases
 

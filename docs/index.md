@@ -94,6 +94,10 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | [GhostWisp Overview](../devices/ghostwisp/README.md) | Project Little Spectre — pocketable MCU-first hacker companion |
 | [GhostWisp Architecture](../devices/ghostwisp/docs/architecture.md) | Hardware architecture, component selection, power model |
 | [GhostBlade ↔ GhostWisp Integration](../devices/ghostwisp/docs/ghostblade-integration.md) | Mothership/edge pairing protocol and USB/UART bridge |
+| [GhostWisp Boot Contract](../devices/ghostwisp/docs/boot-contract.md) | RP2350B boot ordering, watchdog, GPIO, recovery, HIL requirements |
+| [GhostWisp PCB Layout Review](../devices/ghostwisp/docs/pcb-layout-review.md) | PCB layout notes and review checklist |
+| [GhostWisp Peripheral Drivers](../devices/ghostwisp/docs/peripheral-drivers.md) | Peripheral driver notes — CC1101, NFC, IR, display |
+| [GhostWisp RF Engineering](../devices/ghostwisp/docs/rf-engineering.md) | RF engineering notes, antenna design, regulatory notes |
 | [GhostWisp Roadmap](../devices/ghostwisp/docs/roadmap.md) | Rev A milestones and component status |
 
 ## Engineering Phases (Detailed Design)

@@ -13,6 +13,29 @@ Hardware revisions follow CERN-OHL-S v2 version numbering. Firmware and software
 
 ## [Unreleased]
 
+### Added (2026-09-24)
+
+- **README: GhostWisp expanded repo structure** — updated `devices/ghostwisp/`
+  tree in the repository structure diagram to reflect all files added on
+  2026-09-24: `Makefile`, `check.sh`, `firmware/rp2350b/` (CMake build,
+  include headers, src files), `protocol/` (Python codec + golden vectors),
+  `tests/test_ghostwisp_boot.c` (157 boot contract assertions), and
+  `tests/test_protocol.py` (36 unit tests). Previously the tree only listed 3
+  docs files.
+- **README + docs/index.md: missing GhostWisp docs links** — added index
+  entries for `devices/ghostwisp/docs/boot-contract.md`,
+  `devices/ghostwisp/docs/pcb-layout-review.md`,
+  `devices/ghostwisp/docs/peripheral-drivers.md`, and
+  `devices/ghostwisp/docs/rf-engineering.md` which were present in the repo
+  but missing from the documentation tables in both README.md and docs/index.md.
+
+### Changed (2026-09-24)
+
+- `README.md` — updated validation date stamp to 2026-09-24.
+- `stats.json` — refreshed all line counts to 2026-09-24 (C: 32655, headers:
+  5306, dts: 2252, docs: 13502, python: 3376, shell: 2396, makefiles: 672,
+  cmake: 458, linker: 250, total_files: 215, total_lines: 60867).
+
 ### Added (2026-09-23)
 
 - **README: GhostWisp sister device** — added `devices/ghostwisp/` subtree to
