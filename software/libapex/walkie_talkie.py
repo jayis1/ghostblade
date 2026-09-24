@@ -313,7 +313,11 @@ class WalkieTalkie:
         """Terminate GNU Radio TX flowgraph."""
         if self._sdr_proc and self._sdr_proc.poll() is None:
             self._sdr_proc.terminate()
-            self._sdr_proc.wait(timeout=2)
+            try:
+                self._sdr_proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._sdr_proc.kill()
+                self._sdr_proc.wait()
         self._sdr_proc = None
 
     def _cc1101_ptt_start(self) -> None:
@@ -370,7 +374,11 @@ class WalkieTalkie:
         """Disconnect from VoIP server."""
         if self._voip_proc and self._voip_proc.poll() is None:
             self._voip_proc.terminate()
-            self._voip_proc.wait(timeout=2)
+            try:
+                self._voip_proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._voip_proc.kill()
+                self._voip_proc.wait()
         self._voip_proc = None
 
     def _run_mumble_cmd(self, *args: str) -> None:

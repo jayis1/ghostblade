@@ -203,7 +203,6 @@ void sdr_dma_irq_handler(void) {
          * Advancing it before publishing used to expose an unfilled block
          * to the protocol consumer after every DMA completion. */
         uint8_t next_write = (dma_write_block + 1) & (SDR_RING_NUM_BLOCKS - 1);
-        uint8_t filled = __atomic_load_n(&blocks_filled, __ATOMIC_ACQUIRE);
 
         /* The count disambiguates full from empty, so all ring blocks are
          * usable. On overrun discard exactly one oldest block before

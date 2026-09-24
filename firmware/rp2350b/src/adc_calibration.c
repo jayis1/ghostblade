@@ -496,6 +496,10 @@ int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv) {
      *  -2  — readback validation failed (flash may be faulty)
      */
     flash_ret = adc_cal_store_to_flash(0);
+    /* cppcheck-suppress knownConditionTrueFalse
+     * adc_cal_store_to_flash() returns 0 only in the non-device (host)
+     * build stub; the PICO_ON_DEVICE path returns -1 on struct-size
+     * overflow and -2 on flash readback failure. */
     if (flash_ret != 0)
         return flash_ret;  /* Propagate flash error to caller */
 
