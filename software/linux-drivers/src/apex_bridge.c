@@ -1304,10 +1304,18 @@ static __poll_t apex_bridge_poll(struct file *filp,
     __poll_t mask = 0;
 
     if (!dev || !dev->spi)
-        return EPOLLERR;
+        return EPOLLHUP | EPOLLERR;
 
     poll_wait(filp, &dev->rx_waitq, wait);
     poll_wait(filp, &dev->tx_waitq, wait);
+
+    /*
+     * Register the SG waitqueue unconditionally — before the state
+     * check — to avoid a TOCTOU race where the SG engine transitions
+     * to RUNNING after the check but before poll() blocks. Registering
+     * first ensures that any subsequent wake_up on sg_waitq is seen.
+     */
+    poll_wait(filp, &dev->sg_engine.sg_waitq, wait);
 
     if (!kfifo_is_empty(&dev->rx_fifo))
         mask |= EPOLLIN | EPOLLRDNORM;
@@ -1337,8 +1345,6 @@ static __poll_t apex_bridge_poll(struct file *filp,
                 break;
             }
         }
-        /* Also wait on SG waitqueue so poll wakes when a buffer completes */
-        poll_wait(filp, &dev->sg_engine.sg_waitq, wait);
     }
 
     return mask;
