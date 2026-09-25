@@ -130,7 +130,8 @@ Planned GhostBlade-side components:
 - a new namespaced companion daemon for discovery, pairing, synchronization, transfers, and reconnect;
 - a narrow additive `libapex`/Python companion interface for status, observations, capture retrieval, and bounded action preparation;
 - optional UI panels showing connection, effective policy, GhostWisp health, live observations, pending confirmation, and transfer state;
-- shared schema definitions and golden protocol vectors consumed by both host and firmware tests.
+- shared schema definitions and golden protocol vectors consumed by both host and firmware tests;
+- a bounded profile schema and validator (`protocol/profile.py`) that enforces the "profiles are data, never native code" invariant: strict schema validation, explicit field size caps (50 KiB body limit), region-code allowlist, expiry enforcement, and hard rejection of unknown schema versions — with static golden vectors for all positive and negative cases.
 
 These additions must preserve existing ABI/API behavior and remain dormant when GhostWisp is absent.
 

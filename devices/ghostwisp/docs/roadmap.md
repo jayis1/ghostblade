@@ -38,7 +38,7 @@ Work proceeds in evidence-producing increments. A phase is complete only when it
 - [x] Implement board initialization, watchdog, power states, and recovery.
 - [x] Implement peripheral driver stack: I2C, SPI, UART, GPIO with host-runnable unit tests. (API reference: [peripheral-drivers.md](peripheral-drivers.md))
 - [ ] Implement display/input shell and action broker.
-- [ ] Add bounded storage/profile parsers with host-side tests.
+- [x] Add bounded storage/profile parsers with host-side tests. (Profile schema/validator: [protocol/profile.py](../protocol/profile.py), Tests: [tests/test_profile.py](../tests/test_profile.py), Golden vectors: [protocol/golden_vectors.py](../protocol/golden_vectors.py))
 - [ ] Add A/B signed-update metadata and rollback behavior.
 
 ## Phase 4 — Capabilities

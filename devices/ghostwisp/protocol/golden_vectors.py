@@ -270,4 +270,193 @@ VECTORS: List[Dict[str, Any]] = [
             "payload": "",
         },
     },
+
+    # ------------------------------------------------------------------
+    # PROFILE_INDEX_RESP: valid bounded profile header (positive vector)
+    # ------------------------------------------------------------------
+    {
+        "id": "profile_index_resp_valid",
+        "description": (
+            "PROFILE_INDEX_RESP carrying a valid ProfileHeader.  "
+            "schema_version=1, region_code=1 (EU868), profile_flags=0x0003 "
+            "(NO_TRANSMIT | RECEIVE_ONLY), body_length=100 bytes (within 50 KiB cap), "
+            "expiry_utc_ms=0 (no expiry).  "
+            "ProfileValidator must accept this header."
+        ),
+        "payload_class": "ProfileHeader",
+        "payload": {
+            "profile_id": "000102030405060708090a0b0c0d0e0f",
+            "schema_version": 1,
+            "profile_flags": 3,     # NO_TRANSMIT | RECEIVE_ONLY
+            "region_code": 1,       # EU868
+            "max_duration_ms": 1000,
+            "expiry_utc_ms": 0,
+            "body_length": 100,
+            "body_crc32": 0xDEADBEEF,
+        },
+        "hex": (
+            "574701150800060001000000900100002C00"
+            "000102030405060708090A0B0C0D0E0F"
+            "0100"              # schema_version = 1
+            "0300"              # profile_flags = 3
+            "01"                # region_code = 1 (EU868)
+            "00"                # reserved
+            "0000"              # reserved2
+            "E8030000"          # max_duration_ms = 1000
+            "0000000000000000"  # expiry_utc_ms = 0
+            "64000000"          # body_length = 100
+            "EFBEADDE"          # body_crc32 = 0xDEADBEEF
+            "7222"              # CRC
+        ),
+        "frame": {
+            "protocol_version": 1,
+            "message_type": "PROFILE_INDEX_RESP",
+            "flags": 8,         # RESPONSE
+            "request_id": 6,
+            "session_id": 1,
+            "monotonic_ms": 400,
+        },
+        "validation": "accept",
+    },
+
+    # ------------------------------------------------------------------
+    # PROFILE_INDEX_RESP: expired profile (negative vector — must reject)
+    # ------------------------------------------------------------------
+    {
+        "id": "profile_index_resp_expired",
+        "description": (
+            "PROFILE_INDEX_RESP with expiry_utc_ms=1000000000000 (year 2001, always past).  "
+            "ProfileValidator.validate(now_utc_ms > expiry_utc_ms) must return ok=False.  "
+            "Expired profiles must be rejected, not executed."
+        ),
+        "payload_class": "ProfileHeader",
+        "payload": {
+            "profile_id": "000102030405060708090a0b0c0d0e0f",
+            "schema_version": 1,
+            "profile_flags": 3,
+            "region_code": 1,
+            "max_duration_ms": 1000,
+            "expiry_utc_ms": 1_000_000_000_000,
+            "body_length": 100,
+            "body_crc32": 0xDEADBEEF,
+        },
+        "hex": (
+            "574701150800070001000000F40100002C00"
+            "000102030405060708090A0B0C0D0E0F"
+            "0100"
+            "0300"
+            "01"
+            "00"
+            "0000"
+            "E8030000"
+            "0010A5D4E8000000"  # expiry_utc_ms = 1_000_000_000_000 (LE)
+            "64000000"
+            "EFBEADDE"
+            "9465"
+        ),
+        "frame": {
+            "protocol_version": 1,
+            "message_type": "PROFILE_INDEX_RESP",
+            "flags": 8,
+            "request_id": 7,
+            "session_id": 1,
+            "monotonic_ms": 500,
+        },
+        "validation": "reject",
+        "reject_reason_contains": "expired",
+    },
+
+    # ------------------------------------------------------------------
+    # PROFILE_INDEX_RESP: oversized body_length (negative vector — must reject)
+    # ------------------------------------------------------------------
+    {
+        "id": "profile_index_resp_oversized",
+        "description": (
+            "PROFILE_INDEX_RESP with body_length=51201 (> 50 KiB cap).  "
+            "ProfileValidator must reject before any allocation or deserialization."
+        ),
+        "payload_class": "ProfileHeader",
+        "payload": {
+            "profile_id": "000102030405060708090a0b0c0d0e0f",
+            "schema_version": 1,
+            "profile_flags": 3,
+            "region_code": 1,
+            "max_duration_ms": 1000,
+            "expiry_utc_ms": 0,
+            "body_length": 51_201,   # > MAX_PROFILE_BODY_BYTES (50 * 1024)
+            "body_crc32": 0xDEADBEEF,
+        },
+        "hex": (
+            "574701150800080001000000580200002C00"
+            "000102030405060708090A0B0C0D0E0F"
+            "0100"
+            "0300"
+            "01"
+            "00"
+            "0000"
+            "E8030000"
+            "0000000000000000"
+            "01C80000"          # body_length = 51201
+            "EFBEADDE"
+            "158B"
+        ),
+        "frame": {
+            "protocol_version": 1,
+            "message_type": "PROFILE_INDEX_RESP",
+            "flags": 8,
+            "request_id": 8,
+            "session_id": 1,
+            "monotonic_ms": 600,
+        },
+        "validation": "reject",
+        "reject_reason_contains": "body_length",
+    },
+
+    # ------------------------------------------------------------------
+    # PROFILE_INDEX_RESP: out-of-scope region code (negative vector — must reject)
+    # ------------------------------------------------------------------
+    {
+        "id": "profile_index_resp_out_of_scope_region",
+        "description": (
+            "PROFILE_INDEX_RESP with region_code=0xFF (unknown/out-of-scope).  "
+            "ProfileValidator must reject: a profile specifying an unauthorized region "
+            "must never reach the action broker.  Profiles are data, not code; "
+            "this is a validation/UX path, not an execution path."
+        ),
+        "payload_class": "ProfileHeader",
+        "payload": {
+            "profile_id": "000102030405060708090a0b0c0d0e0f",
+            "schema_version": 1,
+            "profile_flags": 3,
+            "region_code": 0xFF,     # unknown region
+            "max_duration_ms": 1000,
+            "expiry_utc_ms": 0,
+            "body_length": 100,
+            "body_crc32": 0xDEADBEEF,
+        },
+        "hex": (
+            "574701150800090001000000BC0200002C00"
+            "000102030405060708090A0B0C0D0E0F"
+            "0100"
+            "0300"
+            "FF"                # region_code = 0xFF (out-of-scope)
+            "00"
+            "0000"
+            "E8030000"
+            "0000000000000000"
+            "64000000"
+            "EFBEADDE"
+            "6A53"
+        ),
+        "frame": {
+            "protocol_version": 1,
+            "message_type": "PROFILE_INDEX_RESP",
+            "flags": 8,
+            "request_id": 9,
+            "session_id": 1,
+            "monotonic_ms": 700,
+        },
+        "validation": "reject",
+        "reject_reason_contains": "region_code",
+    },
 ]
