@@ -27,6 +27,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <string.h>
 #include "spi_protocol.h"
 
@@ -290,14 +291,12 @@ static void spi0_process_byte(uint8_t byte) {
                     break;
                 }
 
-                if (spi0_rx.payload_len == 0) {
-                    /* No payload — check CRC-32 (trailer only) */
-                    /* Need 4 more bytes for CRC-32 */
-                    spi0_rx.state = FRAME_STATE_PAYLOAD;
-                    /* payload_len == 0 means we need just the 4-byte CRC-32 */
-                } else {
-                    spi0_rx.state = FRAME_STATE_PAYLOAD;
-                }
+                /* Transition to PAYLOAD state regardless of length.
+                 * When payload_len == 0 the PAYLOAD state will only
+                 * accumulate the 4-byte CRC-32 trailer; when > 0 it
+                 * accumulates payload bytes followed by the trailer.
+                 * Either way the state machine handles it identically. */
+                spi0_rx.state = FRAME_STATE_PAYLOAD;
             }
         }
         break;
@@ -505,7 +504,14 @@ void spi0_tx_queue_response(const uint8_t *frame, uint16_t len) {
  * Called on initialization and after error recovery.
  */
 void spi0_rx_reset(void) {
-    memset(&spi0_rx, 0, sizeof(spi0_rx));
+    /* Use volatile wipe to prevent the compiler from eliding the zeroing
+     * of spi0_rx, which may contain sensitive SPI frame data (NFC keys,
+     * RF config). A plain memset can be optimized away at -O1 or higher
+     * when the compiler sees the struct is about to be overwritten. */
+    volatile uint8_t *p = (volatile uint8_t *)&spi0_rx;
+    for (size_t i = 0; i < sizeof(spi0_rx); i++)
+        p[i] = 0;
+    __asm__ volatile ("dmb" ::: "memory");  /* Ensure wipe is visible before state reset */
     spi0_rx.state = FRAME_STATE_IDLE;
 }
 
@@ -515,7 +521,13 @@ void spi0_rx_reset(void) {
  * Clears the response buffer and deasserts INT_REQ.
  */
 void spi0_tx_reset(void) {
-    memset(&spi0_tx, 0, sizeof(spi0_tx));
+    /* Use volatile wipe to prevent the compiler from eliding the zeroing
+     * of spi0_tx, which may contain a pending response frame (NFC/IQ data).
+     * See spi0_rx_reset() for the same rationale. */
+    volatile uint8_t *p = (volatile uint8_t *)&spi0_tx;
+    for (size_t i = 0; i < sizeof(spi0_tx); i++)
+        p[i] = 0;
+    __asm__ volatile ("dmb" ::: "memory");  /* Ensure wipe is visible */
     spi0_deassert_int_req();
 }
 

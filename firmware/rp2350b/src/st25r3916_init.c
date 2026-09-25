@@ -36,6 +36,7 @@
  * @addr: Register address (Space A: 0x00-0x3F, Space B via gateway)
  * @val:  Value to write
  */
+/* cppcheck-suppress staticFunction -- declared in st25r3916_init.h, part of public API */
 void st25r3916_write_reg(uint8_t addr, uint8_t val) {
     /* Validate register address range — Space A is 0x00-0x3F.
      * Out-of-range addresses could trigger undefined SPI behavior. */
@@ -50,6 +51,7 @@ void st25r3916_write_reg(uint8_t addr, uint8_t val) {
  * @addr: Register address
  * Returns: Register value (0xFF if address is out of range)
  */
+/* cppcheck-suppress staticFunction -- declared in st25r3916_init.h, part of public API */
 uint8_t st25r3916_read_reg(uint8_t addr) {
     /* Validate register address range — Space A is 0x00-0x3F.
      * Return 0xFF (all bits set) for invalid addresses to avoid
@@ -84,6 +86,7 @@ void st25r3916_write_multiple_regs(uint8_t start_addr,
  *
  * @cmd: Command byte (0xC1-0xD3)
  */
+/* cppcheck-suppress staticFunction -- declared in st25r3916_init.h, part of public API */
 void st25r3916_send_command(uint8_t cmd) {
     /* Validate command range — direct commands are 0xC1-0xD3 per datasheet */
     if (cmd < 0xC1 || cmd > 0xD3)
@@ -99,6 +102,7 @@ void st25r3916_send_command(uint8_t cmd) {
  *
  * Reads all 5 IRQ status registers to clear pending interrupt flags.
  */
+/* cppcheck-suppress staticFunction -- declared in st25r3916_init.h, part of public API */
 void st25r3916_clear_interrupts(uint8_t *irq1, uint8_t *irq2,
                                 uint8_t *irq3, uint8_t *irq4,
                                 uint8_t *irq5) {
@@ -404,6 +408,7 @@ void st25r3916_field_on(void) {
  *
  * Disables the 13.56 MHz carrier.
  */
+/* cppcheck-suppress staticFunction -- declared in st25r3916_init.h, part of public API */
 void st25r3916_field_off(void) {
     st25r3916_send_command(ST25R3916_CMD_TX_OFF);
 }

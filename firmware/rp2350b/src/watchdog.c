@@ -141,6 +141,10 @@ bool watchdog_init(void) {
  *
  * Writing to WD_LOAD reloads the counter to the timeout value.
  */
+/* cppcheck-suppress staticFunction
+ * watchdog_feed is the canonical implementation called by watchdog_kick().
+ * It is intentionally non-static so it can be called directly from test
+ * harnesses without going through the watchdog_kick() alias. */
 void watchdog_feed(void) {
     volatile uint32_t *wd_load = (volatile uint32_t *)(RP2350B_WATCHDOG_BASE + WD_LOAD);
     *wd_load = WD_TIMEOUT_US;
