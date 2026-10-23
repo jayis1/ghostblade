@@ -6,6 +6,7 @@ test_watchdog
 test_power_states
 test_sleep_wake
 test_libapex
+test_libapex_api
 test_libapex_framing
 test_sdr_dma
 test_spi0_isr

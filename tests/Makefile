@@ -45,7 +45,7 @@ CFLAGS  = -Wall -Wextra -std=c11 -DNO_CMOCKA -g -O2
 LDFLAGS =
 
 # Userspace test targets
-USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_libapex_framing test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation test_es8388_audio test_ghostwisp_boot test_ghostwisp_peripherals
+USERSPACE_TARGETS = test_spi_protocol test_battery_monitor test_cc1101_config test_watchdog test_power_states test_sleep_wake test_libapex test_libapex_api test_libapex_framing test_sdr_dma test_spi0_isr test_st25r3916_init test_adc_calibration test_peripheral_power test_cc1101_lms7002m test_crc_validation test_es8388_audio test_ghostwisp_boot test_ghostwisp_peripherals
 
 # Kernel module sources (build separately on target)
 KMOD_SOURCES = test_apex_bridge.c
@@ -106,6 +106,9 @@ test_libapex: test_libapex.c
 
 test_libapex_framing: test_libapex_framing.c
 	$(CC) $(CFLAGS) -I$(CURDIR)/../software/libapex/include -o $@ $< $(LDFLAGS)
+
+test_libapex_api: test_libapex_api.c ../software/libapex/src/libapex.c ../software/libapex/include/libapex.h
+	$(CC) $(CFLAGS) -I$(CURDIR)/../software/libapex/include -o $@ test_libapex_api.c ../software/libapex/src/libapex.c -Wl,--wrap=ioctl $(LDFLAGS)
 
 test_sdr_dma: test_sdr_dma.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
@@ -168,6 +171,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running libapex Unit Tests ==="
 	@./test_libapex
+	@echo ""
+	@echo "=== Running libapex Production API Regression Tests ==="
+	@./test_libapex_api
 	@echo ""
 	@echo "=== Running libapex Frame Encoding/Parsing Unit Tests ==="
 	@./test_libapex_framing

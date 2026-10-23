@@ -385,9 +385,10 @@ int apex_nfc_poll(apex_handle_t handle, uint32_t timeout_ms);
  *
  * @handle: Device handle
  * @version: Output: firmware version string (null-terminated)
- * @buf_len: Size of the version buffer (at least 16 bytes recommended)
+ * @buf_len: Size of the version buffer, including the terminating null;
+ *           at least sizeof("GhostBlade v1.0.0") bytes are required
  *
- * Returns: APEX_OK on success
+ * Returns: APEX_OK on success, APEX_ERR_INVALID_ARG if the buffer is too small
  */
 int apex_get_firmware_version(apex_handle_t handle, char *version,
                                size_t buf_len);

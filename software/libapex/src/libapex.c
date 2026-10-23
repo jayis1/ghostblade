@@ -167,10 +167,10 @@ int apex_last_error(apex_handle_t handle) {
 }
 
 const char *apex_strerror(int error) {
-    int idx = -error;
-    if (idx < 0 || idx >= (int)(sizeof(error_strings) / sizeof(error_strings[0])))
+    /* Check the domain before negating: -INT_MIN is undefined. */
+    if (error > APEX_OK || error < APEX_ERR_NOMEM)
         return "Unknown error";
-    return error_strings[idx];
+    return error_strings[-error];
 }
 
 /* ========================================================================
@@ -187,7 +187,8 @@ int apex_sdr_tune(apex_handle_t handle, uint32_t freq_hz,
     if (freq_hz < 100000 || freq_hz > 3800000000UL)
         return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
-    if (gain_db < 0.0f || gain_db > 6553.5f)
+    /* NaN fails both ordered comparisons and must not reach the cast. */
+    if (!(gain_db >= 0.0f && gain_db <= 6553.5f))
         return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     memset(&cmd, 0, sizeof(cmd));
@@ -593,9 +594,9 @@ int apex_get_firmware_version(apex_handle_t handle, char *version,
      * reported via the firmware_version sysfs attribute. Since there
      * is no dedicated version ioctl, we return the library-compiled
      * version string that matches the kernel driver's version. */
-    if (buf_len < 16) {
+    if (buf_len < sizeof("GhostBlade v1.0.0")) {
         version[0] = '\0';
-        return APEX_ERR_INVALID_ARG;
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
     }
 
     snprintf(version, buf_len, "GhostBlade v1.0.0");
