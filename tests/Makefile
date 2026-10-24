@@ -55,6 +55,7 @@ KMOD_SOURCES = test_apex_bridge.c
 
 USERSPACE_TARGETS += test_ghostwisp_gpio_mmio
 USERSPACE_TARGETS += test_temperature_production
+USERSPACE_TARGETS += test_ghostwisp_i2c_addresses
 
 all: $(USERSPACE_TARGETS)
 
@@ -147,6 +148,9 @@ test_es8388_audio: test_es8388_audio.c
 test_ghostwisp_gpio_mmio: test_ghostwisp_gpio_mmio.c ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_gpio.c ../devices/ghostwisp/firmware/rp2350b/include/ghostwisp_gpio.h ../devices/ghostwisp/firmware/rp2350b/include/ghostwisp_pins.h
 	$(CC) $(CFLAGS) -UNDEBUG -UGHOSTWISP_GPIO_MMIO_TEST -UDRIVER_HOST_TEST -DGHOSTWISP_GPIO_MMIO_TEST -I$(CURDIR)/../devices/ghostwisp/firmware/rp2350b/include -o $@ test_ghostwisp_gpio_mmio.c ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_gpio.c $(LDFLAGS)
 
+test_ghostwisp_i2c_addresses: test_ghostwisp_i2c_addresses.c ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_i2c.c ../devices/ghostwisp/firmware/rp2350b/include/ghostwisp_i2c.h
+	$(CC) $(CFLAGS) -UNDEBUG -DDRIVER_HOST_TEST -I$(CURDIR)/../devices/ghostwisp/firmware/rp2350b/include -o $@ test_ghostwisp_i2c_addresses.c ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_i2c.c $(LDFLAGS)
+
 test_ghostwisp_boot: test_ghostwisp_boot.c
 	$(CC) $(CFLAGS) -DBOOT_HOST_TEST -I$(CURDIR)/../devices/ghostwisp/firmware/rp2350b/include -o $@ $< ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_boot.c $(LDFLAGS)
 
@@ -164,6 +168,7 @@ test_walkie_talkie:
 	@python3 test_walkie_talkie.py
 
 run: $(USERSPACE_TARGETS)
+	@./test_ghostwisp_i2c_addresses
 	@./test_temperature_production
 	@./test_ghostwisp_gpio_mmio
 	@echo "=== Running SPI Protocol Unit Tests ==="

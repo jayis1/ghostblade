@@ -2,6 +2,7 @@
  * ghostwisp_i2c.c — GhostWisp I2C Driver Implementation
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Implements the I2C0 master driver for the GhostWisp RP2350B.
@@ -188,6 +189,9 @@ i2c_result_t i2c_init(uint8_t instance, uint32_t baud_hz) {
 }
 
 i2c_result_t i2c_write_blocking(uint8_t addr, const uint8_t *data, size_t len) {
+    /* Reject out-of-range addresses before any bus access. */
+    if (addr > 0x7F)
+        return I2C_ERR_INVALID_ARG;
     if (len > I2C_MAX_TRANSFER)
         return I2C_ERR_TOO_LONG;
     if (len > 0 && data == NULL)
@@ -253,6 +257,8 @@ i2c_result_t i2c_write_blocking(uint8_t addr, const uint8_t *data, size_t len) {
 }
 
 i2c_result_t i2c_read_blocking(uint8_t addr, uint8_t *data, size_t len) {
+    if (addr > 0x7F)
+        return I2C_ERR_INVALID_ARG;
     if (len > I2C_MAX_TRANSFER)
         return I2C_ERR_TOO_LONG;
     if (len > 0 && data == NULL)
@@ -320,6 +326,8 @@ i2c_result_t i2c_write_register(uint8_t addr, uint8_t reg, uint8_t val) {
 }
 
 i2c_result_t i2c_read_register(uint8_t addr, uint8_t reg, uint8_t *out) {
+    if (addr > 0x7F)
+        return I2C_ERR_INVALID_ARG;
     if (out == NULL)
         return I2C_ERR_INVALID_ARG;
 
@@ -347,6 +355,8 @@ i2c_result_t i2c_read_register(uint8_t addr, uint8_t reg, uint8_t *out) {
 }
 
 i2c_result_t i2c_read_register16(uint8_t addr, uint8_t reg, uint16_t *out16) {
+    if (addr > 0x7F)
+        return I2C_ERR_INVALID_ARG;
     if (out16 == NULL)
         return I2C_ERR_INVALID_ARG;
 
@@ -381,6 +391,8 @@ i2c_result_t i2c_read_register16(uint8_t addr, uint8_t reg, uint16_t *out16) {
 }
 
 i2c_result_t i2c_probe(uint8_t addr) {
+    if (addr > 0x7F)
+        return I2C_ERR_INVALID_ARG;
 #ifdef DRIVER_HOST_TEST
     if (!sim_i2c_initialized)
         return I2C_ERR_NOT_INIT;
