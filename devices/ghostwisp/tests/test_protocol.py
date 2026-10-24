@@ -285,6 +285,41 @@ class TestFrameDecodeErrors(unittest.TestCase):
                 self.assertEqual(wire[5], 0)
                 self.assertEqual(Frame.decode(wire), frame)
 
+    def test_nonzero_alignment_pad_rejected(self):
+        # The canonical C header requires the uint16 pad at offset 10 to be
+        # zero. Exercise every bit, both byte positions, and mixed values.
+        original = _make_frame(payload=b"alignment-pad").encode()
+        pad_values = [1 << bit for bit in range(16)] + [0xFFFF, 0x1234, 0xFF00]
+        for pad in pad_values:
+            data = bytearray(original)
+            struct.pack_into("<H", data, 10, pad)
+            data[-2:] = struct.pack("<H", _crc16_ccitt_false(data[:-2]))
+            for input_type in (bytes, bytearray):
+                with self.subTest(pad=pad, input_type=input_type):
+                    with self.assertRaisesRegex(ProtocolError, "alignment pad must be zero"):
+                        Frame.decode(input_type(data))
+
+    def test_alignment_pad_check_does_not_bypass_crc(self):
+        for offset in (10, 11):
+            data = bytearray(self._valid_frame_bytes())
+            data[offset] = 1
+            with self.subTest(offset=offset):
+                with self.assertRaisesRegex(ProtocolError, "CRC mismatch"):
+                    Frame.decode(data)
+
+    def test_zero_alignment_pad_preserves_known_messages(self):
+        for message_type in MessageType:
+            for payload in (b"", b"known-type", b"\xAB" * PAYLOAD_MAX_DEFAULT):
+                frame = _make_frame(message_type=message_type, payload=payload)
+                wire = frame.encode()
+                for input_type in (bytes, bytearray):
+                    with self.subTest(message_type=message_type, size=len(payload),
+                                      input_type=input_type):
+                        self.assertEqual(wire[10:12], b"\x00\x00")
+                        decoded = Frame.decode(input_type(wire))
+                        self.assertEqual(decoded, frame)
+                        self.assertEqual(decoded.encode(), wire)
+
     def test_unknown_mandatory_type(self):
         f = Frame(
             message_type=MessageType.SESSION_HELLO,  # placeholder; we'll overwrite

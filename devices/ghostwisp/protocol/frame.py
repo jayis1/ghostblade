@@ -19,12 +19,13 @@ Frame layout (all fields little-endian):
        5      1  reserved         0x00
        6      2  request_id       uint16
        8      2  session_id       uint16
-      10      4  monotonic_ms     uint32  ms since device boot
-      14      2  payload_length   uint16
-      16      N  payload
-    16+N      2  crc16            CRC-16/CCITT-FALSE over bytes [0..16+N-1]
+      10      2  pad              0x0000
+      12      4  monotonic_ms     uint32  ms since device boot
+      16      2  payload_length   uint16
+      18      N  payload
+    18+N      2  crc16            CRC-16/CCITT-FALSE over bytes [0..18+N-1]
 
-Total minimum frame size: 18 bytes (zero-length payload).
+Total minimum frame size: 20 bytes (zero-length payload).
 Maximum payload: PAYLOAD_MAX_BYTES (negotiated per session; default 4096).
 
 Safety boundaries:
@@ -46,11 +47,11 @@ from typing import Optional
 MAGIC: int = 0x4757          # 'G','W' LE
 PROTOCOL_VERSION: int = 1
 HEADER_FMT = "<HBBBBHHHI"    # magic, ver, msg_type, flags, reserved, req_id, sess_id, pad, mono_ms
-HEADER_SIZE = struct.calcsize(HEADER_FMT)  # 14 bytes
+HEADER_SIZE = struct.calcsize(HEADER_FMT)  # 16 bytes
 PAYLOAD_LENGTH_FMT = "<H"
 PAYLOAD_LENGTH_SIZE = struct.calcsize(PAYLOAD_LENGTH_FMT)  # 2 bytes
 CRC_SIZE = 2
-OVERHEAD = HEADER_SIZE + PAYLOAD_LENGTH_SIZE + CRC_SIZE  # 18 bytes
+OVERHEAD = HEADER_SIZE + PAYLOAD_LENGTH_SIZE + CRC_SIZE  # 20 bytes
 PAYLOAD_MAX_DEFAULT = 4096
 
 
@@ -230,6 +231,11 @@ class Frame:
         # nonconforming envelope safe to interpret as a supported message.
         if _reserved != 0:
             raise ProtocolError("reserved byte must be zero")
+
+        # The canonical C header also reserves the uint16 alignment pad.
+        # Do not silently discard nonzero envelope data after a valid CRC.
+        if _pad != 0:
+            raise ProtocolError("alignment pad must be zero")
 
         payload_len = struct.unpack_from(PAYLOAD_LENGTH_FMT, data, HEADER_SIZE)[0]
         if payload_len > PAYLOAD_MAX_DEFAULT:

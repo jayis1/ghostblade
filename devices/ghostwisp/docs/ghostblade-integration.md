@@ -113,6 +113,25 @@ The regression tests cover all 255 nonzero values for both `bytes` and
 known message type. This is host codec validation, not physical-link or
 session-authentication validation.
 
+### Reference codec alignment-pad validation
+
+Author: jayis1
+
+The canonical C header also requires the two-byte alignment pad at offsets
+10–11 to be zero. The Python decoder now rejects a nonzero pad with
+`ProtocolError` (`alignment pad must be zero`), after CRC, magic, version,
+and reserved-byte validation. This closes an envelope-validation gap without
+changing the encoding or acceptance of conforming version-1 frames. The
+codec's layout comments now match the existing C layout: monotonic time at
+12, payload length at 16, payload at 18, and 20 bytes of total overhead.
+
+Run `python3 -m unittest discover -s devices/ghostwisp/tests -v` from the
+repository root. Regressions mutate peer bytes and recompute CRCs, exercise
+each pad bit and mixed values with `bytes` and `bytearray`, preserve CRC-error
+precedence, and check byte-identical round trips for every known message type
+with empty, ordinary, and maximum-size payloads. These are host-only codec
+checks; physical-link behavior and session authentication remain unverified.
+
 ### Reference codec version compatibility
 
 The Python decoder accepts only `PROTOCOL_VERSION` (currently 1). A frame with
