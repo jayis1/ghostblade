@@ -24,6 +24,7 @@ help:
 	@echo "  validate         - Validate DTS syntax"
 	@echo "  validate-dts     - Cross-reference DTS GPIOs with firmware and schematic"
 	@echo "  validate-netlist - Cross-reference netlist, manifest, DTS, and firmware pins"
+	@echo "  validate-netlist-strict - Also fail on missing exact manifest net names"
 	@echo "  docs-check       - Verify internal markdown links"
 	@echo "  reproducible     - Print suggested reproducible-build environment exports"
 	@echo "  check            - Check toolchain availability"
@@ -71,6 +72,11 @@ validate-dts:
 validate-netlist:
 	@echo "Running netlist cross-reference validation..."
 	python3 tools/validate_netlist.py
+
+# Author: jayis1
+.PHONY: validate-netlist-strict
+validate-netlist-strict:
+	python3 tools/validate_netlist.py --strict-net-names
 
 docs-check:
 	python3 tools/check_internal_links.py

@@ -25,9 +25,48 @@ concept art or the names of library entries.
 | Device tree | Base source and optional overlays exist; the SoC `rk3576.dtsi` is not bundled | Select the target kernel/revision, compile the base, apply supported overlay combinations, and validate bindings and actual wiring |
 
 `tools/validate_netlist.py` performs selected name/reference checks with regular
-expressions. It does not parse a complete KiCad document, compare every manifest
-net or endpoint, validate every footprint, or prove that a referenced model file
+expressions. It now compares every parsed manifest `NET_` name exactly against
+parsed netlist names. It does not parse a complete KiCad document, compare net
+endpoints, validate every footprint, or prove that a referenced model file
 exists. Passing it is not ERC, DRC, or a manufacturing sign-off.
+
+## Exact net-name coverage
+
+Basis: checked-in `GhostBlade.mf` and `hardware/kicad/ghostblade.net`, not an
+export from a reviewed editable schematic or a hardware measurement.
+
+```sh
+make validate-netlist
+make validate-netlist-strict
+python3 tests/test_netlist_validation.py -v
+```
+
+The default command reports missing exact names as warnings and retains its
+existing error checks. The strict command promotes those warnings to errors.
+Both reject empty parsed manifest/netlist name sets, including unrecognized
+input; neither is a full syntax validator. Additional netlist names are allowed
+because power rails and other board signals need not appear in the manifest's
+interface definitions. Names are case-sensitive; no alias or prefix matching is
+used. The strict target runs all the same selected checks, not just name coverage.
+
+Current result: 20 of 34 parsed manifest names occur exactly in the 58 parsed
+netlist names. The strict command exits nonzero for these 14 unmatched names:
+
+| Group | Manifest names absent by exact spelling |
+|-------|-----------------------------------------|
+| Host handshake | `NET_HOST_READY` |
+| CC1101 | `NET_CC_SPI_CS`, `NET_CC_SPI_MISO`, `NET_CC_SPI_MOSI` |
+| NFC | `NET_NFC_I2C_SCL`, `NET_NFC_I2C_SDA`, `NET_NFC_SPI_CS` |
+| SDR control | `NET_SDR_GPIO0`, `NET_SDR_GPIO1`, `NET_SDR_SPI_CS`, `NET_SDR_SPI_MISO`, `NET_SDR_SPI_MOSI` |
+| SDR samples | `NET_SDR_IQ_I`, `NET_SDR_IQ_Q` |
+
+An unmatched name is a review finding, not proof that the circuit is absent.
+The connector escaping and partial regex extraction noted above still limit the
+result. Reconcile reference/pin endpoints from a reviewed schematic before
+renaming a net, declaring two names equivalent, or changing firmware/DTS wiring.
+No electrical sources are changed by either command. Regression tests use
+synthetic text fixtures and exercise the actual command and strict Make target;
+they do not establish KiCad parsing or electrical correctness.
 
 ## Safe local export commands
 

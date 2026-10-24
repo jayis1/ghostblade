@@ -5,6 +5,33 @@
 
 Author: jayis1
 
+## Exact manifest net-name coverage
+
+Author: jayis1
+
+Basis: checked-in manifest/netlist text, not a reviewed schematic export.
+The existing netlist checker printed net prefixes without checking full-name
+coverage. It now compares exact names, warns on missing names by default, and
+provides `make validate-netlist-strict` to make those findings fail the command.
+Empty parsed name sets fail in both modes; repeated in-process runs reset their
+diagnostics. No automatic aliasing or electrical changes were made.
+
+The repository currently matches 20 of 34 manifest names; the 14 unmatched names
+are listed in [hardware export readiness](hardware-export-readiness.md).
+This is a spelling/coverage result, not a connectivity or KiCad syntax verdict.
+The README now exposes design-stage status before its feature descriptions and
+records the warning/strict-failure distinction rather than an all-passed claim.
+
+Ten regression tests cover exact matches, extra board nets, same-prefix and
+case differences, default warnings, missing/empty/unrecognized inputs,
+deterministic diagnostics, repeated runs, retained component errors, and strict
+Make exit propagation.
+They run through `make -C tests run` with synthetic text fixtures. Host suite,
+link-path checks, selected DTS checks, and eight overlay builds/syntax checks
+passed. Strict net-name validation intentionally fails on the existing findings.
+The base DTS, real ERC/DRC, cross-builds, and hardware operation remain unverified
+for the source/tool limitations documented below.
+
 ## Fabrication export failure handling and readiness review
 
 Author: jayis1

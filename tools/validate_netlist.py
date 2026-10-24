@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Copyright (C) 2026 GhostBlade Project
-"""Validate GhostBlade schematic netlist consistency against GhostBlade.mf manifest.
+# Copyright (C) 2026 jayis1
+# Author: jayis1
+"""Check exact manifest net-name coverage and selected documented assignments.
 
-Checks that:
-1. All manifest net names appear in the KiCad netlist
-2. Component references in the manifest match netlist components
-3. Pin connections specified in the manifest are consistent
-4. All components in the netlist have correct footprint assignments
-5. 3D model references exist in the 3dmodels/README.md
-6. Core ICs are documented in the KiCad library manifest
+Missing net names warn by default; --strict-net-names makes them errors.
+Empty parsed net sets always fail. Regex extraction is not a complete KiCad
+parser, endpoint comparison, footprint validation, or proof of model availability.
 """
 
+import argparse
 import re
 import sys
 import os
-import configparser
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ERRORS = []
@@ -105,7 +102,30 @@ def parse_library_manifest_refs():
     return refs
 
 
-def main():
+def check_net_names(manifest_nets, kicad_nets, strict=False):
+    """Compare exact names only; additional board nets are not discrepancies."""
+    if not manifest_nets:
+        ERRORS.append("No manifest NET_ definitions parsed; coverage cannot be checked")
+    if not kicad_nets:
+        ERRORS.append("No KiCad net names parsed; coverage cannot be checked")
+    if not manifest_nets or not kicad_nets:
+        return
+
+    missing = sorted(set(manifest_nets) - kicad_nets)
+    diagnostics = ERRORS if strict else WARNINGS
+    for name in missing:
+        diagnostics.append(f"Manifest net absent by exact name from KiCad netlist: {name}")
+    print(f"Exact manifest net-name coverage: {len(manifest_nets) - len(missing)}/{len(manifest_nets)}")
+    print("Name coverage does not verify endpoints, aliases, or KiCad syntax.")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--strict-net-names", action="store_true",
+                        help="fail on manifest net names absent from the parsed netlist")
+    args = parser.parse_args(argv)
+    ERRORS.clear()
+    WARNINGS.clear()
     print("GhostBlade Netlist Cross-Reference Validation")
     print("=" * 50)
 
@@ -170,15 +190,8 @@ def main():
             else:
                 print(f"✓ 3D model reference: {model_name}")
 
-    # Check 5: Verify net name consistency between manifest and netlist
-    # The manifest uses NET_ prefixed names, the netlist should reference them
-    manifest_net_prefixes = set()
-    for net_name in manifest_nets:
-        # Extract the functional part: NET_SPI_CLK -> SPI_CLK
-        prefix = net_name.split("_")[1] if "_" in net_name else ""
-        manifest_net_prefixes.add(prefix)
-
-    print(f"\n✓ Manifest net prefixes: {', '.join(sorted(manifest_net_prefixes))}")
+    # Compare complete names, not shared prefixes; never infer electrical aliases.
+    check_net_names(manifest_nets, kicad_nets, strict=args.strict_net_names)
 
     # Check 6: Verify DTS net references match manifest
     dts_path = os.path.join(ROOT, "software/dts/ghostblade-rk3576.dts")

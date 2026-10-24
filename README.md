@@ -21,6 +21,13 @@ Dual-processor (RK3576 + RP2350B) SDR-equipped handheld with Wi-Fi 6E, sub-GHz, 
 
 ---
 
+<!-- Author: jayis1 -->
+> Design-stage repository, not a fabrication or hardware-tested release. Editable
+> schematics and a routed PCB are not tracked. Feature lists and diagrams below
+> describe targets, not measured capabilities. Start with the
+> [current repository state](#current-repository-state) and
+> [hardware readiness review](docs/hardware-export-readiness.md).
+
 ## Concept Art
 
 > Device renderings and visual concepts live here. Drop your images into `concept-art/` and they will appear below automatically once the PR is merged.
@@ -130,7 +137,8 @@ Validated locally on 2026-10-24:
 
 - `python3 tools/check_internal_links.py` → no broken inline or reference-definition link paths
 - `python3 tools/validate_dts.py` → existing selected DTS cross-reference checks passed
-- `python3 tools/validate_netlist.py` → existing selected netlist/reference checks passed
+- `python3 tools/validate_netlist.py` → selected assignment checks passed; exact-name coverage is 20/34, with 14 warnings
+- `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)
 - `make -C software/dts all validate` → eight overlays compiled and syntax-checked
 - `python3 tests/test_dts_build.py -v` → three build-coverage regression tests passed
 - `python3 tests/test_doc_links.py -v` → 16 link-path regression tests passed

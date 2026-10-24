@@ -227,6 +227,9 @@ run: $(USERSPACE_TARGETS)
 	@echo "=== Running Walkie-Talkie Python Unit Tests ==="
 	@python3 test_walkie_talkie.py
 	@echo ""
+	@echo "=== Running Netlist Name Coverage Regression Tests ==="
+	@python3 test_netlist_validation.py -v
+	@echo ""
 	@echo "=== Running Fabrication Export Regression Tests ==="
 	@python3 test_generate_gerbers.py -v
 	@echo ""
