@@ -80,6 +80,35 @@ class DocLinksTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                     self.assertIn('README.md:', result.stdout)
 
+    def test_reference_definitions_check_paths_and_images(self):
+        self.check_document('[guide][ref] ![art][image]\n\n'
+                            '[ref]: ../README.md#intro "Guide"\n'
+                            '   [image]: <a b.png> (Image title)\n', 0,
+                            ('README.md', 'docs/a b.png'))
+
+    def test_missing_reference_destinations_fail(self):
+        for destination in ('absent.md', 'absent.png', '<absent file.md>'):
+            with self.subTest(destination=destination):
+                self.check_document(f'[ref]: {destination}\n', 1)
+
+    def test_reference_urls_encoded_paths_and_root_paths(self):
+        self.check_document('[one]: a%20b.md\n[two]: /README.md?raw=1\n'
+                            '[web]: https://example.org/guide\n'
+                            '[anchor]: #heading\n[mail]: mailto:a@example.org\n',
+                            0, ('docs/a b.md', 'README.md'))
+
+    def test_missing_collapsed_and_shortcut_reference_targets(self):
+        self.check_document('[guide][] and [guide]\n\n[guide]: absent.md\n', 1)
+
+    def test_undefined_references_are_not_path_destinations(self):
+        self.check_document('[undefined][ref] and [plain text]\n', 0)
+
+    def test_indented_code_is_not_a_reference_definition(self):
+        self.check_document('    [example]: absent.md\n', 0)
+
+    def test_reference_definitions_allow_parentheses_in_paths(self):
+        self.check_document('[ref]: part(1).md\n', 0, ('docs/part(1).md',))
+
     def test_missing_root_fails_instead_of_false_success(self):
         with tempfile.TemporaryDirectory(prefix='ghostblade-links-') as directory:
             result = subprocess.run(

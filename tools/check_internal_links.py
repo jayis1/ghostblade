@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 jayis1
-"""Check inline Markdown link/image paths; not anchors or reference-style links.
+"""Check inline Markdown paths and reference-definition destinations; not anchors.
 
 Author: jayis1
 """
@@ -18,6 +18,14 @@ INLINE_LINK = re.compile(
     r'\[[^\]]*\]\(\s*(?:<([^>\n]*)>|([^\s)]+))'
     r'(?:\s+(?:"[^"\n]*"|\'[^\'\n]*\'))?\s*\)'
 )
+# Same-line definitions with at most three leading spaces. Check every
+# destination, including unused definitions; resolving reference uses is outside
+# this path check's scope. Multiline definitions are deliberately not parsed.
+REFERENCE_DEFINITION = re.compile(
+    r'^ {0,3}\[[^\]\n]+\]:[ \t]*(?:<([^>\n]+)>|([^\s<>]+))'
+    r'(?:[ \t]+(?:"[^"\n]*"|\'[^\'\n]*\'|\([^\n]*\)))?[ \t]*$',
+    re.MULTILINE,
+)
 
 
 def check_links(root):
@@ -27,7 +35,9 @@ def check_links(root):
         if '.git' in source.relative_to(root).parts:
             continue
         content = source.read_text(encoding='utf-8')
-        for match in INLINE_LINK.finditer(content):
+        matches = list(INLINE_LINK.finditer(content))
+        matches.extend(REFERENCE_DEFINITION.finditer(content))
+        for match in matches:
             destination = match.group(1) or match.group(2) or ''
             try:
                 url = urlsplit(destination)
@@ -58,7 +68,7 @@ def main(argv=None):
         for source, destination, target in broken:
             print(f'  {source.relative_to(root)}: {destination} -> {target}')
         return 1
-    print('No broken inline internal link paths found.')
+    print('No broken internal link paths found (inline and reference definitions).')
     return 0
 
 

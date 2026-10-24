@@ -5,6 +5,34 @@
 
 Author: jayis1
 
+## Reference-definition link path coverage
+
+Author: jayis1
+
+The shared documentation checker now validates same-line reference-definition
+paths as well as inline destinations. Previously, `[guide][build]` could point
+to a missing file through `[build]: missing.md` without failing `make docs-check`.
+Both command entry points now reject that missing destination, including image
+assets. Definitions are checked even when unused, so stale paths cannot hide in
+an unused reference block.
+
+Supported definitions have zero to three leading spaces, an unquoted URL or an
+angle-bracket destination, and an optional same-line quoted or parenthesized
+title. Relative, repository-root, encoded filenames, queries, and fragments use
+the same path rules as inline links. External URLs are not fetched.
+
+Run `python3 tests/test_doc_links.py -v` and `make docs-check` from the repository
+root. All 16 regression tests and the full `make -C tests run` host suite passed
+in this run. Selected DTS/netlist cross-reference checks also passed. These do
+not establish electrical correctness, model availability, or a successful
+firmware cross-build; no hardware assignments or flashing procedures changed.
+
+This is a path checker, not a Markdown renderer. Undefined reference labels,
+multiline definitions, heading anchors, HTML links, and reference precedence are
+not validated. Four-space-indented definitions are ignored; fenced-code examples
+are not filtered. Same-line definitions containing parentheses in filenames are
+supported, but nested-parenthesis inline destinations remain outside its scope.
+
 ## Cross-build prerequisite exit status and target checks
 
 The previous top-level `make check` labeled native `gcc` as AArch64 when
@@ -68,9 +96,11 @@ trees, including missing-document and missing-image failures, execution from a
 different working directory, metadata exclusion, and invalid-root handling.
 They also run through `make -C tests run`.
 
-Scope remains deliberately limited: heading anchors, reference-style links,
-HTML links, nested-parenthesis destinations, and rendered Markdown semantics
-are not validated. Inline-looking links in code examples are still checked.
+At that stage, scope remained deliberately limited: heading anchors,
+reference-style links, HTML links, nested-parenthesis destinations, and rendered
+Markdown semantics were not validated. Reference-definition path coverage has
+since been added as described above. Inline-looking links in code examples are
+still checked.
 A passing result establishes only that recognized local destinations exist,
 not that hardware instructions or external URLs are correct.
 
