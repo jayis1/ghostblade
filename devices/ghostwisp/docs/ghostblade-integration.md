@@ -95,6 +95,23 @@ Requirements:
 
 Authenticated integrity belongs at the session/message security layer and must not be conflated with CRC.
 
+### Reference codec version compatibility
+
+The Python decoder accepts only `PROTOCOL_VERSION` (currently 1). A frame with
+valid CRC and magic but any other version raises `ProtocolError` with
+`unsupported protocol version <received>; supported 1`. Callers must surface
+this as an incompatible peer rather than retrying with a silently downgraded
+version or treating its payload as version 1. Corrupted frames still fail the
+CRC check before any compatibility interpretation. Version-1 encoding and
+accepted wire bytes are unchanged.
+
+This is an envelope rejection rule, not session negotiation or authenticated
+pairing. The future session layer still owns the visible compatibility state,
+authentication, and any explicitly supported version agreement. The encoder
+continues to serialize its explicit version field; it does not negotiate a
+session. Host tests mutate complete peer frames, recompute their CRCs, and
+exercise every unsupported one-byte version with both `bytes` and `bytearray`.
+
 ### Reference codec receive bound
 
 The current Python codec (`protocol/frame.py`) enforces the same hard ceiling

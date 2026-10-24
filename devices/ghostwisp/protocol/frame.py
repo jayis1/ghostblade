@@ -218,6 +218,14 @@ class Frame:
                 f"bad magic: 0x{magic_int:04x} != 0x{MAGIC:04x}"
             )
 
+        # Never interpret an unsupported envelope as the current protocol.
+        # A session layer can surface this error as a compatibility result;
+        # accepting the frame here would silently bypass version negotiation.
+        if ver != PROTOCOL_VERSION:
+            raise ProtocolError(
+                f"unsupported protocol version {ver}; supported {PROTOCOL_VERSION}"
+            )
+
         payload_len = struct.unpack_from(PAYLOAD_LENGTH_FMT, data, HEADER_SIZE)[0]
         if payload_len > PAYLOAD_MAX_DEFAULT:
             raise ProtocolError(

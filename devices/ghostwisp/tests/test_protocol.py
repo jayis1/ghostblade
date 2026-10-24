@@ -234,6 +234,31 @@ class TestFrameDecodeErrors(unittest.TestCase):
         with self.assertRaises(ProtocolError):
             Frame.decode(bytes(data))
 
+    def test_unsupported_versions_rejected(self):
+        # Mutate peer bytes rather than relying on encoder version policy.
+        # Every other uint8 version must fail even with a valid CRC.
+        original = _make_frame(payload=b"version-skew").encode()
+        for version in range(256):
+            if version == PROTOCOL_VERSION:
+                continue
+            data = bytearray(original)
+            data[2] = version
+            data[-2:] = struct.pack("<H", _crc16_ccitt_false(data[:-2]))
+            for input_type in (bytes, bytearray):
+                with self.subTest(version=version, input_type=input_type):
+                    with self.assertRaisesRegex(
+                        ProtocolError,
+                        rf"unsupported protocol version {version}; supported {PROTOCOL_VERSION}",
+                    ):
+                        Frame.decode(input_type(data))
+
+    def test_version_check_does_not_bypass_crc(self):
+        data = bytearray(self._valid_frame_bytes())
+        data[2] = (PROTOCOL_VERSION + 1) & 0xFF
+        # Deliberately retain the old CRC. Corruption is not compatibility.
+        with self.assertRaisesRegex(ProtocolError, "CRC mismatch"):
+            Frame.decode(data)
+
     def test_unknown_mandatory_type(self):
         f = Frame(
             message_type=MessageType.SESSION_HELLO,  # placeholder; we'll overwrite
