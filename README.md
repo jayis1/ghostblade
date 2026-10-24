@@ -132,6 +132,10 @@ Validated locally on 2026-10-24:
 - `make -C tests run` → host-side unit test suite passed
 
 The base DTB was skipped because the required `rk3576.dtsi` is not included.
+`make check` now rejects a native compiler presented as the AArch64 toolchain
+and returns failure for missing cross-build prerequisites; see the
+[build prerequisite guide](docs/build-instructions.md). Host tests do not require
+a complete cross-build environment.
 Overlay compilation does not verify symbol resolution, kernel bindings, or board
 wiring. See the [maintenance log](docs/maintenance-log.md) for commands, evidence,
 and unresolved hardware/audio integration gaps.

@@ -89,14 +89,15 @@ clean:
 	$(MAKE) -C software/dts clean
 	@echo "Clean complete."
 
+# Author: jayis1
+# Keep the check's default separate from native driver builds (CROSS_COMPILE="").
+CHECK_AARCH64_CC ?= $(if $(CROSS_COMPILE),$(CROSS_COMPILE)gcc,aarch64-linux-gnu-gcc)
+CHECK_ARM_CC ?= arm-none-eabi-gcc
+CHECK_DTC ?= dtc
+CHECK_CMAKE ?= cmake
+
 check:
-	@echo "GhostBlade Cross-Compilation Toolchain Check"
-	@echo "=============================================="
-	@echo ""
-	@which $(CROSS_COMPILE)gcc >/dev/null 2>&1 && echo "✓ aarch64 GCC: $$($(CROSS_COMPILE)gcc --version | head -1)" || echo "✗ aarch64 GCC not found. Install: sudo apt install gcc-aarch64-linux-gnu"
-	@which arm-none-eabi-gcc >/dev/null 2>&1 && echo "✓ ARM bare-metal GCC: $$(arm-none-eabi-gcc --version | head -1)" || echo "✗ ARM bare-metal GCC not found. Install: sudo apt install gcc-arm-none-eabi"
-	@test -d $(PICO_SDK_PATH) && echo "✓ Pico SDK: $(PICO_SDK_PATH)" || echo "✗ Pico SDK not found at $(PICO_SDK_PATH)"
-	@which dtc >/dev/null 2>&1 && echo "✓ DTC: $$(dtc --version | head -1)" || echo "✗ DTC not found. Install: sudo apt install device-tree-compiler"
-	@test -d $(KDIR) && echo "✓ Kernel source: $(KDIR)" || echo "✗ Kernel source not found at $(KDIR)"
-	@echo ""
-	@echo "See software/toolchain.conf and software/toolchains/ for cross-compilation setup."
+	python3 tools/check_toolchain.py \
+		--aarch64-cc "$(CHECK_AARCH64_CC)" --arm-cc "$(CHECK_ARM_CC)" \
+		--dtc "$(CHECK_DTC)" --cmake "$(CHECK_CMAKE)" \
+		--pico-sdk "$(PICO_SDK_PATH)" --kernel-dir "$(KDIR)"

@@ -5,6 +5,39 @@
 
 Author: jayis1
 
+## Cross-build prerequisite exit status and target checks
+
+The previous top-level `make check` labeled native `gcc` as AArch64 when
+`CROSS_COMPILE` was empty and returned success even after reporting missing
+tools. It now invokes `tools/check_toolchain.py`, which checks target triples,
+bounded version probes, and SDK/kernel marker files. All results are reported;
+a failed probe makes the command fail. Custom compiler prefixes and individual
+executable paths are supported without changing native driver build defaults.
+
+Repeat the regression checks from the repository root:
+
+```sh
+python3 tests/test_toolchain_check.py -v
+make -C tests run
+make docs-check validate-dts validate-netlist
+make -C software/dts all validate
+```
+
+Seven regression tests exercise the actual checker and Makefile using temporary
+executable fixtures, including wrong targets, missing executables, unsuccessful
+or empty probes, empty source directories, paths with spaces, custom prefixes,
+and exit-status propagation. Fixture success tests do not demonstrate installed
+cross-compilers or successful firmware builds.
+
+On this host, the corrected `make check` reports missing AArch64 and Arm
+bare-metal compilers, CMake, Pico SDK, and the target kernel build tree and
+correctly exits nonzero. DTC 1.7.2 is available. Baseline and updated host suites,
+inline documentation links, selected DTS/netlist checks, and all eight overlay
+builds/syntax checks passed. The base DTB remains skipped without `rk3576.dtsi`.
+No electrical assignments, libraries, rule files, or flashing commands were
+changed; the hardware and deployment evidence gaps below remain unresolved.
+See [build instructions](build-instructions.md) for prerequisites and limits.
+
 ## Inline documentation link checks
 
 The two link-checker commands now share one implementation. Previously,

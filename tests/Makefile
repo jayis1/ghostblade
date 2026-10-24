@@ -225,6 +225,9 @@ run: $(USERSPACE_TARGETS)
 	@echo "=== Running Documentation Link Regression Tests ==="
 	@python3 test_doc_links.py -v
 	@echo ""
+	@echo "=== Running Cross-Build Prerequisite Regression Tests ==="
+	@python3 test_toolchain_check.py -v
+	@echo ""
 	@echo "=== Running Device Tree Build Regression Tests ==="
 	@python3 test_dts_build.py -v
 	@echo ""

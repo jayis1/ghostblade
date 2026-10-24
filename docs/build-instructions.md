@@ -1,9 +1,47 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
-<!-- Copyright (C) 2026 GhostBlade Project -->
+<!-- Copyright (C) 2026 jayis1 -->
+<!-- Author: jayis1 -->
 
 # Build Instructions
 
-This document covers reproducible local builds for all software artifacts in the GhostBlade repository.
+This document describes local build entry points for GhostBlade. These commands
+are not evidence of a completed cross-build, bit-for-bit reproducibility, or
+working hardware; see the [verification limits](maintenance-log.md).
+
+## Check cross-build prerequisites
+
+From the repository root:
+
+```sh
+make check PICO_SDK_PATH="$HOME/pico-sdk" KDIR=/path/to/target/kernel/build
+```
+
+The check returns nonzero if any probe fails and reports all results. Unlike
+`make tests`, it checks cross-build prerequisites, not host test dependencies.
+It defaults to `aarch64-linux-gnu-gcc`, even when `CROSS_COMPILE` is empty, and
+checks compiler target triples with `-dumpmachine` rather than accepting a
+native compiler's version string. A custom `CROSS_COMPILE` prefix selects its
+`gcc`; individual executable paths can also be supplied:
+
+```sh
+make check CHECK_AARCH64_CC=/opt/toolchains/bin/aarch64-linux-gnu-gcc \
+  CHECK_ARM_CC=/opt/toolchains/bin/arm-none-eabi-gcc \
+  CHECK_DTC=/usr/bin/dtc CHECK_CMAKE=/usr/bin/cmake \
+  PICO_SDK_PATH="$HOME/pico-sdk" KDIR=/path/to/target/kernel/build
+```
+
+Each compiler/version probe has a ten-second timeout. SDK and kernel checks
+require `pico_sdk_init.cmake` and a kernel `Makefile`, respectively; an empty
+directory is not enough. These marker files do not establish SDK submodule
+availability, a configured target kernel, version compatibility, or a successful
+build. No downloads, installation, flashing, or device access occur. Overrides
+must name single executables, not shell command strings or compiler flags.
+
+A missing CMake, cross-compiler, SDK marker, or kernel Makefile is an environment
+prerequisite failure; install/select the relevant tools or source trees before
+retrying. Host-only development can still use `make tests` and `make docs-check`
+without the cross-build prerequisites. The sourced `software/toolchain.conf`
+helper is advisory and does not replace this exit-status-bearing check.
 
 ## Build Matrix
 
