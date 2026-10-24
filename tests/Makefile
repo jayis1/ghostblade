@@ -54,6 +54,7 @@ KMOD_SOURCES = test_apex_bridge.c
 .PHONY: all clean run check help
 
 USERSPACE_TARGETS += test_ghostwisp_gpio_mmio
+USERSPACE_TARGETS += test_temperature_production
 
 all: $(USERSPACE_TARGETS)
 
@@ -125,8 +126,11 @@ test_st25r3916_init: test_st25r3916_init.c
 test_adc_calibration: test_adc_calibration.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) -lm
 
-test_adc_calibration_production: test_adc_calibration_production.c ../firmware/rp2350b/src/adc_calibration.c ../firmware/rp2350b/include/adc_calibration.h
+test_adc_calibration_production: test_adc_calibration_production.c ../firmware/rp2350b/src/adc_calibration.c ../firmware/rp2350b/include/adc_calibration.h ../firmware/rp2350b/include/adc_temperature.h
 	$(CC) $(CFLAGS) -I$(CURDIR)/../firmware/rp2350b/include -o $@ $< $(LDFLAGS)
+
+test_temperature_production: test_temperature_production.c ../firmware/rp2350b/src/battery_monitor.c ../firmware/rp2350b/include/battery_monitor.h ../firmware/rp2350b/include/adc_temperature.h
+	$(CC) $(CFLAGS) -I$(CURDIR)/../firmware/rp2350b/include -o $@ $< $(LDFLAGS) -lm
 
 test_peripheral_power: test_peripheral_power.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
@@ -160,6 +164,7 @@ test_walkie_talkie:
 	@python3 test_walkie_talkie.py
 
 run: $(USERSPACE_TARGETS)
+	@./test_temperature_production
 	@./test_ghostwisp_gpio_mmio
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol

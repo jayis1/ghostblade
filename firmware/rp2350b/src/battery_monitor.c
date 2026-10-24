@@ -1,7 +1,7 @@
 /*
  * battery_monitor.c — ADC Battery & Temperature Monitor for RP2350B
  *
- * Copyright (C) 2026 GhostBlade Project
+ * Copyright (C) 2026 jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements battery voltage monitoring and die temperature
@@ -23,6 +23,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "battery_monitor.h"
+#include "adc_temperature.h"
 
 /* ========================================================================
  * RP2350B ADC Register Base
@@ -142,12 +144,8 @@ enum power_state {
  *   V_TEMP = ADC_RESULT × 3.3 / 4095
  *   T = 27 - (ADC_RESULT × 3.3 / 4095 - 0.706) / 0.001721
  *
- * Fixed-point calculation:
- *   V_TEMP_mV = ADC_RESULT × 3300 / 4095
- *   T_cC = 27000 - (V_TEMP_mV - 706) × 1000 / 1.721
- *
- * Simplified for integer math:
- *   T_cC = 27000 - (ADC_RESULT × 3300000 / 4095 - 706000) / 1721
+ * Fixed-point calculation is shared with the calibration self-test in
+ * adc_temperature.h; both the reference and delta use tenths of a degree.
  */
 
 #define TEMP_T0_C             27       /* Reference temperature in °C */
@@ -352,33 +350,12 @@ static bool battery_is_critical(uint16_t vbat_mv) {
  */
 static int16_t temperature_read_dc10(void) {
     uint16_t adc_raw;
-    int32_t temp_dc10;
 
     /* Read ADC channel 4 (temperature sensor) with 8-sample averaging */
     adc_raw = adc_read_channel_averaged(4, 8);
 
-    /* Calculate temperature using fixed-point arithmetic:
-     *
-     * V_TEMP_mV = ADC_RAW × 3300 / 4095
-     * T_cC = 27000 - (V_TEMP_mV - 706) × 1000000 / 1721
-     *
-     * Simplified:
-     * V_TEMP_uV = ADC_RAW × 3300000 / 4095
-     * T_cC = 27000 - (V_TEMP_uV - 706000) / 1721
-     *
-     * Step by step:
-     * V_TEMP_uV = ADC_RAW × 806  (approximately: 3300000/4095 ≈ 805.9)
-     * delta_uV = V_TEMP_uV - 706000
-     * delta_cC = delta_uV / 1721  (can be negative)
-     * T_cC = 27000 - delta_cC
-     * T_dc10 = T_cC / 10
-     */
-    int32_t v_temp_uv = (int32_t)adc_raw * 806;  /* μV, approximate */
-    int32_t delta_uv = v_temp_uv - 706000;        /* μV difference from T0 */
-    int32_t delta_dc = delta_uv / 1721;            /* °C × 10 difference from T0 */
-    temp_dc10 = 270 - delta_dc;                    /* °C × 10 */
-
-    return (int16_t)temp_dc10;
+    /* Use the same units and conversion as the calibration self-test. */
+    return adc_temperature_dc10(adc_raw);
 }
 
 /**

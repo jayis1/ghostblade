@@ -3,9 +3,12 @@
  * Include the production implementation to exercise private arithmetic without
  * substituting copied helpers or accessing ADC/flash hardware.
  */
+#define _GNU_SOURCE
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include "../firmware/rp2350b/src/adc_calibration.c"
 
 static void test_saturation(void)
@@ -78,6 +81,29 @@ static void test_coefficients(void)
     assert(offset == INT16_MIN && gain == 1000);
 }
 
+static void test_self_test_temperature(void)
+{
+    /* Register backing only: no ADC timing or electrical behavior emulation. */
+    long page_size = sysconf(_SC_PAGESIZE);
+    assert(page_size > 0);
+    void *registers = mmap((void *)RP2350B_ADC_BASE, (size_t)page_size,
+                          PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
+                          -1, 0);
+    assert(registers != MAP_FAILED);
+    assert(registers == (void *)RP2350B_ADC_BASE);
+    REG32(RP2350B_ADC_BASE + ADC_CS) = ADC_CS_READY;
+    REG32(RP2350B_ADC_BASE + ADC_RESULT) = 876;
+    assert(adc_cal_self_test() == 0);
+    /* Valid battery voltage but an implausibly cold temperature. The old
+     * unit mismatch incorrectly accepted this sample as about -15 C. */
+    REG32(RP2350B_ADC_BASE + ADC_RESULT) = 1400;
+    assert(adc_cal_self_test() == -2);
+    REG32(RP2350B_ADC_BASE + ADC_RESULT) = 0;
+    assert(adc_cal_self_test() == -3);
+    assert(munmap(registers, (size_t)page_size) == 0);
+}
+
 int main(void)
 {
     struct adc_cal_coeffs before, after;
@@ -99,6 +125,7 @@ int main(void)
     test_saturation();
     test_raw_conversion();
     test_coefficients();
+    test_self_test_temperature();
     puts("ADC calibration production arithmetic tests passed");
     return 0;
 }

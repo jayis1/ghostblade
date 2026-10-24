@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "adc_calibration.h"
+#include "adc_temperature.h"
 
 /* Pull in Pico SDK flash and XIP definitions when building on device */
 #ifdef PICO_ON_DEVICE
@@ -548,10 +549,7 @@ int adc_cal_self_test(void) {
 
     /* Test 2: Read temperature and check it's in plausible range */
     uint16_t adc_temp = adc_read_averaged(4, 16);
-    int32_t v_temp_uv = (int32_t)adc_temp * 806;
-    int32_t delta_uv = v_temp_uv - 706000;
-    int32_t delta_dc = delta_uv / 1721;
-    temp_c_x10 = (int16_t)(270 - delta_dc);
+    temp_c_x10 = adc_temperature_dc10(adc_temp);
 
     if (temp_c_x10 < -400 || temp_c_x10 > 1250)
         return -2;  /* Temperature out of range */
