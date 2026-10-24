@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 jayis1
-"""Exercise the production extension's descriptor ownership without hardware."""
+"""Exercise production descriptor ownership and input validation without hardware."""
 
 import os
 from pathlib import Path
@@ -121,6 +121,56 @@ except OSError:
     pass
 else:
     raise AssertionError('owned fd zero was not closed')
+""")
+
+    def test_sdr_tune_rejects_invalid_frequency_before_ioctl(self):
+        self.run_isolated("""
+import math
+with_device = pyapex.ApexBridge('/dev/null')
+for frequency in (float('nan'), float('inf'), -float('inf'), -1.0,
+                  0.0, 99999.0, math.nextafter(3.8e9, math.inf), 1e300):
+    try:
+        with_device.sdr_tune(frequency, 20000, 30.0)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f'invalid frequency accepted: {frequency!r}')
+with_device.close()
+""")
+
+    def test_sdr_tune_rejects_invalid_bandwidth_and_gain_before_ioctl(self):
+        self.run_isolated("""
+import math
+with_device = pyapex.ApexBridge('/dev/null')
+for bandwidth, gain in ((-1, 30.0), (0, 30.0), (61441, 30.0),
+                        (65536, 30.0), (131073, 30.0),
+                        (20000, -0.1), (20000, math.nextafter(73.0, math.inf)),
+                        (20000, float('nan')), (20000, float('inf')),
+                        (20000, -float('inf')), (20000, 1e300)):
+    try:
+        with_device.sdr_tune(868e6, bandwidth, gain)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f'invalid tune accepted: {bandwidth!r}, {gain!r}')
+with_device.close()
+""")
+
+    def test_sdr_tune_valid_endpoints_reach_ioctl(self):
+        self.run_isolated("""
+import errno
+with_device = pyapex.ApexBridge('/dev/null')
+for frequency in (100000.0, 868e6, 3.8e9):
+    for bandwidth in (1, 20000, 61440):
+        for gain in (0.0, 30.0, 73.0):
+            try:
+                with_device.sdr_tune(frequency, bandwidth, gain)
+            except OSError as exc:
+                # /dev/null rejects ioctls without operating any RF hardware.
+                assert os.strerror(errno.ENOTTY) in str(exc), str(exc)
+            else:
+                raise AssertionError('ioctl unexpectedly succeeded')
+with_device.close()
 """)
 
     def test_closed_object_can_be_reinitialized(self):

@@ -228,9 +228,22 @@ static PyObject *ApexBridge_sdr_tune(ApexBridgeObject *self, PyObject *args) {
     if (!PyArg_ParseTuple(args, "did", &freq_hz, &bw_khz, &gain_db))
         return NULL;
 
-    if (freq_hz < 100e3 || freq_hz > 3.8e9) {
+    /* Reject NaN as well as out-of-range values before integer conversion.
+     * Match the firmware limits so narrowing cannot turn an invalid setting
+     * into a different valid command. */
+    if (!(freq_hz >= 100e3 && freq_hz <= 3.8e9)) {
         PyErr_SetString(PyExc_ValueError,
                         "freq_hz must be between 100 kHz and 3.8 GHz");
+        return NULL;
+    }
+    if (bw_khz < 1 || bw_khz > 61440) {
+        PyErr_SetString(PyExc_ValueError,
+                        "bw_khz must be between 1 and 61440 kHz");
+        return NULL;
+    }
+    if (!(gain_db >= 0.0 && gain_db <= 73.0)) {
+        PyErr_SetString(PyExc_ValueError,
+                        "gain_db must be between 0 and 73 dB");
         return NULL;
     }
 
@@ -678,8 +691,8 @@ static PyMethodDef ApexBridge_methods[] = {
      "Tune SDR to a frequency.\n\n"
      "Args:\n"
      "    freq_hz (float): Center frequency in Hz (100 kHz - 3.8 GHz)\n"
-     "    bw_khz (int): Bandwidth in kHz\n"
-     "    gain_db (float): LNA gain in dB\n"},
+     "    bw_khz (int): Bandwidth in kHz (1 - 61440)\n"
+     "    gain_db (float): LNA gain in dB (0 - 73)\n"},
 
     {"sdr_stream_start",(PyCFunction)ApexBridge_sdr_stream_start, METH_NOARGS,
      "Start SDR IQ data streaming.\n"},
