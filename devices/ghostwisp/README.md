@@ -139,8 +139,20 @@ devices/ghostwisp/
 ```
 
 **Boot checks:** `cd devices/ghostwisp && make check`
-runs host boot tests (157/157), GhostBlade isolation checks, and header sanity checks.
+runs host boot tests, GhostBlade isolation checks, header sanity checks, and
+all host Python protocol/profile tests. Python 3 is required; override its
+executable with `PYTHON=/path/to/python3`. Run only the build-free Python suite
+with `make -C devices/ghostwisp protocol-test` from the repository root.
 Set `PICO_SDK_PATH=...` to also probe the cross-compile.
+
+The frame-boundary regressions exercise the length-bounded, integrity-checked
+companion contract in the interconnection requirements above: every truncated
+prefix of empty, ordinary, and maximum-size frames, CRC-valid trailing data,
+and every single-bit corruption of a representative frame. CRC results are
+cross-checked against Python's independent `binascii.crc_hqx` implementation
+with the CCITT-FALSE initial value. These tests access no hardware and do not
+establish pairing, authenticated integrity, stream reassembly, or physical
+confirmation enforcement.
 See [boot-contract.md](docs/boot-contract.md) for what requires physical-board HIL verification.
 
 Build the RP2350B image with Pico SDK 2.0 or newer. The committed `ghostwisp`

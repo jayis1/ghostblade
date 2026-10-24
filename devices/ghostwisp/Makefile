@@ -21,7 +21,15 @@
 #       arm-none-eabi-gcc or arm-none-eabi-gcc-12
 #       cmake, ninja
 
-.PHONY: all test check clean help
+.PHONY: all test protocol-test check clean help
+
+.DEFAULT_GOAL := all
+
+# Standard-library-only protocol/profile checks; no attached device required.
+PYTHON ?= python3
+
+protocol-test:
+	cd $(REPO_ROOT) && $(PYTHON) -m unittest discover -s $(TESTS_DIR) -p 'test_*.py' -v
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +94,9 @@ check: $(TEST_BIN)
 	    echo "  Set PICO_SDK_PATH=/path/to/pico-sdk to enable target build probe."; \
 	fi
 	@echo ""
+	@echo "--- Step 5: Host protocol and profile tests ---"
+	@$(MAKE) --no-print-directory protocol-test
+	@echo ""
 	@echo "========================================================"
 	@echo "  All automated checks PASSED"
 	@echo "========================================================"
@@ -100,6 +111,7 @@ help:
 	@echo "Targets:"
 	@echo "  all           Build host test binary (default)"
 	@echo "  test          Build + run host boot tests"
+	@echo "  protocol-test Build-free host protocol/profile tests (Python 3)"
 	@echo "  check         Full automated check suite"
 	@echo "  clean         Remove build directory"
 	@echo ""
