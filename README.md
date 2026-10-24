@@ -121,6 +121,11 @@ above and below describe design targets, not verified board performance or a
 manufacturing-ready release. Power and flashing procedures require board-specific
 review before use.
 
+The [hardware export readiness review](docs/hardware-export-readiness.md) records
+concrete netlist, footprint, model, and rule-integration gaps. Fabrication export
+now fails on missing boards or failed KiCad commands; draft notes require the
+explicit `--notes-only` option and cannot be packaged as a Gerber archive.
+
 Validated locally on 2026-10-24:
 
 - `python3 tools/check_internal_links.py` → no broken inline or reference-definition link paths
@@ -578,7 +583,7 @@ Screen glow illuminates the front face. No background — pure black void.
 | [ghostblade-footprints.kicad_mod](hardware/kicad/footprints/ghostblade-footprints.pretty/ghostblade-footprints.kicad_mod) | Footprint library (FCBGA-732, QFN-60, QFN-64, BGA-153, SOT-23-5/6, SOP-8, VQFN-14, USB-C, MicroSD, FPC 30/40-pin, crystals, inductors, 0402 passives, all packages) |
 | [ghostblade.net](hardware/kicad/ghostblade.net) | Schematic netlist (150+ nets, all IC connections) |
 | [ghostblade-drc-rules.kicad_drc](hardware/drc/ghostblade-drc-rules.kicad_drc) | Custom DRC rules (IPC Class 3, RF/high-speed constraints) |
-| [hardware/drc/README.md](hardware/drc/README.md) | How to apply the custom ERC/DRC rule sets |
+| [hardware/drc/README.md](hardware/drc/README.md) | Draft ERC/DRC status, integration requirements, and verification limits |
 | [ghostblade-bom.csv](hardware/bom/ghostblade-bom.csv) | Full bill of materials (67 line items, MPN, price) |
 | [ghostblade-bom-interactive.html](hardware/bom/ghostblade-bom-interactive.html) | Interactive HTML BOM (search, filter, sort, cost calc) |
 | [3D models README](hardware/kicad/3dmodels/README.md) | STEP model references and parametric generation scripts |
@@ -634,9 +639,15 @@ make -j$(nproc)
 
 ### Generating Gerber Files
 
+No routed PCB is tracked yet. For draft design notes only (not fabrication data):
+
 ```bash
-python3 tools/generate_gerbers.py --fab-note --zip
+python3 tools/generate_gerbers.py --notes-only --output hardware/design-notes
 ```
+
+Actual exports require a reviewed PCB, KiCad, and a new or empty output directory;
+see [hardware export readiness](docs/hardware-export-readiness.md). Export success
+does not certify manufacturing readiness.
 
 ---
 

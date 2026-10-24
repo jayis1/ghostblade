@@ -2,14 +2,16 @@
 """
 GhostBlade Gerber Generation Script
 ==================================
-Generates manufacturing-ready Gerber files, drill files, and pick-and-place
-from KiCad PCB for submission to PCB fabricators.
+Exports Gerber files, drill files, and pick-and-place data from a supplied
+KiCad PCB. Export success is not a manufacturing-readiness certification.
 
-Copyright (C) 2026 GhostBlade Project
+Copyright (C) 2026 jayis1
+Author: jayis1
 SPDX-License-Identifier: GPL-2.0-or-later
 
 Usage:
-    python3 generate_gerbers.py [--kicad_pcb path/to/ghostblade.kicad_pcb] [--output gerbers/]
+    python3 generate_gerbers.py --kicad-pcb path/to/ghostblade.kicad_pcb --output gerbers/
+    python3 generate_gerbers.py --notes-only --output design-notes/
 
 Requirements:
     KiCad 8+ must be installed with kicad-cli available in PATH.
@@ -83,7 +85,7 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
     pcb_path = Path(kicad_pcb)
     out_path = Path(output_dir)
 
-    if not pcb_path.exists():
+    if not pcb_path.is_file():
         print(f"ERROR: KiCad PCB file not found: {pcb_path}")
         return False
 
@@ -104,14 +106,16 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             if result.returncode != 0:
-                print(f"  WARNING: {layer_id} generation returned {result.returncode}")
+                print(f"  ERROR: {layer_id} generation returned {result.returncode}")
                 if result.stderr:
                     print(f"    stderr: {result.stderr[:200]}")
+                return False
         except FileNotFoundError:
             print("ERROR: kicad-cli not found. Install KiCad 8+ and ensure kicad-cli is in PATH.")
             return False
         except subprocess.TimeoutExpired:
-            print(f"  WARNING: {layer_id} generation timed out")
+            print(f"  ERROR: {layer_id} generation timed out")
+            return False
 
     # Generate drill files
     print("  Generating drill files...")
@@ -124,9 +128,11 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
     try:
         result = subprocess.run(drill_cmd, capture_output=True, text=True, timeout=60)
         if result.returncode != 0:
-            print(f"  WARNING: Drill generation returned {result.returncode}")
+            print(f"  ERROR: Drill generation returned {result.returncode}")
+            return False
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-        print(f"  WARNING: Drill generation failed: {e}")
+        print(f"  ERROR: Drill generation failed: {e}")
+        return False
 
     # Generate pick-and-place file
     print("  Generating pick-and-place file...")
@@ -137,9 +143,13 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
         str(pcb_path)
     ]
     try:
-        subprocess.run(pos_cmd, capture_output=True, text=True, timeout=60)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+        result = subprocess.run(pos_cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            print(f"  ERROR: Pick-and-place generation returned {result.returncode}")
+            return False
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        print(f"  ERROR: Pick-and-place generation failed: {e}")
+        return False
 
     print(f"\nGerber generation complete. Files in: {out_path}")
     return True
@@ -149,6 +159,8 @@ def generate_fab_note(output_dir: str):
     """Generate fabrication notes as a JSON file for the fab house."""
     fab_data = {
         "project": "GhostBlade - Project NullSpectre",
+        "author": "jayis1",
+        "status": "draft design assumptions; not approved fabrication specifications",
         "revision": "1.0",
         "date": datetime.now().isoformat(),
         "board_specifications": {
@@ -213,14 +225,14 @@ def generate_zip(output_dir: str):
     gerber_dir = Path(output_dir)
 
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for ext in ['*.gbr', '*.gbo', '*.gbs', '*.gbl', '*.gbr', '*.drl', '*.pos', '*.json']:
-            for f in gerber_dir.glob(ext):
+        for ext in ['*.gbr', '*.gbo', '*.gbs', '*.gbl', '*.drl', '*.pos', '*.json']:
+            for f in sorted(gerber_dir.glob(ext)):
                 zf.write(f, f.name)
 
     print(f"Gerber archive: {zip_path}")
 
 
-if __name__ == "__main__":
+def main(argv=None):
     parser = argparse.ArgumentParser(description="GhostBlade Gerber Generation")
     parser.add_argument("--kicad-pcb", default="hardware/kicad/ghostblade.kicad_pcb",
                         help="Path to KiCad PCB file")
@@ -229,19 +241,35 @@ if __name__ == "__main__":
     parser.add_argument("--zip", action="store_true",
                         help="Create ZIP archive for fab house submission")
     parser.add_argument("--fab-note", action="store_true",
-                        help="Generate fabrication notes JSON")
-    args = parser.parse_args()
+                        help="Also generate draft fabrication notes after a successful export")
+    parser.add_argument("--notes-only", action="store_true",
+                        help="Write draft design notes without exporting or packaging a PCB")
+    args = parser.parse_args(argv)
 
-    success = True
-
-    if args.fab_note or not args.zip:
+    if args.notes_only:
+        if args.zip:
+            parser.error("--notes-only cannot be combined with --zip")
         generate_fab_note(args.output)
-        success = True
+        print("Draft design notes only; no PCB export or hardware validation performed.")
+        return 0
 
-    if args.kicad_pcb and Path(args.kicad_pcb).exists():
-        success = generate_gerbers(args.kicad_pcb, args.output)
+    output = Path(args.output)
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        print("ERROR: export output must be a new or empty directory; existing files are preserved.")
+        return 1
+
+    if not generate_gerbers(args.kicad_pcb, args.output):
+        print("Export failed; no fabrication notes or archive created by this invocation.")
+        return 1
+
+    if args.fab_note:
+        generate_fab_note(args.output)
 
     if args.zip:
         generate_zip(args.output)
 
-    sys.exit(0 if success else 1)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

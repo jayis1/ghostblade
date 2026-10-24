@@ -5,6 +5,32 @@
 
 Author: jayis1
 
+## Fabrication export failure handling and readiness review
+
+Author: jayis1
+
+The exporter previously returned success without a board and continued after
+failed layer, drill, and placement commands. It now fails before notes or ZIP
+creation on those paths, requires a new or empty export directory, and offers
+explicit `--notes-only` for draft design notes. Notes carry `jayis1` authorship
+and a draft-status warning. ZIP creation no longer includes each `.gbr` twice.
+
+Ten host regression tests exercise production control flow, stage failures,
+timeouts, missing executables, notes-only mode, occupied paths, and packaging
+using explicitly synthetic subprocess/file fixtures. They run through
+`make -C tests run`; they do not establish that KiCad can load or export the
+current design assets. See [hardware export readiness](hardware-export-readiness.md)
+for existing netlist syntax/name discrepancies, incomplete footprint examples,
+model gaps, and unvalidated rule integration. No electrical files, power delays,
+or flashing commands were changed.
+
+Verification in this run: the exporter tests, full host suite, documentation
+link-path checker, and selected DTS/netlist cross-reference checks passed.
+All eight overlays compiled and syntax-checked. The base DTB remained skipped
+without `rk3576.dtsi`; real ERC/DRC and board exports were not run because
+editable schematic/PCB sources and `kicad-cli` are absent. Cross-builds and
+hardware operation are not validated.
+
 ## Reference-definition link path coverage
 
 Author: jayis1
