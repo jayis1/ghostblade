@@ -128,6 +128,7 @@ Validated locally on 2026-10-24:
 - `python3 tools/validate_netlist.py` → existing selected netlist/reference checks passed
 - `make -C software/dts all validate` → eight overlays compiled and syntax-checked
 - `python3 tests/test_dts_build.py -v` → three build-coverage regression tests passed
+- `python3 tests/test_doc_links.py -v` → nine inline-link path regression tests passed
 - `make -C tests run` → host-side unit test suite passed
 
 The base DTB was skipped because the required `rk3576.dtsi` is not included.
@@ -387,7 +388,7 @@ ghostblade/
 │   └── hitl_test.sh                           # Hardware-in-the-loop combined integration test
 ├── tools/
 │   ├── generate_gerbers.py                    # Gerber/fab-note generation script
-│   ├── check_links.py                         # External markdown link checker
+│   ├── check_links.py                         # Internal link checker compatibility entry point
 │   ├── check_internal_links.py                # Internal markdown link checker
 │   ├── validate_dts.py                        # DTS GPIO cross-reference validator
 │   └── validate_netlist.py                    # Netlist/manifest/DTS/firmware pin cross-reference

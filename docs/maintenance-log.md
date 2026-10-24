@@ -5,6 +5,42 @@
 
 Author: jayis1
 
+## Inline documentation link checks
+
+The two link-checker commands now share one implementation. Previously,
+`tools/check_links.py` searched from the current working directory, only examined
+Markdown destinations, and returned success even when it reported broken links.
+It is now a compatibility entry point for `tools/check_internal_links.py` and
+returns a nonzero status for missing paths. Both locate the repository from the
+script location, rather than the shell's working directory.
+
+Run either command from any directory using its absolute path, or from the
+repository root:
+
+```sh
+make docs-check
+python3 tools/check_links.py
+python3 tests/test_doc_links.py -v
+```
+
+Both check inline links and images, including non-Markdown assets, relative and
+repository-root paths, URL-encoded filenames, angle-bracket destinations, and
+optional quoted titles. URL schemes, network destinations, and fragment-only
+links are not treated as local files. `--root /path/to/checkout` explicitly selects
+another documentation tree; a nonexistent root is an error. Neither command
+makes network requests or changes files.
+
+Nine regression tests run the real command entry points against disposable
+trees, including missing-document and missing-image failures, execution from a
+different working directory, metadata exclusion, and invalid-root handling.
+They also run through `make -C tests run`.
+
+Scope remains deliberately limited: heading anchors, reference-style links,
+HTML links, nested-parenthesis destinations, and rendered Markdown semantics
+are not validated. Inline-looking links in code examples are still checked.
+A passing result establishes only that recognized local destinations exist,
+not that hardware instructions or external URLs are correct.
+
 ## 2026-10-24 — Complete device-tree overlay build coverage
 
 The DTS Makefile previously enumerated seven overlays and omitted

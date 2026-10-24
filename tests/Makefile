@@ -216,6 +216,9 @@ run: $(USERSPACE_TARGETS)
 	@echo "=== Running Walkie-Talkie Python Unit Tests ==="
 	@python3 test_walkie_talkie.py
 	@echo ""
+	@echo "=== Running Documentation Link Regression Tests ==="
+	@python3 test_doc_links.py -v
+	@echo ""
 	@echo "=== Running Device Tree Build Regression Tests ==="
 	@python3 test_dts_build.py -v
 	@echo ""

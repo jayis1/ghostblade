@@ -79,8 +79,8 @@ local commands, overlay build coverage, and outstanding hardware evidence.
 |------|-------------|
 | `tools/validate_dts.py` | Cross-reference DTS GPIOs, RAM capacity, firmware pins, and schematic nets |
 | `tools/validate_netlist.py` | Cross-reference manifest, KiCad netlist, DTS, firmware pins, and 3D models |
-| `tools/check_links.py` | Check external markdown links in documentation |
-| `tools/check_internal_links.py` | Check internal markdown links across the repository |
+| `tools/check_links.py` | Compatibility entry point for the same internal inline-link path checker |
+| `tools/check_internal_links.py` | Check inline local link/image paths; does not check anchors or external URLs |
 | `tools/generate_gerbers.py` | Generate Gerber files, drill files, and fabrication notes from KiCad PCB |
 
 ## Contributing
