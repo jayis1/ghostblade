@@ -111,7 +111,7 @@ test_libapex_framing: test_libapex_framing.c
 	$(CC) $(CFLAGS) -I$(CURDIR)/../software/libapex/include -o $@ $< $(LDFLAGS)
 
 test_libapex_api: test_libapex_api.c ../software/libapex/src/libapex.c ../software/libapex/include/libapex.h
-	$(CC) $(CFLAGS) -I$(CURDIR)/../software/libapex/include -o $@ test_libapex_api.c ../software/libapex/src/libapex.c -Wl,--wrap=ioctl $(LDFLAGS)
+	$(CC) $(CFLAGS) -I$(CURDIR)/../software/libapex/include -o $@ test_libapex_api.c ../software/libapex/src/libapex.c -Wl,--wrap=ioctl $(LDFLAGS) -lm
 
 test_sdr_dma: test_sdr_dma.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)

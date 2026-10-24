@@ -2,6 +2,7 @@
  * libapex.h — Userspace API for GhostBlade SPI Bridge Device
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This library provides a C API for interacting with the GhostBlade
@@ -178,8 +179,8 @@ const char *apex_strerror(int error);
  *
  * @handle:   Device handle
  * @freq_hz:  Center frequency in Hz (100 kHz – 3.8 GHz)
- * @bw_khz:   Bandwidth in kHz (e.g., 20000 for 20 MHz)
- * @gain_db:  LNA gain in dB (0.0 – 70.0, passed as ×10 internally)
+ * @bw_khz:   Bandwidth in kHz (1 – 61440, e.g., 20000 for 20 MHz)
+ * @gain_db:  Finite LNA gain in dB (0.0 – 73.0, passed as ×10 internally)
  *
  * Returns: APEX_OK on success, negative error code on failure
  */

@@ -2,6 +2,7 @@
  * libapex.c — Userspace Library for GhostBlade SPI Bridge Device
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Implementation of the libapex API. This library wraps the kernel
@@ -187,8 +188,13 @@ int apex_sdr_tune(apex_handle_t handle, uint32_t freq_hz,
     if (freq_hz < 100000 || freq_hz > 3800000000UL)
         return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
+    /* Match the firmware command limits: unsupported settings are otherwise
+     * silently discarded by handle_cmd_sdr_tune() after a successful ioctl. */
+    if (bw_khz == 0 || bw_khz > 61440)
+        return apex_fail(handle, APEX_ERR_INVALID_ARG);
+
     /* NaN fails both ordered comparisons and must not reach the cast. */
-    if (!(gain_db >= 0.0f && gain_db <= 6553.5f))
+    if (!(gain_db >= 0.0f && gain_db <= 73.0f))
         return apex_fail(handle, APEX_ERR_INVALID_ARG);
 
     memset(&cmd, 0, sizeof(cmd));

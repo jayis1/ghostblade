@@ -15,6 +15,7 @@
 
 static unsigned int ioctl_calls;
 static uint16_t encoded_gain;
+static uint16_t encoded_bandwidth;
 
 int __wrap_ioctl(int fd, unsigned long request, ...)
 {
@@ -26,6 +27,7 @@ int __wrap_ioctl(int fd, unsigned long request, ...)
     va_start(args, request);
     payload = va_arg(args, const uint8_t *);
     /* The tune ioctl payload is frequency, bandwidth, then gain. */
+    memcpy(&encoded_bandwidth, payload + 4, sizeof(encoded_bandwidth));
     memcpy(&encoded_gain, payload + 6, sizeof(encoded_gain));
     va_end(args);
     ioctl_calls++;
@@ -44,7 +46,10 @@ static void test_error_extremes(void)
 
 static void test_gain_validation(apex_handle_t handle)
 {
-    const float invalid[] = { NAN, INFINITY, -INFINITY, -0.1f, 6554.0f };
+    const float invalid[] = {
+        NAN, INFINITY, -INFINITY, -0.1f,
+        nextafterf(73.0f, INFINITY), 73.1f, 6553.5f, 6554.0f
+    };
 
     for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
         assert(apex_sdr_tune(handle, 868000000, 10000, invalid[i]) ==
@@ -57,9 +62,30 @@ static void test_gain_validation(apex_handle_t handle)
     assert(encoded_gain == 0);
     assert(apex_sdr_tune(handle, 868000000, 10000, 30.5f) == APEX_OK);
     assert(encoded_gain == 305);
-    assert(apex_sdr_tune(handle, 868000000, 10000, 6553.5f) == APEX_OK);
-    assert(encoded_gain == UINT16_MAX);
+    assert(apex_sdr_tune(handle, 868000000, 10000, 73.0f) == APEX_OK);
+    assert(encoded_gain == 730);
     assert(ioctl_calls == 3);
+    assert(apex_last_error(handle) == APEX_OK);
+}
+
+static void test_bandwidth_validation(apex_handle_t handle)
+{
+    const uint16_t invalid[] = { 0, 61441, UINT16_MAX };
+    unsigned int calls_before = ioctl_calls;
+
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); i++) {
+        assert(apex_sdr_tune(handle, 868000000, invalid[i], 30.0f) ==
+               APEX_ERR_INVALID_ARG);
+        assert(apex_last_error(handle) == APEX_ERR_INVALID_ARG);
+        assert(ioctl_calls == calls_before);
+    }
+
+    assert(apex_sdr_tune(handle, 100000, 1, 0.0f) == APEX_OK);
+    assert(encoded_bandwidth == 1);
+    assert(apex_sdr_tune(handle, 3800000000U, 61440, 73.0f) == APEX_OK);
+    assert(encoded_bandwidth == 61440);
+    assert(encoded_gain == 730);
+    assert(ioctl_calls == calls_before + 2);
     assert(apex_last_error(handle) == APEX_OK);
 }
 
@@ -94,6 +120,7 @@ int main(void)
     assert(handle != NULL);
     test_error_extremes();
     test_gain_validation(handle);
+    test_bandwidth_validation(handle);
     test_version_capacity(handle);
     apex_close(handle);
     puts("libapex production API regression tests passed");
