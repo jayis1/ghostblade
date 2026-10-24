@@ -147,7 +147,8 @@ def _crc16_ccitt_false(data: bytes | bytearray) -> int:
 @dataclasses.dataclass
 class Frame:
     protocol_version: int = PROTOCOL_VERSION
-    message_type: MessageType = MessageType.SESSION_HELLO
+    # Known types remain enums; optional unknown types retain their wire ID.
+    message_type: MessageType | int = MessageType.SESSION_HELLO
     flags: FrameFlags = FrameFlags.NONE
     request_id: int = 0
     session_id: int = 0
@@ -257,8 +258,9 @@ class Frame:
                 raise ProtocolError(
                     f"unknown mandatory message type 0x{msg_type_raw:02x}"
                 )
-            # Non-mandatory unknown type: return with a sentinel
-            msg_type = MessageType(msg_type_raw)  # will raise; handled above
+            # Preserve the raw ID so callers can ignore unsupported optional
+            # messages without confusing them with a known executable command.
+            msg_type = msg_type_raw
 
         payload_start = HEADER_SIZE + PAYLOAD_LENGTH_SIZE
         payload = data[payload_start : payload_start + payload_len]
@@ -274,8 +276,10 @@ class Frame:
         )
 
     def __repr__(self) -> str:  # pragma: no cover
+        type_name = (self.message_type.name if isinstance(self.message_type, MessageType)
+                     else f"0x{self.message_type:02x}")
         return (
-            f"Frame(ver={self.protocol_version}, type={self.message_type.name}, "
+            f"Frame(ver={self.protocol_version}, type={type_name}, "
             f"flags={self.flags!r}, req_id={self.request_id}, "
             f"sess_id={self.session_id}, mono_ms={self.monotonic_ms}, "
             f"payload_len={len(self.payload)})"

@@ -320,6 +320,76 @@ class TestFrameDecodeErrors(unittest.TestCase):
                         self.assertEqual(decoded, frame)
                         self.assertEqual(decoded.encode(), wire)
 
+    def _unknown_type_wire(self, message_type, flags, payload=b"optional-extension"):
+        data = bytearray(_make_frame(flags=flags, payload=payload).encode())
+        data[3] = message_type
+        data[-2:] = struct.pack("<H", _crc16_ccitt_false(data[:-2]))
+        return data
+
+    def test_unknown_optional_types_preserved(self):
+        known_types = {int(message_type) for message_type in MessageType}
+        for raw_type in range(256):
+            if raw_type in known_types:
+                continue
+            for flags in (FrameFlags.NONE, FrameFlags.MORE_FRAGS |
+                          FrameFlags.IDEMPOTENT | FrameFlags.RESPONSE):
+                wire = self._unknown_type_wire(raw_type, flags)
+                for input_type in (bytes, bytearray):
+                    with self.subTest(message_type=raw_type, flags=flags,
+                                      input_type=input_type):
+                        decoded = Frame.decode(input_type(wire))
+                        self.assertIs(type(decoded.message_type), int)
+                        self.assertEqual(decoded.message_type, raw_type)
+                        self.assertEqual(decoded.flags, flags)
+                        self.assertEqual(decoded.payload, b"optional-extension")
+                        self.assertEqual(decoded.encode(), wire)
+                        self.assertIn(f"type=0x{raw_type:02x}", repr(decoded))
+
+    def test_all_unknown_mandatory_types_rejected(self):
+        known_types = {int(message_type) for message_type in MessageType}
+        for raw_type in range(256):
+            if raw_type in known_types:
+                continue
+            for flags in (FrameFlags.MANDATORY, FrameFlags.MANDATORY |
+                          FrameFlags.MORE_FRAGS | FrameFlags.IDEMPOTENT |
+                          FrameFlags.RESPONSE):
+                wire = self._unknown_type_wire(raw_type, flags)
+                for input_type in (bytes, bytearray):
+                    with self.subTest(message_type=raw_type, flags=flags,
+                                      input_type=input_type):
+                        with self.assertRaisesRegex(
+                            ProtocolError,
+                            f"unknown mandatory message type 0x{raw_type:02x}",
+                        ):
+                            Frame.decode(input_type(wire))
+
+    def test_unknown_optional_type_still_validates_envelope(self):
+        for offset, value, error in (
+            (2, 0, "unsupported protocol version"),
+            (5, 1, "reserved byte must be zero"),
+            (10, 1, "alignment pad must be zero"),
+            (16, 0, "length mismatch"),
+        ):
+            wire = self._unknown_type_wire(0xEE, FrameFlags.NONE)
+            wire[offset] = value
+            wire[-2:] = struct.pack("<H", _crc16_ccitt_false(wire[:-2]))
+            with self.subTest(offset=offset):
+                with self.assertRaisesRegex(ProtocolError, error):
+                    Frame.decode(wire)
+        for flags in (FrameFlags.NONE, FrameFlags.MANDATORY):
+            wire = self._unknown_type_wire(0xEE, flags)
+            wire[-1] ^= 0xFF
+            with self.subTest(flags=flags):
+                with self.assertRaisesRegex(ProtocolError, "CRC mismatch"):
+                    Frame.decode(wire)
+
+    def test_known_types_remain_enums_with_named_repr(self):
+        for message_type in MessageType:
+            with self.subTest(message_type=message_type):
+                decoded = Frame.decode(_make_frame(message_type=message_type).encode())
+                self.assertIs(decoded.message_type, message_type)
+                self.assertIn(f"type={message_type.name}", repr(decoded))
+
     def test_unknown_mandatory_type(self):
         f = Frame(
             message_type=MessageType.SESSION_HELLO,  # placeholder; we'll overwrite

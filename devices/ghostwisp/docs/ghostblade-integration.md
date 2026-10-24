@@ -174,6 +174,26 @@ The receive-bound regressions construct CRC-valid oversized peer frames
 without using the encoder, check rejection before CRC work for both `bytes`
 and `bytearray`, and exercise empty and maximum-size valid payloads.
 
+### Unknown message compatibility
+
+The reference codec preserves an unknown message type as a raw integer when
+`MANDATORY` is clear; known types still decode to `MessageType` members. Callers
+must ignore unsupported optional messages, not dispatch their payloads to a
+known handler or treat them as authorization. This repairs the previous
+`ValueError` on optional extension messages without assigning new message IDs.
+An unknown type with `MANDATORY` set still raises `ProtocolError`.
+
+Envelope validation (including CRC, version, reserved fields, and length)
+applies before either outcome. Unknown optional frames retain their original
+wire ID, flags, and payload for inspection and byte-identical re-encoding;
+`repr()` displays their hexadecimal ID instead of requiring an enum name.
+This codec behavior does not implement pairing, authentication, or execution.
+
+Run `python3 -m unittest discover -s devices/ghostwisp/tests -v` locally.
+Tests cover every unassigned one-byte type with and without `MANDATORY`,
+`bytes` and `bytearray` inputs, combined defined flags, unchanged known-type
+enums, and invalid-envelope rejection. No physical device is accessed.
+
 ## Message families
 
 | Family | Examples |
