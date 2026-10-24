@@ -259,6 +259,32 @@ class TestFrameDecodeErrors(unittest.TestCase):
         with self.assertRaisesRegex(ProtocolError, "CRC mismatch"):
             Frame.decode(data)
 
+    def test_nonzero_reserved_byte_rejected(self):
+        # The v1 envelope reserves byte 5 as zero, including on known types.
+        original = _make_frame(payload=b"reserved-byte").encode()
+        for reserved in range(1, 256):
+            data = bytearray(original)
+            data[5] = reserved
+            data[-2:] = struct.pack("<H", _crc16_ccitt_false(data[:-2]))
+            for input_type in (bytes, bytearray):
+                with self.subTest(reserved=reserved, input_type=input_type):
+                    with self.assertRaisesRegex(ProtocolError, "reserved byte must be zero"):
+                        Frame.decode(input_type(data))
+
+    def test_reserved_byte_check_does_not_bypass_crc(self):
+        data = bytearray(self._valid_frame_bytes())
+        data[5] = 1
+        with self.assertRaisesRegex(ProtocolError, "CRC mismatch"):
+            Frame.decode(data)
+
+    def test_zero_reserved_byte_preserves_known_messages(self):
+        for message_type in MessageType:
+            with self.subTest(message_type=message_type):
+                frame = _make_frame(message_type=message_type, payload=b"known-type")
+                wire = frame.encode()
+                self.assertEqual(wire[5], 0)
+                self.assertEqual(Frame.decode(wire), frame)
+
     def test_unknown_mandatory_type(self):
         f = Frame(
             message_type=MessageType.SESSION_HELLO,  # placeholder; we'll overwrite

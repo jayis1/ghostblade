@@ -226,6 +226,11 @@ class Frame:
                 f"unsupported protocol version {ver}; supported {PROTOCOL_VERSION}"
             )
 
+        # Version 1 defines byte 5 as zero.  A valid CRC does not make a
+        # nonconforming envelope safe to interpret as a supported message.
+        if _reserved != 0:
+            raise ProtocolError("reserved byte must be zero")
+
         payload_len = struct.unpack_from(PAYLOAD_LENGTH_FMT, data, HEADER_SIZE)[0]
         if payload_len > PAYLOAD_MAX_DEFAULT:
             raise ProtocolError(

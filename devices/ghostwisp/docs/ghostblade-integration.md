@@ -95,6 +95,24 @@ Requirements:
 
 Authenticated integrity belongs at the session/message security layer and must not be conflated with CRC.
 
+### Reference codec reserved-byte validation
+
+Author: jayis1
+
+The version-1 wire contract in `protocol/frame.py` and
+`firmware/rp2350b/include/ghostwisp_protocol.h` defines the reserved byte at
+offset 5 as zero. The Python decoder rejects every nonzero value with
+`ProtocolError` (`reserved byte must be zero`), after CRC, magic, and version
+validation. A valid CRC detects corruption; it does not authorize interpreting
+reserved data. Encoding and all conforming version-1 frames remain unchanged.
+This rule does not change the separate alignment pad or define new flags.
+
+Host verification: `python3 -m unittest discover -s devices/ghostwisp/tests -v`.
+The regression tests cover all 255 nonzero values for both `bytes` and
+`bytearray`, CRC-error precedence, and zero-reserved round trips for every
+known message type. This is host codec validation, not physical-link or
+session-authentication validation.
+
 ### Reference codec version compatibility
 
 The Python decoder accepts only `PROTOCOL_VERSION` (currently 1). A frame with
