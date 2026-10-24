@@ -1,7 +1,7 @@
 /*
  * adc_calibration.c — ADC Calibration and Voltage Divider Compensation
  *
- * Copyright (C) 2026 GhostBlade Project
+ * Copyright (C) 2026 jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Implements per-board ADC calibration with flash storage.
@@ -393,8 +393,10 @@ uint16_t adc_cal_apply_vbat(uint16_t raw_mv) {
      *   - Resistor divider tolerance
      *   - VREF voltage variation
      */
-    int32_t corrected = (int32_t)raw_mv + cal_coeffs.vbat_offset_mv;
-    corrected = (corrected * (int32_t)cal_coeffs.vbat_gain_x1000) / 1000;
+    /* The full uint16_t input and gain ranges can exceed INT32_MAX
+     * before saturation. Widen before multiplying, not after overflow. */
+    int64_t corrected = (int64_t)raw_mv + cal_coeffs.vbat_offset_mv;
+    corrected = (corrected * cal_coeffs.vbat_gain_x1000) / 1000;
 
     /* Clamp to valid range (0-5500 mV covers all Li-Po scenarios) */
     if (corrected < 0) corrected = 0;
@@ -424,26 +426,58 @@ void adc_cal_get_coeffs(struct adc_cal_coeffs *out) {
         *out = cal_coeffs;
 }
 
+/* The 12-bit sample multiplied by the divider numerator exceeds 32 bits. */
+static uint16_t adc_cal_raw_to_mv(uint16_t raw) {
+    return (uint16_t)(((uint64_t)raw * ADC_CAL_VBAT_NUMERATOR +
+                       ADC_CAL_VBAT_ROUNDING) / ADC_CAL_VBAT_DENOMINATOR);
+}
+
+/* Pure coefficient calculation, shared by the factory path and host tests.
+ * Reject unusable measurements before division or narrowing to flash fields.
+ * Leave the output coefficients untouched on failure. */
+static int adc_cal_compute_vbat_coeffs(uint16_t known_low, uint16_t known_high,
+                                      uint16_t raw_low, uint16_t raw_high,
+                                      int16_t *offset_out, uint16_t *gain_out) {
+    int32_t gain, offset;
+
+    if (known_high <= known_low || raw_high <= raw_low)
+        return -1;
+
+    gain = ((int32_t)known_high - known_low) * 1000 /
+           ((int32_t)raw_high - raw_low);
+    if (gain <= 0 || gain > UINT16_MAX)
+        return -1;
+
+    offset = (int32_t)known_low * 1000 / gain - raw_low;
+    if (offset < INT16_MIN || offset > INT16_MAX)
+        return -1;
+
+    *offset_out = (int16_t)offset;
+    *gain_out = (uint16_t)gain;
+    return 0;
+}
+
 int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv) {
     uint16_t adc_low, adc_high;
     int32_t raw_low_mv, raw_high_mv;
-    int32_t offset, gain_x1000;
+    int16_t offset;
+    uint16_t gain_x1000;
     int flash_ret;
+
+    /* Invalid references must not trigger ADC access or flash writes. */
+    if (vbat_high_mv <= vbat_low_mv)
+        return -1;
 
     /* Step 1: Read ADC at known low voltage */
     adc_low = adc_read_averaged(0, ADC_CAL_CALIBRATION_SAMPLES);
 
     /* Convert raw ADC to mV using nominal divider */
-    raw_low_mv = (int32_t)((uint32_t)adc_low * ADC_CAL_VBAT_NUMERATOR +
-                            ADC_CAL_VBAT_ROUNDING) /
-                 (int32_t)ADC_CAL_VBAT_DENOMINATOR;
+    raw_low_mv = adc_cal_raw_to_mv(adc_low);
 
     /* Step 2: Read ADC at known high voltage */
     adc_high = adc_read_averaged(0, ADC_CAL_CALIBRATION_SAMPLES);
 
-    raw_high_mv = (int32_t)((uint32_t)adc_high * ADC_CAL_VBAT_NUMERATOR +
-                             ADC_CAL_VBAT_ROUNDING) /
-                  (int32_t)ADC_CAL_VBAT_DENOMINATOR;
+    raw_high_mv = adc_cal_raw_to_mv(adc_high);
 
     /* Step 3: Compute two-point calibration coefficients
      *
@@ -455,17 +489,14 @@ int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv) {
      *
      * offset = V_known_low × 1000 / gain - V_raw_low
      */
-    if (raw_high_mv == raw_low_mv)
-        return -1;  /* Avoid division by zero */
-
-    gain_x1000 = ((int32_t)vbat_high_mv - (int32_t)vbat_low_mv) * 1000 /
-                  (raw_high_mv - raw_low_mv);
-
-    offset = (int32_t)vbat_low_mv * 1000 / gain_x1000 - raw_low_mv;
+    if (adc_cal_compute_vbat_coeffs(vbat_low_mv, vbat_high_mv,
+                                   raw_low_mv, raw_high_mv,
+                                   &offset, &gain_x1000) != 0)
+        return -1;
 
     /* Store calibration coefficients in RAM */
-    cal_coeffs.vbat_offset_mv    = (int16_t)offset;
-    cal_coeffs.vbat_gain_x1000   = (uint16_t)gain_x1000;
+    cal_coeffs.vbat_offset_mv    = offset;
+    cal_coeffs.vbat_gain_x1000   = gain_x1000;
     cal_coeffs.calibrated         = true;
     cal_coeffs.cal_version        = 1;
 
@@ -511,9 +542,7 @@ int adc_cal_self_test(void) {
     int16_t temp_c_x10;
 
     /* Test 1: Read VBAT and check it's in plausible range */
-    vbat_mv = (uint16_t)(((uint32_t)adc_read_averaged(0, 16) *
-                          ADC_CAL_VBAT_NUMERATOR + ADC_CAL_VBAT_ROUNDING) /
-                         ADC_CAL_VBAT_DENOMINATOR);
+    vbat_mv = adc_cal_raw_to_mv(adc_read_averaged(0, 16));
     if (vbat_mv < 2500 || vbat_mv > 5500)
         return -3;  /* VBAT out of range */
 

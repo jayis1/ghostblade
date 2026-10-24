@@ -1,7 +1,7 @@
 /*
  * adc_calibration.h — ADC Calibration and Voltage Divider Compensation
  *
- * Copyright (C) 2026 GhostBlade Project
+ * Copyright (C) 2026 jayis1
  * SPDX-License-Identifier: MIT
  *
  * Provides ADC self-calibration, multi-channel differential sampling,
@@ -244,8 +244,8 @@ void adc_cal_get_coeffs(struct adc_cal_coeffs *out);
  * @vbat_high_mv: Known high reference voltage in mV (e.g., 4100 mV)
  *
  * Returns:  0  — success; calibration stored in flash and active
- *          -1  — vbat_low == vbat_high (division by zero guard), or struct
- *                too large for one flash page (developer error)
+ *          -1  — unordered reference/measurement points, zero or out-of-range
+ *                gain, unrepresentable offset, or oversized flash record
  *          -2  — flash readback validation failed (flash may be faulty)
  */
 int adc_cal_factory_calibrate(uint16_t vbat_low_mv, uint16_t vbat_high_mv);
