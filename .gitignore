@@ -89,6 +89,7 @@ tests/test_sleep_wake
 tests/test_crc_validation
 tests/test_es8388_audio
 tests/test_ghostwisp_boot
+tests/test_ghostwisp_gpio_mmio
 
 # Coverage / analysis
 *.gcda

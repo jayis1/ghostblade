@@ -2,6 +2,7 @@
  * ghostwisp_gpio.h — GhostWisp GPIO Driver API
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Provides a high-level GPIO interface for the GhostWisp RP2350B.
@@ -190,6 +191,10 @@ gpio_result_t gpio_toggle(uint8_t pin);
 
 /**
  * gpio_set_irq_enabled — Enable or disable interrupts on a pin
+ *
+ * Callers must serialize configuration calls: eight pins share each
+ * processor-0 interrupt enable register, updated by read-modify-write.
+ * This API configures processor 0 only.
  *
  * @pin:    Pin number
  * @events: Bitmask of GPIO_IRQ_EDGE_FALL, GPIO_IRQ_EDGE_RISE, etc.

@@ -2,6 +2,7 @@
  * ghostwisp_gpio.c — GhostWisp GPIO Driver Implementation
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Implements the GPIO driver for the GhostWisp RP2350B. Provides
@@ -78,34 +79,50 @@ void     gpio_test_reset(void) {
 /*  RP2350B Register Definitions                                            */
 /* ======================================================================== */
 
-#define RP2350B_IO_BANK0_BASE    0x400D0000UL
-#define RP2350B_PADS_BASE        0x400C0000UL
+#define RP2350B_IO_BANK0_BASE    0x40028000UL
+#define RP2350B_PADS_BASE        0x40038000UL
 #define SIO_BASE                 0xD0000000UL
 
-/* SIO registers */
-#define SIO_GPIO_IN              (*(volatile uint32_t *)(SIO_BASE + 0x004))
-#define SIO_GPIO_OUT             (*(volatile uint32_t *)(SIO_BASE + 0x010))
-#define SIO_GPIO_OUT_SET         (*(volatile uint32_t *)(SIO_BASE + 0x014))
-#define SIO_GPIO_OUT_CLR         (*(volatile uint32_t *)(SIO_BASE + 0x018))
-#define SIO_GPIO_OUT_XOR         (*(volatile uint32_t *)(SIO_BASE + 0x01C))
-#define SIO_GPIO_OE              (*(volatile uint32_t *)(SIO_BASE + 0x020))
-#define SIO_GPIO_OE_SET          (*(volatile uint32_t *)(SIO_BASE + 0x024))
-#define SIO_GPIO_OE_CLR          (*(volatile uint32_t *)(SIO_BASE + 0x028))
+/* Register-level tests execute this hardware path, not DRIVER_HOST_TEST. */
+#ifdef GHOSTWISP_GPIO_MMIO_TEST
+extern volatile uint32_t *gpio_mmio_test_reg(uintptr_t address);
+#define GPIO_REG32(address) (*gpio_mmio_test_reg(address))
+#define GPIO_BARRIER() ((void)0)
+#else
+#define GPIO_REG32(address) (*(volatile uint32_t *)(address))
+#define GPIO_BARRIER() __asm__ volatile ("dmb" ::: "memory")
+#endif
 
-/* IO_BANK0: each pin has CTRL at 0x04 + pin*8, and INTR at 0x00 + pin*8 */
-#define IO_BANK0_CTRL(pin)       (*(volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x04 + (uint32_t)(pin) * 8))
-#define IO_BANK0_INTR(pin)       (*(volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x00 + (uint32_t)(pin) * 8))
+/* RP2350 SIO low/high banks are interleaved (unlike RP2040).
+ * GPIO32..47 use bits 0..15 of the high bank; never shift by pin >= 32.
+ * Reference: pico-sdk 2.2.0, rp2350 hardware/regs/sio.h.
+ */
+#define SIO_GPIO_REG(offset, pin) \
+    GPIO_REG32(SIO_BASE + (offset) + ((pin) >= 32 ? 4U : 0U))
+#define SIO_GPIO_IN(pin)      SIO_GPIO_REG(0x004U, pin)
+#define SIO_GPIO_OUT_SET(pin) SIO_GPIO_REG(0x018U, pin)
+#define SIO_GPIO_OUT_CLR(pin) SIO_GPIO_REG(0x020U, pin)
+#define SIO_GPIO_OUT_XOR(pin) SIO_GPIO_REG(0x028U, pin)
+#define SIO_GPIO_OE(pin)      SIO_GPIO_REG(0x030U, pin)
+#define SIO_GPIO_OE_SET(pin)  SIO_GPIO_REG(0x038U, pin)
+#define SIO_GPIO_OE_CLR(pin)  SIO_GPIO_REG(0x040U, pin)
+#define SIO_GPIO_MASK(pin)    (UINT32_C(1) << ((pin) & 31U))
+
+/* IO_BANK0 has per-pin CTRL, but eight pins share each IRQ register. */
+#define IO_BANK0_CTRL(pin)       GPIO_REG32(RP2350B_IO_BANK0_BASE + 0x04 + (uint32_t)(pin) * 8)
+#define IO_BANK0_IRQ_REG(offset, pin) \
+    GPIO_REG32(RP2350B_IO_BANK0_BASE + (offset) + ((uint32_t)(pin) / 8U) * 4U)
+#define IO_BANK0_INTR(pin)       IO_BANK0_IRQ_REG(0x230U, pin)
+#define IO_BANK0_PROC0_INTE(pin)  IO_BANK0_IRQ_REG(0x248U, pin)
+#define IO_BANK0_IRQ_SHIFT(pin)  (((pin) & 7U) * 4U)
 
 /* PADS_BANK0: each pin has a control register at 0x04 + pin*4 */
-#define PADS_BANK0_CTRL(pin)     (*(volatile uint32_t *)(RP2350B_PADS_BASE + 0x04 + (uint32_t)(pin) * 4))
+#define PADS_BANK0_CTRL(pin)     GPIO_REG32(RP2350B_PADS_BASE + 0x04 + (uint32_t)(pin) * 4)
 
 /* PADS bits */
-#define PADS_OD                 (1U << 0)   /* Output disable */
-#define PADS_PUE                (1U << 2)   /* Pull-up enable */
-#define PADS_PDE                (1U << 3)   /* Pull-down enable */
-
-/* PROC0_INTE — interrupt enable for processor 0 (at offset 0x100 in IO_BANK0) */
-#define IO_BANK0_PROC0_INTE     (*(volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x100))
+#define PADS_OD                 (1U << 7)   /* Output disable */
+#define PADS_PUE                (1U << 3)   /* Pull-up enable */
+#define PADS_PDE                (1U << 2)   /* Pull-down enable */
 
 static bool g_gpio_initialized = false;
 static gpio_irq_callback_t g_irq_callback = NULL;
@@ -164,7 +181,7 @@ gpio_result_t gpio_set_function(uint8_t pin, gpio_func_t func) {
     sim_func[pin] = (uint32_t)func;
 #else
     IO_BANK0_CTRL(pin) = (uint32_t)func & 0x1FU;
-    __asm__ volatile ("dmb" ::: "memory");
+    GPIO_BARRIER();
     g_gpio_func[pin] = (uint8_t)func;
 #endif
 
@@ -192,13 +209,13 @@ gpio_result_t gpio_set_dir(uint8_t pin, gpio_dir_t dir) {
     sim_func[pin] = GPIO_FUNC_SIO;
 #else
     if (dir == GPIO_DIR_OUTPUT) {
-        SIO_GPIO_OE_SET = (1U << pin);
+        SIO_GPIO_OE_SET(pin) = SIO_GPIO_MASK(pin);
         PADS_BANK0_CTRL(pin) &= ~PADS_OD;
     } else {
-        SIO_GPIO_OE_CLR = (1U << pin);
+        SIO_GPIO_OE_CLR(pin) = SIO_GPIO_MASK(pin);
         PADS_BANK0_CTRL(pin) |= PADS_OD;
     }
-    __asm__ volatile ("dmb" ::: "memory");
+    GPIO_BARRIER();
     g_gpio_dir[pin] = (uint8_t)dir;
 #endif
 
@@ -212,7 +229,7 @@ int gpio_get_dir(uint8_t pin) {
 #ifdef DRIVER_HOST_TEST
     return sim_dir[pin] ? GPIO_DIR_OUTPUT : GPIO_DIR_INPUT;
 #else
-    return (SIO_GPIO_OE & (1U << pin)) ? GPIO_DIR_OUTPUT : GPIO_DIR_INPUT;
+    return (SIO_GPIO_OE(pin) & SIO_GPIO_MASK(pin)) ? GPIO_DIR_OUTPUT : GPIO_DIR_INPUT;
 #endif
 }
 
@@ -241,7 +258,7 @@ gpio_result_t gpio_set_pull(uint8_t pin, gpio_pull_t pull) {
             break;
     }
     PADS_BANK0_CTRL(pin) = pad;
-    __asm__ volatile ("dmb" ::: "memory");
+    GPIO_BARRIER();
     g_gpio_pull[pin] = (uint8_t)pull;
 #endif
 
@@ -273,10 +290,10 @@ gpio_result_t gpio_put(uint8_t pin, bool value) {
     sim_output_level[pin] = value ? 1 : 0;
 #else
     if (value)
-        SIO_GPIO_OUT_SET = (1U << pin);
+        SIO_GPIO_OUT_SET(pin) = SIO_GPIO_MASK(pin);
     else
-        SIO_GPIO_OUT_CLR = (1U << pin);
-    __asm__ volatile ("dmb" ::: "memory");
+        SIO_GPIO_OUT_CLR(pin) = SIO_GPIO_MASK(pin);
+    GPIO_BARRIER();
 #endif
 
     return GPIO_OK;
@@ -294,7 +311,7 @@ bool gpio_get(uint8_t pin) {
     else
         return sim_input_level[pin] != 0;
 #else
-    return (SIO_GPIO_IN & (1U << pin)) != 0;
+    return (SIO_GPIO_IN(pin) & SIO_GPIO_MASK(pin)) != 0;
 #endif
 }
 
@@ -305,8 +322,8 @@ gpio_result_t gpio_toggle(uint8_t pin) {
 #ifdef DRIVER_HOST_TEST
     sim_output_level[pin] ^= 1;
 #else
-    SIO_GPIO_OUT_XOR = (1U << pin);
-    __asm__ volatile ("dmb" ::: "memory");
+    SIO_GPIO_OUT_XOR(pin) = SIO_GPIO_MASK(pin);
+    GPIO_BARRIER();
 #endif
 
     return GPIO_OK;
@@ -328,18 +345,19 @@ gpio_result_t gpio_set_irq_enabled(uint8_t pin, uint32_t events, bool enable) {
     else
         sim_irq_enable[pin] &= ~events;
 #else
-    /* Configure the INT edge/level in IO_BANK0 INTR register.
-     * The INTR register has 4 bits per pin: level-low, level-high,
-     * edge-fall, edge-rise (bits 0–3 of each pin's INTR). */
-    uint32_t cfg = IO_BANK0_INTR(pin);
+    /* INTR is status/W1C, not an enable register. Preserve the other
+     * seven pins in the processor-0 enable word. Configuration calls
+     * must be serialized by the caller against other configuration. */
+    uint32_t mask = events << IO_BANK0_IRQ_SHIFT(pin);
+    uint32_t cfg = IO_BANK0_PROC0_INTE(pin);
     if (enable) {
-        cfg |= events;
+        cfg |= mask;
     } else {
-        cfg &= ~events;
+        cfg &= ~mask;
     }
-    IO_BANK0_INTR(pin) = cfg;
+    IO_BANK0_PROC0_INTE(pin) = cfg;
     g_irq_enable[pin] = enable ? (g_irq_enable[pin] | events) : (g_irq_enable[pin] & ~events);
-    __asm__ volatile ("dmb" ::: "memory");
+    GPIO_BARRIER();
 #endif
 
     return GPIO_OK;
@@ -361,8 +379,8 @@ gpio_result_t gpio_acknowledge_irq(uint8_t pin) {
     sim_irq_status[pin] = 0;
 #else
     /* Write 1 to the edge-detect bits to clear them in IO_BANK0 INTR */
-    IO_BANK0_INTR(pin) = GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE;
-    __asm__ volatile ("dmb" ::: "memory");
+    IO_BANK0_INTR(pin) = (uint32_t)(GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE) << IO_BANK0_IRQ_SHIFT(pin);
+    GPIO_BARRIER();
 #endif
 
     return GPIO_OK;
@@ -374,7 +392,7 @@ void gpio_handle_irq(void) {
         uint32_t status = sim_irq_status[pin];
         uint32_t enabled = sim_irq_enable[pin];
 #else
-        uint32_t status = IO_BANK0_INTR(pin);
+        uint32_t status = (IO_BANK0_INTR(pin) >> IO_BANK0_IRQ_SHIFT(pin)) & 0xFU;
         uint32_t enabled = g_irq_enable[pin];
 #endif
         uint32_t pending = status & enabled;

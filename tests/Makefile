@@ -53,6 +53,8 @@ KMOD_SOURCES = test_apex_bridge.c
 
 .PHONY: all clean run check help
 
+USERSPACE_TARGETS += test_ghostwisp_gpio_mmio
+
 all: $(USERSPACE_TARGETS)
 
 help:
@@ -138,6 +140,9 @@ test_crc_validation: test_crc_validation.c
 test_es8388_audio: test_es8388_audio.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
+test_ghostwisp_gpio_mmio: test_ghostwisp_gpio_mmio.c ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_gpio.c ../devices/ghostwisp/firmware/rp2350b/include/ghostwisp_gpio.h ../devices/ghostwisp/firmware/rp2350b/include/ghostwisp_pins.h
+	$(CC) $(CFLAGS) -UNDEBUG -UGHOSTWISP_GPIO_MMIO_TEST -UDRIVER_HOST_TEST -DGHOSTWISP_GPIO_MMIO_TEST -I$(CURDIR)/../devices/ghostwisp/firmware/rp2350b/include -o $@ test_ghostwisp_gpio_mmio.c ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_gpio.c $(LDFLAGS)
+
 test_ghostwisp_boot: test_ghostwisp_boot.c
 	$(CC) $(CFLAGS) -DBOOT_HOST_TEST -I$(CURDIR)/../devices/ghostwisp/firmware/rp2350b/include -o $@ $< ../devices/ghostwisp/firmware/rp2350b/src/ghostwisp_boot.c $(LDFLAGS)
 
@@ -155,6 +160,7 @@ test_walkie_talkie:
 	@python3 test_walkie_talkie.py
 
 run: $(USERSPACE_TARGETS)
+	@./test_ghostwisp_gpio_mmio
 	@echo "=== Running SPI Protocol Unit Tests ==="
 	@./test_spi_protocol
 	@echo ""
