@@ -2,6 +2,7 @@
  * pyapex.c — Python Bindings for GhostBlade libapex
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * Python extension module providing access to the GhostBlade hardware
@@ -140,36 +141,24 @@ static PyTypeObject ApexBridgeType;
  * ApexBridge.__init__
  * ======================================================================== */
 
-static int ApexBridge_init(ApexBridgeObject *self, PyObject *args, PyObject *kwds) {
-    const char *device_path = "/dev/apex_bridge0";
-    static char *kwlist[] = {"device", NULL};
+/* A zero-filled instance must not claim ownership of stdin, including when
+ * argument parsing fails before __init__ opens a device. */
+static PyObject *ApexBridge_new(PyTypeObject *type, PyObject *args,
+                                PyObject *kwds)
+{
+    ApexBridgeObject *self = (ApexBridgeObject *)type->tp_alloc(type, 0);
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|s", kwlist, &device_path))
-        return -1;
-
-    self->device_path = strdup(device_path);
-    if (!self->device_path) {
-        PyErr_NoMemory();
-        return -1;
-    }
-
-    self->fd = open(device_path, O_RDWR | O_CLOEXEC);
-    if (self->fd < 0) {
-        PyErr_Format(PyExc_OSError,
-                     "Failed to open %s: %s", device_path, strerror(errno));
-        free(self->device_path);
+    (void)args;
+    (void)kwds;
+    if (self) {
+        self->fd = -1;
         self->device_path = NULL;
-        return -1;
     }
-
-    return 0;
+    return (PyObject *)self;
 }
 
-/* ========================================================================
- * ApexBridge.__del__
- * ======================================================================== */
-
-static void ApexBridge_dealloc(ApexBridgeObject *self) {
+static void ApexBridge_release(ApexBridgeObject *self)
+{
     if (self->fd >= 0) {
         close(self->fd);
         self->fd = -1;
@@ -178,7 +167,54 @@ static void ApexBridge_dealloc(ApexBridgeObject *self) {
         secure_wipe(self->device_path, strlen(self->device_path));
     free(self->device_path);
     self->device_path = NULL;
+}
+
+static int ApexBridge_init(ApexBridgeObject *self, PyObject *args, PyObject *kwds) {
+    const char *device_path = "/dev/apex_bridge0";
+    static char *kwlist[] = {"device", NULL};
+    char *new_path;
+    int new_fd;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|s", kwlist, &device_path))
+        return -1;
+
+    new_path = strdup(device_path);
+    if (!new_path) {
+        PyErr_NoMemory();
+        return -1;
+    }
+
+    new_fd = open(device_path, O_RDWR | O_CLOEXEC);
+    if (new_fd < 0) {
+        PyErr_Format(PyExc_OSError,
+                     "Failed to open %s: %s", device_path, strerror(errno));
+        secure_wipe(new_path, strlen(new_path));
+        free(new_path);
+        return -1;
+    }
+
+    /* __init__ can be called repeatedly. Replace the old resources only
+     * after the new device is open, preserving the old handle on failure. */
+    ApexBridge_release(self);
+    self->device_path = new_path;
+    self->fd = new_fd;
+    return 0;
+}
+
+/* ========================================================================
+ * ApexBridge.__del__
+ * ======================================================================== */
+
+static void ApexBridge_dealloc(ApexBridgeObject *self) {
+    ApexBridge_release(self);
     Py_TYPE(self)->tp_free((PyObject *)self);
+}
+
+static PyObject *ApexBridge_close(ApexBridgeObject *self,
+                                 PyObject *Py_UNUSED(ignored))
+{
+    ApexBridge_release(self);
+    Py_RETURN_NONE;
 }
 
 /* ========================================================================
@@ -636,6 +672,8 @@ static PyObject *ApexBridge_audio_ptt(ApexBridgeObject *self, PyObject *args) {
  * ======================================================================== */
 
 static PyMethodDef ApexBridge_methods[] = {
+    {"close",           (PyCFunction)ApexBridge_close,           METH_NOARGS,
+     "Close the device. Repeated calls are harmless; fileno() returns -1.\n"},
     {"sdr_tune",        (PyCFunction)ApexBridge_sdr_tune,        METH_VARARGS,
      "Tune SDR to a frequency.\n\n"
      "Args:\n"
@@ -746,7 +784,7 @@ static PyTypeObject ApexBridgeType = {
     .tp_basicsize = sizeof(ApexBridgeObject),
     .tp_itemsize = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
-    .tp_new = PyType_GenericNew,
+    .tp_new = ApexBridge_new,
     .tp_init = (initproc)ApexBridge_init,
     .tp_dealloc = (destructor)ApexBridge_dealloc,
     .tp_methods = ApexBridge_methods,

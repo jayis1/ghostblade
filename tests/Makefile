@@ -219,6 +219,9 @@ run: $(USERSPACE_TARGETS)
 	@echo "=== Running Device Tree Build Regression Tests ==="
 	@python3 test_dts_build.py -v
 	@echo ""
+	@echo "=== Running Production Python Extension Lifecycle Tests ==="
+	@python3 test_pyapex_lifecycle.py -v
+	@echo ""
 
 check: run
 
