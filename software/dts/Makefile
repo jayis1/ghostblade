@@ -2,6 +2,7 @@
 # Makefile — GhostBlade Device Tree Sources
 #
 # Copyright (C) 2026 GhostBlade Project
+# Author: jayis1
 # SPDX-License-Identifier: GPL-2.0-or-later
 # ============================================================================
 
@@ -31,13 +32,9 @@ DTC_FLAGS = -Wno-unit_address_vs_reg \
 	-Wno-unique_unit_address
 
 BASE_DTS := $(if $(or $(wildcard $(CUR_DIR)/rk3576.dtsi),$(RK3576_DTSI)),ghostblade-rk3576.dts,)
-DTO_SOURCES = ghostblade-options.dts \
-	ghostblade-sdr-overlay.dts \
-	ghostblade-cc1101-overlay.dts \
-	ghostblade-nfc-overlay.dts \
-	ghostblade-wifi-overlay.dts \
-	ghostblade-sleep-overlay.dts \
-	ghostblade-gps-overlay.dts
+# Discover every standalone overlay; never silently omit a new option from
+# build, validation, or cleanup. The base board source is handled separately.
+DTO_SOURCES := $(filter-out ghostblade-rk3576.dts,$(sort $(wildcard ghostblade-*.dts)))
 
 DTB_OUTPUTS = $(BASE_DTS:.dts=.dtb)
 DTO_OUTPUTS = $(DTO_SOURCES:.dts=.dtbo)

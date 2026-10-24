@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
 <!-- Copyright (C) 2026 GhostBlade Project -->
+<!-- Author: jayis1 -->
 
 # GhostBlade Documentation Index
 
@@ -70,6 +71,9 @@ This page provides a central index of all GhostBlade (Project NullSpectre) docum
 | `../firmware/rp2350b/toolchain-arm-none-eabi.cmake` | RP2350B bare-metal CMake toolchain file for Pico SDK firmware builds |
 
 ## Validation Tools
+
+See the [maintenance log and verification limits](maintenance-log.md) for tested
+local commands, overlay build coverage, and outstanding hardware evidence.
 
 | Tool | Description |
 |------|-------------|

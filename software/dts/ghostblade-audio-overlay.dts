@@ -2,6 +2,7 @@
 /*
  * Device Tree Overlay — GhostBlade ES8388 Audio Codec
  * Project NullSpectre
+ * Author: jayis1
  *
  * Configures the ES8388 stereo audio codec connected to the RK3576:
  *   - I2S2 (RK3576) as I2S master → ES8388 as I2S slave
@@ -19,16 +20,17 @@
  *   - On-device wake word via 6 TOPS NPU (no cloud)
  *
  * Usage:
- *   dtc -I dts -O dtb -@ -o ghostblade-audio-overlay.dtbo ghostblade-audio-overlay.dts
+ *   make -C software/dts ghostblade-audio-overlay.dtbo
+ *   Board deployment below is unverified; first resolve the base-tree labels
+ *   and confirm codec control-bus ownership against the board schematic.
  *   sudo mkdir -p /sys/kernel/config/device-tree/overlays/audio
- *   sudo cp ghostblade-audio-overlay.dtbo /sys/kernel/config/device-tree/overlays/audio/dtbo
+ *   sudo cp software/dts/ghostblade-audio-overlay.dtbo /sys/kernel/config/device-tree/overlays/audio/dtbo
  */
 
 /dts-v1/;
 /plugin/;
 
 #include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/sound/rockchip,rk-audio.h>
 
 / {
 	compatible = "ghostblade,nullspectre", "rockchip,rk3576";

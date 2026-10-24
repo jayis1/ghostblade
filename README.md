@@ -112,12 +112,28 @@ The RP2350B manages all RF frontends (antenna switching, SDR tuning, NFC polling
 
 ## Current Repository State
 
-Validated locally on 2026-09-24:
+<!-- Author: jayis1 -->
 
-- `python3 tools/check_internal_links.py` → no broken internal links
-- `python3 tools/validate_dts.py` → DTS cross-reference checks passed
-- `python3 tools/validate_netlist.py` → manifest/netlist/library checks passed
-- `make -C tests run` → full host-side unit test suite passed
+This repository contains design specifications, a manifest/netlist, KiCad
+libraries, firmware/driver sources, and host tests. It does not currently track
+editable `.kicad_sch` or routed `.kicad_pcb` files. The capabilities and diagrams
+above and below describe design targets, not verified board performance or a
+manufacturing-ready release. Power and flashing procedures require board-specific
+review before use.
+
+Validated locally on 2026-10-24:
+
+- `python3 tools/check_internal_links.py` → no broken inline internal link paths
+- `python3 tools/validate_dts.py` → existing selected DTS cross-reference checks passed
+- `python3 tools/validate_netlist.py` → existing selected netlist/reference checks passed
+- `make -C software/dts all validate` → eight overlays compiled and syntax-checked
+- `python3 tests/test_dts_build.py -v` → three build-coverage regression tests passed
+- `make -C tests run` → host-side unit test suite passed
+
+The base DTB was skipped because the required `rk3576.dtsi` is not included.
+Overlay compilation does not verify symbol resolution, kernel bindings, or board
+wiring. See the [maintenance log](docs/maintenance-log.md) for commands, evidence,
+and unresolved hardware/audio integration gaps.
 
 ---
 

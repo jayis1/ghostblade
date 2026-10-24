@@ -2,6 +2,7 @@
 # Makefile — GhostBlade Test Suite
 #
 # Copyright (C) 2026 GhostBlade Project
+# Author: jayis1
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Build targets:
@@ -210,6 +211,9 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running Walkie-Talkie Python Unit Tests ==="
 	@python3 test_walkie_talkie.py
+	@echo ""
+	@echo "=== Running Device Tree Build Regression Tests ==="
+	@python3 test_dts_build.py -v
 	@echo ""
 
 check: run
