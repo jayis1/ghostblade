@@ -26,6 +26,7 @@ import importlib
 import struct
 import sys
 import unittest
+from unittest import mock
 
 # ---------------------------------------------------------------------------
 # Allow running this file directly from the repo root or as a module
@@ -40,7 +41,7 @@ if _REPO_ROOT not in sys.path:
 from devices.ghostwisp.protocol.frame import (
     Frame, MessageType, FrameFlags, ProtocolError,
     _crc16_ccitt_false, PROTOCOL_VERSION, MAGIC,
-    OVERHEAD, HEADER_SIZE, PAYLOAD_LENGTH_SIZE,
+    OVERHEAD, HEADER_SIZE, PAYLOAD_LENGTH_SIZE, PAYLOAD_MAX_DEFAULT,
 )
 from devices.ghostwisp.protocol.schema import (
     IdentityPayload, SessionCapabilities,
@@ -166,6 +167,39 @@ class TestFrameDecodeErrors(unittest.TestCase):
 
     def _valid_frame_bytes(self) -> bytes:
         return _make_frame(request_id=1).encode()
+
+    def test_oversized_wire_frame_rejected_before_crc(self):
+        # Construct peer input directly: encode() already rejects this size.
+        for payload_size in (PAYLOAD_MAX_DEFAULT + 1, 0xFFFF):
+            body = bytearray(self._valid_frame_bytes()[:-2])
+            struct.pack_into("<H", body, HEADER_SIZE, payload_size)
+            body.extend(b"\xAB" * payload_size)
+            wire = body + struct.pack("<H", _crc16_ccitt_false(body))
+            for input_type in (bytes, bytearray):
+                with self.subTest(size=payload_size, input_type=input_type):
+                    with mock.patch(
+                        "devices.ghostwisp.protocol.frame._crc16_ccitt_false"
+                    ) as crc:
+                        with self.assertRaisesRegex(ProtocolError, "frame too large"):
+                            Frame.decode(input_type(wire))
+                        crc.assert_not_called()
+
+    def test_oversized_declared_payload_rejected(self):
+        for payload_size in (PAYLOAD_MAX_DEFAULT + 1, 0xFFFF):
+            with self.subTest(size=payload_size):
+                data = bytearray(self._valid_frame_bytes())
+                struct.pack_into("<H", data, HEADER_SIZE, payload_size)
+                data[-2:] = struct.pack("<H", _crc16_ccitt_false(data[:-2]))
+                with self.assertRaisesRegex(ProtocolError, "payload length .* exceeds maximum"):
+                    Frame.decode(data)
+
+    def test_payload_limit_accepts_bytes_and_bytearray(self):
+        for payload_size in (0, PAYLOAD_MAX_DEFAULT):
+            payload = b"\xAB" * payload_size
+            wire = _make_frame(payload=payload).encode()
+            for input_type in (bytes, bytearray):
+                with self.subTest(size=payload_size, input_type=input_type):
+                    self.assertEqual(Frame.decode(input_type(wire)).payload, payload)
 
     def test_too_short(self):
         with self.assertRaises(ProtocolError):

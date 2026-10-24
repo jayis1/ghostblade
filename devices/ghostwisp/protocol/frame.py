@@ -179,6 +179,12 @@ class Frame:
     @classmethod
     def decode(cls, data: bytes | bytearray) -> "Frame":
         """Deserialize a frame.  Raises ProtocolError on any violation."""
+        # Bound input before copying it or computing a CRC.  The transport
+        # must still bound its own receive buffer; this codec sees one frame.
+        if len(data) > OVERHEAD + PAYLOAD_MAX_DEFAULT:
+            raise ProtocolError(
+                f"frame too large: {len(data)} > {OVERHEAD + PAYLOAD_MAX_DEFAULT}"
+            )
         data = bytes(data)
         if len(data) < OVERHEAD:
             raise ProtocolError(
@@ -213,6 +219,10 @@ class Frame:
             )
 
         payload_len = struct.unpack_from(PAYLOAD_LENGTH_FMT, data, HEADER_SIZE)[0]
+        if payload_len > PAYLOAD_MAX_DEFAULT:
+            raise ProtocolError(
+                f"payload length {payload_len} exceeds maximum {PAYLOAD_MAX_DEFAULT}"
+            )
         expected_total = OVERHEAD + payload_len
         if len(data) != expected_total:
             raise ProtocolError(

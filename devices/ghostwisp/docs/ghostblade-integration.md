@@ -95,6 +95,31 @@ Requirements:
 
 Authenticated integrity belongs at the session/message security layer and must not be conflated with CRC.
 
+### Reference codec receive bound
+
+The current Python codec (`protocol/frame.py`) enforces the same hard ceiling
+on encoding and decoding: `PAYLOAD_MAX_DEFAULT` is 4096 payload bytes. With the
+current header, length field, and CRC, `OVERHEAD` is 20 bytes, so the maximum
+accepted wire frame is 4116 bytes. Oversized input is rejected with
+`ProtocolError` before copying the input or computing its CRC; an oversized
+payload-length declaration is also rejected. Empty and exactly-at-limit
+payloads remain valid, and accepted wire bytes are unchanged.
+
+This hard ceiling does not implement session negotiation. A future session
+layer must enforce any smaller negotiated limit, and a transport must bound
+its receive buffer before handing a complete frame to the codec. The codec
+is not a stream accumulator or an authentication mechanism.
+
+Run the host-only protocol and profile tests from the repository root:
+
+```sh
+python3 -m unittest discover -s devices/ghostwisp/tests -v
+```
+
+The receive-bound regressions construct CRC-valid oversized peer frames
+without using the encoder, check rejection before CRC work for both `bytes`
+and `bytearray`, and exercise empty and maximum-size valid payloads.
+
 ## Message families
 
 | Family | Examples |
