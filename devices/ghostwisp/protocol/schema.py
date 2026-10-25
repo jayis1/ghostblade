@@ -171,10 +171,14 @@ class PolicySyncPayload:
         return struct.pack(self.STRUCT_FMT, self.region_code, self.policy_flags, 0, self.policy_seq)
 
     @classmethod
-    def decode(cls, data: bytes) -> "PolicySyncPayload":
+    def decode(cls, data: bytes | bytearray) -> "PolicySyncPayload":
         if len(data) < cls.SIZE:
             raise ProtocolError(f"PolicySyncPayload: expected {cls.SIZE}, got {len(data)}")
         region, flags, _res, seq = struct.unpack_from(cls.STRUCT_FMT, data)
+        # Author: jayis1 — do not discard undefined policy data, even when
+        # its enclosing frame passes CRC validation.
+        if _res != 0:
+            raise ProtocolError("PolicySyncPayload: reserved word must be zero")
         return cls(region_code=region, policy_flags=flags, policy_seq=seq)
 
 

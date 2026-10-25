@@ -194,6 +194,31 @@ Tests cover every unassigned one-byte type with and without `MANDATORY`,
 `bytes` and `bytearray` inputs, combined defined flags, unchanged known-type
 enums, and invalid-envelope rejection. No physical device is accessed.
 
+### Policy-sync reserved-word validation
+
+Author: jayis1
+
+`PolicySyncPayload` uses the existing eight-byte `<BBHI` layout: region at
+byte 0, policy flags at byte 1, a zero reserved word at bytes 2–3, and policy
+sequence at bytes 4–7. `decode()` now raises `ProtocolError` with
+`PolicySyncPayload: reserved word must be zero` for nonzero reserved data,
+including payloads inside CRC-valid `POLICY_SYNC_REQ` and `POLICY_SYNC_RESP`
+frames. The encoder already writes zero; conforming wire bytes are unchanged.
+
+This structural check does not select a region, merge safety policies, check
+sequence freshness, or authenticate a peer. Existing region and flag values
+(including unknown values) are preserved for the future policy layer; they
+must not be treated as permission to transmit. The existing minimum-length
+check and acceptance of following bytes are unchanged. Callers still own
+message-size validation and restrictive effective-policy enforcement.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_policy_reserved -v`
+from the repository root, or `make -C devices/ghostwisp check`. The host-only
+regressions cover every nonzero 16-bit reserved value with both `bytes` and
+`bytearray`, CRC-valid request/response envelopes, all truncated prefixes,
+byte-identical conforming round trips, and following-byte compatibility.
+No transport, physical board, session authentication, or radio action is tested.
+
 ## Message families
 
 | Family | Examples |
