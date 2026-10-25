@@ -49,6 +49,11 @@ CFLAGS  := -DBOOT_HOST_TEST \
 
 TEST_BIN := $(BUILD_DIR)/test_ghostwisp_boot
 TEST_SRC := $(TESTS_DIR)/test_ghostwisp_boot.c
+TEST_DEP := $(TEST_BIN).d
+
+# Track compiler-discovered includes, including transitive local headers.
+# The explicit default goal above must remain all when loading this file.
+-include $(TEST_DEP)
 
 # Optional cross-compiler for target probe
 CROSS_CC     ?= arm-none-eabi-gcc
@@ -63,9 +68,9 @@ all: $(TEST_BIN)
 $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)
 
-$(TEST_BIN): $(TEST_SRC) $(FW_DIR)/src/ghostwisp_boot.c $(FW_DIR)/include/ghostwisp_boot.h $(FW_DIR)/include/ghostwisp_pins.h | $(BUILD_DIR)
+$(TEST_BIN): $(TEST_SRC) $(GHOSTWISP_DIR)/Makefile $(FW_DIR)/src/ghostwisp_boot.c $(FW_DIR)/include/ghostwisp_boot.h $(FW_DIR)/include/ghostwisp_pins.h | $(BUILD_DIR)
 	@echo "[CC] Building host test..."
-	$(CC) $(CFLAGS) $(TEST_SRC) -o $(TEST_BIN)
+	$(CC) $(CFLAGS) -MMD -MP -MF $(TEST_DEP) -MT $(TEST_BIN) $(TEST_SRC) -o $(TEST_BIN)
 	@echo "[OK] $(TEST_BIN) built"
 
 test: $(TEST_BIN)

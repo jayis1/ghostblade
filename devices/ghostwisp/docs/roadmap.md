@@ -98,6 +98,29 @@ and dependencies outside the scanned tree require compiler/dependency review.
 It does not prove target compilation, electrical correctness, or hardware
 behavior. No GhostBlade source, API, or default behavior is changed.
 
+## Host boot build dependencies
+
+Author: jayis1
+
+Phase 3's reproducible-toolchain requirement also applies to incremental host
+checks. The host boot build records compiler-discovered local dependencies in
+`build/test_ghostwisp_boot.d`, including headers reached through other headers.
+Editing a transitive header therefore rebuilds the boot test instead of running
+a stale binary. The Makefile itself is a prerequisite so recipe changes also
+rebuild existing binaries. The default goal remains `all`; `clean` removes the
+binary and dependency file together. Use a clean build when changing compiler
+selection, command-line flags, or toolchain versions; those are not tracked.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_host_build -v` from the
+repository root, or `make -C devices/ghostwisp check`. The three host regressions
+copy the production Makefile and sources into isolated fixtures and invoke real
+GCC: direct header rebuild, transitive header compile-error propagation and
+repair, unchanged-input no-op behavior, default-goal preservation, and cleanup
+followed by rebuilding. Before the fix, the transitive edit incorrectly returned
+success without compiling, and no dependency file was produced. These tests do
+not cross-compile target firmware or validate physical hardware. No frozen
+GhostBlade source or interface is modified.
+
 ## Per-run rule
 
 Scheduled work should choose one incomplete item, inspect the current repository first, make a coherent bounded change, run the relevant local checks, and update this roadmap only with verified progress. GhostBlade is a frozen baseline. Work may add namespaced, backward-compatible companion services, APIs, UI surfaces, schemas, documentation, and tests, but must not redesign or regress existing GhostBlade hardware or behavior. With GhostWisp absent, GhostBlade must continue to behave exactly as before.
