@@ -5,6 +5,48 @@
 
 Author: jayis1
 
+## Runtime PM SPI configuration failures
+
+Author: jayis1
+
+The driver's runtime suspend/resume callbacks previously returned success even
+when `spi_setup()` failed. Suspend now returns the controller error before
+masking the IRQ. Resume returns the error, restores the preceding software mode
+and speed, and leaves the IRQ masked. Successful transitions retain their IRQ
+ordering. This is software rollback, not proof that a controller undoes partial
+hardware configuration on failure.
+
+`tests/test_kernel_pm_production.py` extracts both production callbacks, compiles
+them with `-Wall -Wextra -Werror` and undefined-behavior/bounds sanitizers, and
+injects SPI setup failures. The regression failed before the fix and passes
+afterward. It checks submitted mode/speed, rollback, IRQ ordering, direct callback
+retry, and success/error paths without an IRQ. It runs in `make -C tests run`;
+the complete host suite passes. Stubs do not establish PM-core retry behavior,
+concurrency safety, a complete module build, or hardware operation.
+
+Static analysis: cppcheck 2.17.1 passes all 15 main firmware C files using
+`--enable=warning,performance,portability --check-level=exhaustive
+--platform=unix32 --std=c11 --error-exitcode=1 '-Dbi_decl(x)='
+-Ifirmware/rp2350b/include firmware/rp2350b/src`. The SDK's binary-information
+annotation macro is omitted for analysis only. This width approximation and
+absent SDK headers are not a target build or exhaustive SDK configuration check.
+Linux v6.12 checkpatch reports zero errors/warnings on the driver patch; the full
+file still reports 772 errors and 1531 warnings (baseline: 777 and 1556). The
+requested all-warning cleanup is not complete; unrelated style churn was avoided.
+Source pattern scans found no literal credential assignments or matches for
+`os.system`, `shell=True`, `pickle.load(s)`, or `yaml.load` in Python sources;
+these scans are not a full security audit or secret-history investigation.
+
+`make libapex`, `make docs-check`, and `make -C software/dts all validate` pass;
+the base DTB remains skipped without `rk3576.dtsi`. `make check`, `make firmware`,
+and `make driver` fail because the environment lacks cross-compilers, CMake,
+Pico SDK, and the target kernel build tree. No module was loaded, firmware
+flashed, or radio operated. The broad source audit and requested optional
+hardware-dependent features remain incomplete. In particular, the existing SG
+engine's asynchronous-transfer timeout lifetime, mmap allocation boundaries,
+and removal/open-file lifetime need separate remediation and kernel testing;
+this callback fix does not make the whole driver production-ready.
+
 ## Required and unique netlist component records
 
 Author: jayis1

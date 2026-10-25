@@ -2632,52 +2632,57 @@ MODULE_DEVICE_TABLE(spi, apex_bridge_id_table);
 
 static int apex_bridge_runtime_suspend(struct device *dev)
 {
-    struct spi_device *spi = to_spi_device(dev);
-    struct apex_bridge_dev *adev = spi_get_drvdata(spi);
+	struct spi_device *spi = to_spi_device(dev);
+	struct apex_bridge_dev *adev = spi_get_drvdata(spi);
+	int ret;
 
-    dev_dbg(dev, "apex_bridge: runtime suspend\n");
+	dev_dbg(dev, "apex_bridge: runtime suspend\n");
 
-    /* Save current SPI configuration for restore on resume */
-    adev->saved_spi_mode = spi->mode;
-    adev->saved_spi_max_speed_hz = spi->max_speed_hz;
+	/* Save current SPI configuration for restore on resume. */
+	adev->saved_spi_mode = spi->mode;
+	adev->saved_spi_max_speed_hz = spi->max_speed_hz;
 
-    /* Disable SPI transfers by lowering clock speed to minimum.
-     * We keep the SPI bus powered to allow the MCU to still signal
-     * interrupts, but the low speed ensures minimal power consumption
-     * on the SPI bus lines. */
-    spi->max_speed_hz = 1000000;  /* 1 MHz — low power mode */
-    if (spi_setup(spi)) {
-        spi->max_speed_hz = adev->saved_spi_max_speed_hz;
-        dev_warn(dev, "Failed to lower SPI speed for runtime suspend\n");
-    }
+	spi->max_speed_hz = 1000000;
+	ret = spi_setup(spi);
+	if (ret) {
+		/* Leave the IRQ active when the controller rejects suspend. */
+		spi->max_speed_hz = adev->saved_spi_max_speed_hz;
+		dev_warn(dev, "Failed to lower SPI speed for runtime suspend\n");
+		return ret;
+	}
 
-    /* Free the SPI IRQ during suspend to avoid spurious wakeups
-     * from the MCU INT_REQ line while the host is idle. The IRQ
-     * will be re-requested in runtime_resume. */
-    if (adev->irq >= 0)
-        disable_irq(adev->irq);
+	/* Mask the existing IRQ only after configuration succeeds. */
+	if (adev->irq >= 0)
+		disable_irq(adev->irq);
 
-    return 0;
+	return 0;
 }
 
 static int apex_bridge_runtime_resume(struct device *dev)
 {
-    struct spi_device *spi = to_spi_device(dev);
-    struct apex_bridge_dev *adev = spi_get_drvdata(spi);
+	struct spi_device *spi = to_spi_device(dev);
+	struct apex_bridge_dev *adev = spi_get_drvdata(spi);
+	u32 suspended_mode = spi->mode;
+	u32 suspended_speed_hz = spi->max_speed_hz;
+	int ret;
 
-    dev_dbg(dev, "apex_bridge: runtime resume\n");
+	dev_dbg(dev, "apex_bridge: runtime resume\n");
 
-    /* Restore original SPI configuration */
-    spi->mode = adev->saved_spi_mode;
-    spi->max_speed_hz = adev->saved_spi_max_speed_hz;
-    if (spi_setup(spi))
-        dev_warn(dev, "Failed to restore SPI configuration on resume\n");
+	spi->mode = adev->saved_spi_mode;
+	spi->max_speed_hz = adev->saved_spi_max_speed_hz;
+	ret = spi_setup(spi);
+	if (ret) {
+		/* Preserve the suspended state and keep the IRQ masked. */
+		spi->mode = suspended_mode;
+		spi->max_speed_hz = suspended_speed_hz;
+		dev_warn(dev, "Failed to restore SPI configuration on resume\n");
+		return ret;
+	}
 
-    /* Re-enable the SPI IRQ */
-    if (adev->irq >= 0)
-        enable_irq(adev->irq);
+	if (adev->irq >= 0)
+		enable_irq(adev->irq);
 
-    return 0;
+	return 0;
 }
 
 static int apex_bridge_runtime_idle(struct device *dev)
