@@ -233,13 +233,17 @@ class ArmRequestPayload:
         )
 
     @classmethod
-    def decode(cls, data: bytes) -> "ArmRequestPayload":
+    def decode(cls, data: bytes | bytearray) -> "ArmRequestPayload":
         if len(data) < cls.SIZE:
             raise ProtocolError(
                 f"ArmRequestPayload: expected {cls.SIZE}, got {len(data)}; "
                 "absent mandatory field causes hard rejection"
             )
         mode, _res, dur, expiry, op_id, scope, nonce = struct.unpack_from(cls.STRUCT_FMT, data)
+        # Author: jayis1 — do not silently discard undefined request data.
+        # Structural acceptance is not authorization or physical consent.
+        if _res != 0:
+            raise ProtocolError("ArmRequestPayload: reserved byte must be zero")
         return cls(
             mode=mode,
             duration_ms=dur,

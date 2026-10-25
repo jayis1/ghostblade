@@ -219,6 +219,29 @@ regressions cover every nonzero 16-bit reserved value with both `bytes` and
 byte-identical conforming round trips, and following-byte compatibility.
 No transport, physical board, session authentication, or radio action is tested.
 
+### ARM-request reserved-byte validation
+
+Author: jayis1
+
+The existing `ArmRequestPayload` layout (`<BBHI16s64s16s`) reserves byte 1;
+its encoder writes zero. Following the envelope requirement that unknown
+mandatory fields fail closed, `decode()` now rejects a nonzero reserved byte
+with `ProtocolError` (`ArmRequestPayload: reserved byte must be zero`), even
+inside a CRC-valid `ARM_REQ` frame. Conforming encodings, field values, the
+minimum-length check, and acceptance of following bytes are unchanged.
+Callers remain responsible for complete message-size validation.
+
+This is structural validation only. It does not authenticate an operator,
+validate an action mode or scope, enforce deadlines, check nonce freshness,
+arm hardware, or replace local physical confirmation. CRC is not authentication.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_arm_reserved -v` from the
+repository root, or `make -C devices/ghostwisp check`. Host regressions cover
+all 255 nonzero reserved-byte values directly and in independently checksummed
+frames, immutable and mutable input buffers, every truncated payload prefix,
+conforming round trips for the four defined modes, and following-byte
+compatibility. No transport, hardware, or action execution is exercised.
+
 ## Message families
 
 | Family | Examples |
