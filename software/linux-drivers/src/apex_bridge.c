@@ -242,8 +242,11 @@ static int apex_spi_xfer(struct apex_bridge_dev *dev,
     struct spi_message msg;
     int ret;
 
-    if (tx_len > APEX_SPI_FRAME_SIZE_MAX)
-        return -EMSGSIZE;
+	/* Author: jayis1 - validate DMA buffer contracts before submission. */
+	if (!tx_buf || !rx_buf)
+		return -EINVAL;
+	if (tx_len > APEX_SPI_FRAME_SIZE_MAX || tx_len > rx_buf_size)
+		return -EMSGSIZE;
 
     memset(&xfer, 0, sizeof(xfer));
     xfer.tx_buf = tx_buf;
@@ -293,12 +296,21 @@ static int apex_build_frame(uint8_t cmd, const uint8_t *payload,
     uint32_t crc32_val;
     uint64_t crc64_val;
 
-    if (payload_len > APEX_SPI_MAX_PAYLOAD)
-        return -EMSGSIZE;
+	if (!frame_buf || (payload_len && !payload))
+		return -EINVAL;
+	if (payload_len > APEX_SPI_MAX_PAYLOAD)
+		return -EMSGSIZE;
 
-    total_len = APEX_SPI_HDR_SIZE + payload_len + APEX_SPI_CRC32_SIZE;
-    if (total_len > frame_buf_size)
-        return -EMSGSIZE;
+	total_len = APEX_SPI_HDR_SIZE + payload_len + APEX_SPI_CRC32_SIZE;
+	if (total_len > frame_buf_size)
+		return -EMSGSIZE;
+
+	/*
+	 * Author: jayis1 - RX polling transmits the entire buffer, not just
+	 * this frame. Zero padding so unused kmalloc bytes cannot reach the
+	 * MCU or be interpreted as additional commands after the NOP.
+	 */
+	memset(frame_buf, 0, frame_buf_size);
 
     /* Build header */
     hdr = (struct apex_spi_header *)frame_buf;
