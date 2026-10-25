@@ -52,21 +52,62 @@ if [ "$MODE" = "isolation" ]; then
         "rp2350b_memmap"
     )
 
+    for tool in nm strings grep; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            fail "required isolation tool not found: $tool"
+            exit 1
+        fi
+    done
+
+    # Author: jayis1 — failed inspection is not evidence of isolation.
+    # Capture once so tool errors cannot be mistaken for absent patterns.
+    if ! SYMBOLS=$(nm "$TEST_BIN"); then
+        fail "nm could not inspect $TEST_BIN"
+        exit 1
+    fi
+    if [ -z "$SYMBOLS" ]; then
+        fail "nm returned no symbols; isolation requires an unstripped test binary"
+        exit 1
+    fi
+    if ! BINARY_STRINGS=$(strings "$TEST_BIN"); then
+        fail "strings could not inspect $TEST_BIN"
+        exit 1
+    fi
+
+    # Filtering every symbol is valid (grep status 1); execution errors are not.
+    if FILTERED_SYMBOLS=$(grep -v ' t test_\| T test_\| W test_\| U test_' <<< "$SYMBOLS"); then
+        :
+    else
+        STATUS=$?
+        if [ "$STATUS" -ne 1 ]; then
+            fail "grep could not filter the symbol table"
+            exit 1
+        fi
+    fi
+
     for pat in "${FORBIDDEN_PATTERNS[@]}"; do
-        # Get symbols, skip test_ prefixed ones, check for forbidden pattern
-        if nm "$TEST_BIN" 2>/dev/null \
-               | grep -v ' t test_\| T test_\| W test_\| U test_' \
-               | grep -qi "$pat"; then
+        # Consume all input: grep -q may cause upstream SIGPIPE under pipefail.
+        if grep -i "$pat" <<< "$FILTERED_SYMBOLS" >/dev/null; then
             fail "forbidden symbol pattern '$pat' found in $TEST_BIN (non-test symbol)"
         else
+            STATUS=$?
+            if [ "$STATUS" -ne 1 ]; then
+                fail "grep could not inspect symbol pattern '$pat'"
+                exit 1
+            fi
             ok "no forbidden symbol '$pat' in test binary (non-test symbols)"
         fi
     done
 
     # The ghost_blade linker script must not be referenced
-    if strings "$TEST_BIN" 2>/dev/null | grep -qi "rp2350b_memmap.ld"; then
+    if grep -i "rp2350b_memmap.ld" <<< "$BINARY_STRINGS" >/dev/null; then
         fail "GhostBlade linker script 'rp2350b_memmap.ld' referenced in test binary"
     else
+        STATUS=$?
+        if [ "$STATUS" -ne 1 ]; then
+            fail "grep could not inspect linker script references"
+            exit 1
+        fi
         ok "GhostBlade linker script not referenced in test binary"
     fi
 

@@ -62,6 +62,17 @@ Work proceeds in evidence-producing increments. A phase is complete only when it
 - [ ] Validate captures and profiles against malformed-input test vectors.
 - [ ] Create a concise build, flash, recover, and first-use guide.
 
+## Isolation-check evidence
+
+The frozen-baseline boundary is also checked by `make -C devices/ghostwisp check`.
+The binary isolation gate rejects missing or failed `nm`, `strings`, and `grep`
+inspection, including partial output followed by failure and empty symbol tables.
+It preserves the existing test-symbol exemption and forbidden-symbol rules.
+Host regression tests in `tests/test_check_isolation.py` exercise the real helper
+with controlled tool fixtures, including large symbol output and filter errors.
+These checks establish host-test binary isolation, not electrical correctness,
+physical-board behavior, or a successful target firmware build.
+
 ## Per-run rule
 
 Scheduled work should choose one incomplete item, inspect the current repository first, make a coherent bounded change, run the relevant local checks, and update this roadmap only with verified progress. GhostBlade is a frozen baseline. Work may add namespaced, backward-compatible companion services, APIs, UI surfaces, schemas, documentation, and tests, but must not redesign or regress existing GhostBlade hardware or behavior. With GhostWisp absent, GhostBlade must continue to behave exactly as before.
