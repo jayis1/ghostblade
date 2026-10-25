@@ -50,37 +50,99 @@ class GerberExportTests(unittest.TestCase):
     def test_each_export_failure_prevents_packaging(self):
         stages = len(exporter.GERBER_LAYERS) + 2  # layers, drill, position
         for stage in range(stages):
-            for failure in (subprocess.CompletedProcess([], 7, "", "fixture failure"),
+            for index, failure in enumerate((subprocess.CompletedProcess([], 7, "", "fixture failure"),
                             FileNotFoundError("fixture missing executable"),
-                            subprocess.TimeoutExpired("fixture", 60)):
+                            subprocess.TimeoutExpired("fixture", 60))):
                 with self.subTest(stage=stage, failure=type(failure).__name__):
-                    results = [subprocess.CompletedProcess([], 0, "", "")] * stage + [failure]
-                    with patch.object(exporter.subprocess, "run", side_effect=results) as run:
-                        self.assertEqual(exporter.main(self.args + ["--fab-note", "--zip"]), 1)
+                    self.output = self.root / f"failure-{stage}-{index}"
+                    args = ["--kicad-pcb", str(self.pcb), "--output", str(self.output)]
+                    calls = []
+
+                    def fixture_failure(command, **kwargs):
+                        calls.append(command)
+                        if len(calls) <= stage:
+                            return self.fixture_export(command, **kwargs)
+                        if isinstance(failure, Exception):
+                            raise failure
+                        return failure
+
+                    with patch.object(exporter.subprocess, "run", side_effect=fixture_failure) as run:
+                        self.assertEqual(exporter.main(args + ["--fab-note", "--zip"]), 1)
                     self.assertEqual(run.call_count, stage + 1)
                     self.assertFalse((self.output / "ghostblade-fab-notes.json").exists())
                     self.assertFalse((self.output / "ghostblade-gerbers.zip").exists())
 
-    def test_successful_command_sequence(self):
+    def fixture_export(self, command, **kwargs):
+        # Synthetic files exercise orchestration, not KiCad geometry or syntax.
+        kind = command[3]
+        if kind == "gerbers":
+            layer = command[command.index("--layers") + 1]
+            path = self.output / (layer + ".gbr")
+        elif kind == "drill":
+            path = self.output / "fixture.drl"
+        else:
+            path = Path(command[command.index("--output") + 1])
+        path.write_text("synthetic export fixture")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    def test_zero_exit_without_artifacts_prevents_packaging(self):
         with patch.object(exporter.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "", "")) as run:
+            self.assertEqual(exporter.main(self.args + ["--fab-note", "--zip"]), 1)
+        self.assertEqual(run.call_count, 1)
+        self.assertFalse((self.output / "ghostblade-fab-notes.json").exists())
+        self.assertFalse((self.output / "ghostblade-gerbers.zip").exists())
+
+    def test_each_stage_requires_new_nonempty_artifacts(self):
+        stages = len(exporter.GERBER_LAYERS) + 2
+        for stage in range(stages):
+            for mode in ("missing", "empty", "directory", "symlink", "wrong-name"):
+                with self.subTest(stage=stage, mode=mode):
+                    self.output = self.root / f"stage-{stage}-{mode}"
+                    args = ["--kicad-pcb", str(self.pcb), "--output", str(self.output)]
+                    calls = []
+
+                    def run(command, **kwargs):
+                        calls.append(command)
+                        if len(calls) != stage + 1:
+                            return self.fixture_export(command, **kwargs)
+                        if mode != "missing":
+                            self.fixture_export(command, **kwargs)
+                            kind = command[3]
+                            if kind == "gerbers":
+                                path = self.output / (command[command.index("--layers") + 1] + ".gbr")
+                            elif kind == "drill":
+                                path = self.output / "fixture.drl"
+                            else:
+                                path = self.output / "ghostblade-PickPlace.pos"
+                            path.unlink()
+                            if mode == "empty":
+                                path.touch()
+                            elif mode == "directory":
+                                path.mkdir()
+                            elif mode == "symlink":
+                                path.symlink_to(self.pcb)
+                            else:
+                                (self.output / "unrelated.txt").write_text("not export data")
+                        return subprocess.CompletedProcess(command, 0, "", "")
+
+                    with patch.object(exporter.subprocess, "run", side_effect=run):
+                        self.assertEqual(exporter.main(args + ["--fab-note", "--zip"]), 1)
+                    self.assertEqual(len(calls), stage + 1)
+                    self.assertFalse((self.output / "ghostblade-fab-notes.json").exists())
+                    self.assertFalse((self.output / "ghostblade-gerbers.zip").exists())
+
+    def test_successful_command_sequence(self):
+        with patch.object(exporter.subprocess, "run", side_effect=self.fixture_export) as run:
             self.assertEqual(exporter.main(self.args), 0)
         self.assertEqual(run.call_count, len(exporter.GERBER_LAYERS) + 2)
         self.assertEqual(run.call_args.args[0][-1], str(self.pcb))
         self.assertFalse((self.output / "ghostblade-fab-notes.json").exists())
 
     def test_successful_export_packages_notes_and_fixture_outputs(self):
-        def fixture_export(command, **kwargs):
-            # Synthetic export artifacts test orchestration, not KiCad geometry.
-            kind = command[3]
-            suffix = {"gerbers": ".gbr", "drill": ".drl", "pos": ".pos"}[kind]
-            name = command[command.index("--layers") + 1] if kind == "gerbers" else kind
-            (self.output / (name + suffix)).write_text("synthetic export fixture")
-            return subprocess.CompletedProcess(command, 0, "", "")
-
-        with patch.object(exporter.subprocess, "run", side_effect=fixture_export):
+        with patch.object(exporter.subprocess, "run", side_effect=self.fixture_export):
             self.assertEqual(exporter.main(self.args + ["--fab-note", "--zip"]), 0)
         expected = {layer + ".gbr" for layer in exporter.GERBER_LAYERS}
-        expected.update({"drill.drl", "pos.pos", "ghostblade-fab-notes.json"})
+        expected.update({"fixture.drl", "ghostblade-PickPlace.pos", "ghostblade-fab-notes.json"})
         with zipfile.ZipFile(self.output / "ghostblade-gerbers.zip") as archive:
             self.assertEqual(set(archive.namelist()), expected)
             self.assertEqual(len(archive.namelist()), len(expected))

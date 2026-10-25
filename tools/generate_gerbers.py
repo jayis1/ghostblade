@@ -80,6 +80,24 @@ GERBER_LAYERS = {
 }
 
 
+# Author: jayis1
+def require_new_output(output_dir, previous, pattern, stage):
+    """Check file presence only, not fabrication syntax or geometry."""
+    candidates = set(output_dir.glob(pattern)) - previous
+    if not candidates:
+        print(f"ERROR: {stage} returned success without new {pattern} output")
+        return False
+    try:
+        if any(path.is_symlink() or not path.is_file() or path.stat().st_size == 0
+               for path in candidates):
+            print(f"ERROR: {stage} produced empty or non-regular output")
+            return False
+    except OSError as error:
+        print(f"ERROR: Cannot inspect {stage} output: {error}")
+        return False
+    return True
+
+
 def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
     """Generate Gerber files using KiCad CLI."""
     pcb_path = Path(kicad_pcb)
@@ -96,6 +114,7 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
 
     # Generate each Gerber layer
     for layer_id, filename in GERBER_LAYERS.items():
+        previous = set(out_path.iterdir())
         cmd = [
             "kicad-cli", "pcb", "export", "gerbers",
             "--layers", layer_id,
@@ -116,9 +135,12 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
         except subprocess.TimeoutExpired:
             print(f"  ERROR: {layer_id} generation timed out")
             return False
+        if not require_new_output(out_path, previous, "*.gbr", layer_id):
+            return False
 
     # Generate drill files
     print("  Generating drill files...")
+    previous = set(out_path.iterdir())
     drill_cmd = [
         "kicad-cli", "pcb", "export", "drill",
         "--format", "excellon",
@@ -133,9 +155,12 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         print(f"  ERROR: Drill generation failed: {e}")
         return False
+    if not require_new_output(out_path, previous, "*.drl", "Drill export"):
+        return False
 
     # Generate pick-and-place file
     print("  Generating pick-and-place file...")
+    previous = set(out_path.iterdir())
     pos_cmd = [
         "kicad-cli", "pcb", "export", "pos",
         "--format", "csv",
@@ -149,6 +174,8 @@ def generate_gerbers(kicad_pcb: str, output_dir: str) -> bool:
             return False
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         print(f"  ERROR: Pick-and-place generation failed: {e}")
+        return False
+    if not require_new_output(out_path, previous, "ghostblade-PickPlace.pos", "Placement export"):
         return False
 
     print(f"\nGerber generation complete. Files in: {out_path}")

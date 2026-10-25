@@ -135,8 +135,10 @@ module-install guards are tested with mocked tools, not a physical target.
 
 The [hardware export readiness review](docs/hardware-export-readiness.md) records
 concrete netlist, footprint, model, and rule-integration gaps. Fabrication export
-now fails on missing boards or failed KiCad commands; draft notes require the
-explicit `--notes-only` option and cannot be packaged as a Gerber archive.
+now fails on missing boards, failed KiCad commands, or commands that return
+success without new nonempty export files. File-presence checks do not validate
+fabrication geometry or electrical safety. Draft notes require the explicit
+`--notes-only` option and cannot be packaged as a Gerber archive.
 
 Validated locally on 2026-10-25:
 

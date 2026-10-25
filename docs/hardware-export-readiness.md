@@ -103,7 +103,16 @@ valid KiCad syntax or complete connectivity.
 ## Safe local export commands
 
 The export command now fails if the board is missing or any KiCad layer, drill,
-or placement command fails or times out. Export requires a new or empty output
+or placement command fails or times out. A zero process exit is not sufficient:
+each layer command must create a new, nonempty regular `*.gbr` file, the drill
+command must create new, nonempty regular `*.drl` files, and placement must
+create the requested `ghostblade-PickPlace.pos`. Matching directories, symlinks,
+and zero-byte files are rejected; a prior layer's files cannot satisfy a later
+command's check. The file checks use the exporter's existing Gerber-extension
+convention, not Protel extensions. They check presence and size, not file syntax,
+correct layer identity, pad geometry, drill completeness, or electrical safety.
+
+Export requires a new or empty output
 directory so old files cannot be included by accident. A failed run may leave
 partial exports; preserve them for diagnosis and retry into another empty
 location. No notes or ZIP are created after a failed export by that invocation.
@@ -144,7 +153,9 @@ make -C tests run
 The exporter regression tests exercise production Python control flow with
 mocked KiCad subprocess results and temporary path/archive fixtures. They cover
 missing inputs, occupied output directories, failure/timeout/missing-executable
-handling at every export stage, notes-only behavior, and duplicate-free ZIP
+handling at every export stage, zero-exit commands with missing, empty,
+directory, symlink, or unrelated output at every stage, notes-only behavior,
+and duplicate-free ZIP
 entries. They do not parse or export a real PCB. All eight optional overlays can
 compile locally without the missing base include; this does not prove base-tree
 symbol resolution or overlay compatibility on hardware.

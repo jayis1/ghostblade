@@ -5,6 +5,47 @@
 
 Author: jayis1
 
+## Reject successful export commands without artifacts (2026-10-25)
+
+Author: jayis1
+
+The fabrication exporter previously treated zero KiCad process exits as export
+success, even when no files were written. It could consequently package only
+draft notes. Each layer, drill and placement command now needs new, nonempty
+regular output of its expected filename/extension before the next stage runs.
+Directories, symlinks, empty files and unrelated filenames do not qualify;
+previous stages' files cannot satisfy a later command. Failure preserves partial
+outputs for diagnosis and prevents this invocation from creating notes or a ZIP.
+The [readiness guide](hardware-export-readiness.md#safe-local-export-commands)
+explains the file-presence contract and its limits.
+
+Verification:
+
+- New regressions reproduced 76 failing assertions before the production fix.
+  `python3 tests/test_generate_gerbers.py -v` now passes all 12 test methods,
+  including missing/empty/directory/symlink/unrelated output at every stage,
+  command errors/timeouts/missing executables, and successful synthetic packaging.
+- `make -C tests run` passes the complete host suite, including exporter tests.
+- `make docs-check validate-dts validate-netlist` passes its available checks;
+  default netlist validation still reports 14 existing exact-name warnings.
+- `make validate-netlist-strict` still fails on those same 14 names. No electrical
+  net was renamed to hide a mismatch.
+- `make -C software/dts all validate` passes for eight existing overlay outputs;
+  the base board is skipped because the external `rk3576.dtsi` is unavailable.
+- Independent read-only review found no blocking correctness/security defects;
+  `git diff --check` passes. No workflow files or hardware definitions changed.
+
+These are file-presence/control-flow checks with explicitly synthetic export
+fixtures, not real CAD exports or validation of layer identity, geometry, drill
+completeness, ERC/DRC or electrical safety. `kicad-cli`, an editable schematic,
+and a routed board are unavailable. Existing getting-started, contributor,
+build, flashing, diagram and troubleshooting guides were retained rather than
+duplicated. Package pins, footprints/models, power sequencing and new devicetree
+assignments still require the revision-matched evidence listed in the readiness
+guide; no speculative hardware additions or target flashing were performed.
+The unrelated edits in `/root/ghostblade` remain untouched; this run uses
+`/root/ghostblade-maintenance` on main.
+
 ## Preserve GPIO provider probe errors
 
 Author: jayis1
