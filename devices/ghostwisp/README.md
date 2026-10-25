@@ -143,7 +143,19 @@ runs host boot tests, GhostBlade isolation checks, header sanity checks, and
 all host Python protocol/profile tests. Python 3 is required; override its
 executable with `PYTHON=/path/to/python3`. Run only the build-free Python suite
 with `make -C devices/ghostwisp protocol-test` from the repository root.
-Set `PICO_SDK_PATH=...` to also probe the cross-compile.
+Set `PICO_SDK_PATH=...` to also probe the cross-compile. An explicitly requested
+probe requires `arm-none-eabi-gcc`, `cmake`, `ninja`, and
+`arm-none-eabi-readelf` on `PATH`; a missing tool fails the check before creating
+the cross-build directory. Leaving `PICO_SDK_PATH` unset still selects the
+host-only checks and explicitly skips the target probe.
+
+The host regressions in `tests/test_check_cross.py` trace to the roadmap's
+reproducible firmware-toolchain requirement. Controlled tool fixtures verify
+missing-prerequisite rejection, propagation through `make check`, configure
+and build failure (including a stale ELF), absent output, failed ELF inspection,
+and the helper's success path. These fixtures do not compile firmware or
+validate a real ELF; a successful target build still requires a real Pico SDK
+and ARM toolchain. Author: jayis1.
 
 The frame-boundary regressions exercise the length-bounded, integrity-checked
 companion contract in the interconnection requirements above: every truncated

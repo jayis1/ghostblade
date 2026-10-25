@@ -180,14 +180,15 @@ if [ "$MODE" = "cross" ]; then
     PICO_SDK_PATH="${3:?}"
     CROSS_BUILD_DIR="${4:?}"
 
-    if ! command -v arm-none-eabi-gcc &>/dev/null; then
-        echo "  SKIP cross-compile probe: arm-none-eabi-gcc not found"
-        exit 0
-    fi
-    if ! command -v cmake &>/dev/null; then
-        echo "  SKIP cross-compile probe: cmake not found"
-        exit 0
-    fi
+    # Author: jayis1 — this mode is explicitly requested, so missing tools
+    # must fail rather than turn an unperformed target build into a pass.
+    # Ninja is selected below; readelf is required for output inspection.
+    for tool in arm-none-eabi-gcc cmake ninja arm-none-eabi-readelf; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            fail "required cross-compile tool not found: $tool"
+            exit 1
+        fi
+    done
 
     echo "  Cross-compiler: $(arm-none-eabi-gcc --version | head -1)"
     echo "  Pico SDK: $PICO_SDK_PATH"
