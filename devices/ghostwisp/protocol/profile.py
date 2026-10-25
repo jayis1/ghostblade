@@ -233,7 +233,13 @@ class ProfileValidator:
                 f"expected {PROFILE_SCHEMA_VERSION}"
             )
 
-        # 2. Body size must not exceed the RAM-budget cap.
+        # 2. Enforce both bounds even for locally constructed/replaced headers.
+        # Wire decoding uses uint32, but this public validator also accepts
+        # dataclass instances that have not passed through the wire decoder.
+        if header.body_length < 0:
+            return ProfileValidationResult.reject(
+                f"profile body_length {header.body_length} must be nonnegative"
+            )
         if header.body_length > MAX_PROFILE_BODY_BYTES:
             return ProfileValidationResult.reject(
                 f"profile body_length {header.body_length} exceeds maximum "

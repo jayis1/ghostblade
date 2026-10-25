@@ -121,6 +121,32 @@ success without compiling, and no dependency file was produced. These tests do
 not cross-compile target firmware or validate physical hardware. No frozen
 GhostBlade source or interface is modified.
 
+## Profile length validation evidence
+
+Author: jayis1
+
+Phase 3's bounded profile parser now rejects negative `body_length` values in
+`ProfileValidator.validate()`, including locally constructed headers and
+headers changed after decoding. The existing unsigned wire field already
+prevents negative decoded values; this closes the public in-memory validation
+gap without changing wire encodings or the 50 KiB upper bound. Callers can
+check the header before accepting a body without treating a negative length
+as valid. `validate_body()` rejects these headers before reading the body or
+computing its checksum. This is size validation, not authentication.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_profile_length_bounds -v`
+from the repository root. Four host regressions cover negative values,
+revalidation of replaced headers, rejection before body access/checksum, valid
+zero/maximum boundaries, and oversized unsigned wire values. The original
+validator accepted negative lengths; the new tests exposed that defect before
+the fix. All four pass after the fix.
+
+Verification for this increment: `make -C devices/ghostwisp check` passed before
+and after (150 Python tests after, plus host boot/isolation/header checks).
+`make -C tests check` passed before and after with no frozen GhostBlade files
+modified. Target compilation was skipped because `PICO_SDK_PATH` was unset;
+no physical-board or hardware-in-the-loop validation was performed.
+
 ## Per-run rule
 
 Scheduled work should choose one incomplete item, inspect the current repository first, make a coherent bounded change, run the relevant local checks, and update this roadmap only with verified progress. GhostBlade is a frozen baseline. Work may add namespaced, backward-compatible companion services, APIs, UI surfaces, schemas, documentation, and tests, but must not redesign or regress existing GhostBlade hardware or behavior. With GhostWisp absent, GhostBlade must continue to behave exactly as before.
