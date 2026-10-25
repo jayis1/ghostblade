@@ -5,6 +5,34 @@
 
 Author: jayis1
 
+## Incremental libapex build dependencies
+
+Author: jayis1
+
+The C-library Makefile now records public and transitive header dependencies
+using compiler-generated `.d` files, preserves `all` as the default goal, and
+removes incomplete recipe targets on errors. The top-level `libapex` target no
+longer invokes independent `clean all` goals together: that discarded incremental
+outputs and could race under parallel Make. Help now correctly describes this
+as a C-library build, not a Python-extension build.
+
+Before the fix, the new six-test suite had four failures and one error: header
+changes were ignored, a deliberate header compilation error was not noticed,
+dependency files were missing, and the parallel top-level build removed an
+expected artifact. All six tests now pass using the production Makefiles and C
+source in temporary directories. They are included in `make -C tests run`, which
+also passed. See [build instructions](build-instructions.md#libapex) for clean
+builds when compiler flags, architecture, or pkg-config prefix changes; these
+inputs are not tracked automatically. No reproducibility claim is made.
+
+`make docs-check validate-dts validate-netlist` passed with the existing 14 exact
+net-name warnings (20/34 coverage). Eight overlays passed syntax validation via
+`make -C software/dts all validate`; the base remained skipped because the
+external `rk3576.dtsi` is absent. No schematic, footprint, DTS assignment, power
+timing, flashing procedure, or electrical rule was changed. Cross-builds,
+electrical validation, and hardware operation remain outside this host-only
+verification.
+
 ## Fenced-code examples in documentation checks
 
 Author: jayis1

@@ -141,6 +141,7 @@ Validated locally on 2026-10-25:
 - `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)
 - `make -C software/dts all validate` → eight overlays compiled and syntax-checked
 - `python3 tests/test_dts_build.py -v` → seven regression tests passed, including transitive include rebuilds, unchanged-build stability, failure recovery, default-goal preservation, and cleanup without the external base include
+- `python3 tests/test_libapex_build.py -v` → six native C-library build regressions passed; header dependency tracking and parallel incremental top-level builds are covered (no device access)
 - `python3 tests/test_doc_links.py -v` → 24 link-path regression tests passed; top-level fenced examples are excluded
 - `make -C tests run` → host-side unit test suite passed
 

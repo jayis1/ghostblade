@@ -18,7 +18,7 @@ help:
 	@echo "Targets:"
 	@echo "  firmware         - Build RP2350B firmware (requires Pico SDK)"
 	@echo "  driver           - Build Linux kernel SPI bridge driver"
-	@echo "  libapex          - Build userspace C library + Python bindings"
+	@echo "  libapex          - Build userspace C library (incremental)"
 	@echo "  tests            - Build and run host-side unit tests"
 	@echo "  dtb              - Compile device tree sources to DTB/DTBO"
 	@echo "  validate         - Validate DTS syntax"
@@ -53,7 +53,7 @@ driver:
 
 libapex:
 	@echo "Building libapex..."
-	$(MAKE) -C software/libapex clean all
+	$(MAKE) -C software/libapex all
 
 tests:
 	@echo "Building and running unit tests..."

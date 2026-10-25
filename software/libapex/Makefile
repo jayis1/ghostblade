@@ -1,6 +1,10 @@
 # libapex Makefile
 # Copyright (C) 2026 GhostBlade Project
 # SPDX-License-Identifier: GPL-2.0-or-later
+# Author: jayis1
+
+.DEFAULT_GOAL := all
+.DELETE_ON_ERROR:
 
 CC      ?= gcc
 AR      ?= ar
@@ -27,6 +31,9 @@ PKGCONFIG_FILE  := lib$(LIB_NAME).pc
 
 SRCS = $(SRC_DIR)/libapex.c
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SRCS))
+DEPS = $(OBJS:.o=.d)
+
+-include $(DEPS)
 
 .PHONY: all clean install uninstall static shared pkgconfig
 
@@ -36,7 +43,7 @@ $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -fPIC -c $< -o $@
+	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -MF $(@:.o=.d) -MT $@ -fPIC -c $< -o $@
 
 static: $(OBJ_DIR)/$(LIB_STATIC)
 

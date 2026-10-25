@@ -252,6 +252,9 @@ run: $(USERSPACE_TARGETS)
 	@echo "=== Running Device Tree Build Regression Tests ==="
 	@python3 test_dts_build.py -v
 	@echo ""
+	@echo "=== Running libapex Build Regression Tests ==="
+	@python3 test_libapex_build.py -v
+	@echo ""
 	@echo "=== Running Production Kernel SPI Buffer Tests ==="
 	@python3 test_kernel_spi_buffers.py -v
 	@echo ""

@@ -204,8 +204,36 @@ make -C software/linux-drivers \
 ### Native build
 
 ```bash
-make -C software/libapex clean all
+make -C software/libapex all
 ```
+
+Author: jayis1
+
+The top-level `make libapex` builds the same C library incrementally; it does not
+build the Python extension. Both entry points support parallel builds, for
+example `make -j4 libapex`. The GCC-compatible compiler generates `.d` files for
+the public header and transitive includes. Header edits rebuild affected objects
+and libraries; unchanged inputs preserve artifact timestamps. The default goal
+remains `all` after dependency files have been generated.
+
+Dependencies do not track compiler/flag changes, tool versions, or a new
+`PREFIX` for the generated pkg-config file. Clean explicitly before switching
+those inputs or moving between native and cross-compilation. Keep cleaning and
+building as separate commands: `clean all` in a single parallel Make invocation
+can remove artifacts while another goal is building them.
+
+```sh
+make -C software/libapex clean
+make -C software/libapex -j4 all
+python3 tests/test_libapex_build.py -v
+```
+
+The six host regression tests build the production C library in temporary
+directories and check header/transitive-header rebuilds, unchanged default and
+parallel top-level builds, compilation-failure recovery, and cleanup/rebuild.
+They do not open a device, build Python bindings, validate cross-compilation, or
+establish bit-for-bit reproducibility. Existing build directories created before
+dependency tracking was introduced should also be cleaned once.
 
 ### Cross-build
 
