@@ -14,8 +14,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def production_function(source, name):
-    start = source.index("static int " + name + "(")
+def production_function(source, name, return_type="int"):
+    start = source.index("static " + return_type + " " + name + "(")
     brace = source.index("{", start)
     depth = 1
     end = brace + 1
@@ -29,7 +29,7 @@ class KernelSpiBuffers(unittest.TestCase):
     def test_production_helpers(self):
         source = (ROOT / "software/linux-drivers/src/apex_bridge.c").read_text()
         functions = "\n".join(production_function(source, name) for name in (
-            "apex_spi_xfer", "apex_build_frame"))
+            "apex_spi_xfer", "apex_build_frame", "apex_validate_frame"))
         harness = r'''
 #include <assert.h>
 #include <errno.h>
@@ -45,6 +45,8 @@ class KernelSpiBuffers(unittest.TestCase):
 #define READ_ONCE(x) (x)
 #define min_t(type, a, b) ((type)(a) < (type)(b) ? (type)(a) : (type)(b))
 #define cpu_to_le16(x) (x)
+#define le16_to_cpu(x) (x)
+#define pr_warn_ratelimited(...) ((void)0)
 #define dev_err(...) ((void)0)
 struct apex_spi_header {
     uint8_t sync, cmd;
@@ -58,10 +60,10 @@ struct spi_transfer {
     size_t len;
     int speed_hz, bits_per_word, cs_change;
 };
-struct spi_message { struct spi_transfer *xfer; };
+struct spi_message { struct spi_transfer *xfer; size_t actual_length; };
 struct apex_bridge_dev { void *spi; int lock, spi_err_count; unsigned long flags; };
 static int spi_speed_hz = 50000000;
-static int sync_calls, sync_error;
+static int sync_calls, sync_error, short_transfer;
 static void mutex_lock(int *lock) { (void)lock; }
 static void mutex_unlock(int *lock) { (void)lock; }
 static void set_bit(int bit, unsigned long *flags) { *flags |= 1UL << bit; }
@@ -74,6 +76,7 @@ static int spi_sync(void *spi, struct spi_message *msg) {
     (void)spi; ++sync_calls;
     if (sync_error) return sync_error;
     memset(msg->xfer->rx_buf, 0x5A, msg->xfer->len);
+    msg->actual_length = msg->xfer->len - short_transfer;
     return 0;
 }
 /* CRC stubs isolate buffer ownership; CRC correctness has separate tests. */
@@ -81,12 +84,28 @@ static uint64_t apex_crc64(const uint8_t *p, size_t n) { (void)p; (void)n; retur
 static uint32_t apex_crc32(const uint8_t *p, size_t n) { (void)p; (void)n; return 0; }
 static void put_unaligned_le64(uint64_t value, void *p) { memcpy(p, &value, 8); }
 static void put_unaligned_le32(uint32_t value, void *p) { memcpy(p, &value, 4); }
+static uint64_t get_unaligned_le64(const void *p) { uint64_t v; memcpy(&v, p, 8); return v; }
+static uint32_t get_unaligned_le32(const void *p) { uint32_t v; memcpy(&v, p, 4); return v; }
 '''
         main = r'''
 int main(void) {
     uint8_t frame[APEX_SPI_FRAME_SIZE_MAX], rx[APEX_SPI_FRAME_SIZE_MAX];
     uint8_t payload[] = { 0x13, 0x37, 0xAA };
     struct apex_bridge_dev dev = {0};
+    uint8_t cmd = 0;
+    uint16_t parsed_len = 0;
+    const uint8_t *parsed_payload = NULL;
+    assert(apex_build_frame(0xFF, NULL, 0, frame, sizeof(frame)) == 20);
+    assert(apex_validate_frame(frame, 20, &cmd, &parsed_len, &parsed_payload) == 0);
+    assert(cmd == 0xFF && parsed_len == 0 && parsed_payload == frame + 16);
+    for (size_t n = 0; n < 20; ++n)
+        assert(apex_validate_frame(frame, n, &cmd, &parsed_len, &parsed_payload) == -EBADMSG);
+    /* CRC stubs allow an otherwise integrity-valid nonzero reserved field. */
+    for (size_t n = 4; n < 8; ++n) {
+        frame[n] = 1;
+        assert(apex_validate_frame(frame, 20, &cmd, &parsed_len, &parsed_payload) == -EBADMSG);
+        frame[n] = 0;
+    }
     for (size_t n = 0; n <= sizeof(payload); ++n) {
         memset(frame, 0xA5, sizeof(frame));
         int len = apex_build_frame(0xFF, payload, n, frame, sizeof(frame));
@@ -121,6 +140,16 @@ int main(void) {
     sync_error = -EIO;
     assert(apex_spi_xfer(&dev, frame, 20, rx, sizeof(rx)) == -EIO);
     assert(dev.spi_err_count == 1 && dev.flags == (1UL << APEX_STATE_SPI_ERROR));
+    sync_error = 0;
+    short_transfer = 1;
+    assert(apex_spi_xfer(&dev, frame, 20, rx, sizeof(rx)) == -EIO);
+    assert(dev.spi_err_count == 2);
+    short_transfer = 20;
+    assert(apex_spi_xfer(&dev, frame, 20, rx, sizeof(rx)) == -EIO);
+    assert(dev.spi_err_count == 3);
+    short_transfer = 0;
+    assert(apex_spi_xfer(&dev, frame, 20, rx, sizeof(rx)) == 20);
+    assert(dev.spi_err_count == 3);
     return 0;
 }
 '''

@@ -2,6 +2,7 @@
  * spi_protocol.c — SPI Bridge Protocol Handler for RP2350B
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements the SPI0 slave protocol handler that receives,
@@ -663,7 +664,14 @@ static void handle_cmd_sdr_stream(const uint8_t *payload, uint16_t len) {
          * BUG FIX: Previously this function only toggled GPIO enables
          * but never started the DMA engine, so no IQ data would ever
          * be captured or sent to the host. */
-        sdr_dma_start();
+        if (sdr_dma_start() != 0) {
+            /* A failed start must leave the receive path off and allow
+             * the next start command to retry instead of appearing active. */
+            device_state.sdr_streaming = false;
+            device_state.sdr_rx_enabled = false;
+            apex_sdr_rx_enable(false);
+            apex_sdr_lna_enable(false);
+        }
     } else if (!enable && device_state.sdr_streaming) {
         /* Stop SDR IQ streaming */
         device_state.sdr_streaming = false;

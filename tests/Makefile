@@ -257,6 +257,7 @@ run: $(USERSPACE_TARGETS)
 	@echo ""
 	@echo "=== Running Production Kernel SPI Buffer Tests ==="
 	@python3 test_kernel_spi_buffers.py -v
+	@python3 test_spi_stream_production.py -v
 	@echo ""
 	@echo "=== Running Production Python Extension Lifecycle Tests ==="
 	@python3 test_pyapex_lifecycle.py -v

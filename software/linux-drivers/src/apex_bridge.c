@@ -3,6 +3,7 @@
  * apex_bridge.c — Linux Kernel Driver for GhostBlade SPI Bridge
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  *
  * This driver implements a character device interface for the SPI bridge
  * between the RK3576 SoC (Linux host) and the RP2350B coprocessor (MCU).
@@ -262,6 +263,10 @@ static int apex_spi_xfer(struct apex_bridge_dev *dev,
     ret = spi_sync(dev->spi, &msg);
     mutex_unlock(&dev->lock);
 
+	/* Do not parse the unreceived tail after a short successful transfer. */
+	if (!ret && msg.actual_length != tx_len)
+		ret = -EIO;
+
     if (ret < 0) {
         dev_err(&dev->spi->dev, "SPI transfer failed: %d\n", ret);
         set_bit(APEX_STATE_SPI_ERROR, &dev->flags);
@@ -353,6 +358,10 @@ static int apex_validate_frame(const uint8_t *frame, size_t frame_len,
 
     hdr = (const struct apex_spi_header *)frame;
 
+	/* Match the MCU's reserved-field contract before accepting a frame. */
+	if (hdr->reserved)
+		return -EBADMSG;
+
     /* Check sync byte */
     if (hdr->sync != APEX_SPI_SYNC_BYTE) {
         pr_warn_ratelimited("apex_bridge: invalid sync byte in received frame\n");
@@ -373,8 +382,8 @@ static int apex_validate_frame(const uint8_t *frame, size_t frame_len,
         return -EBADMSG;
 
     /* Check total frame size */
-    if (frame_len < APEX_SPI_HDR_SIZE + len + APEX_SPI_CRC32_SIZE)
-        return -EBADMSG;
+	if (frame_len < (size_t)APEX_SPI_HDR_SIZE + len + APEX_SPI_CRC32_SIZE)
+		return -EBADMSG;
 
     /* Check payload CRC-32, including zero-length payloads. A zero-length
      * frame still carries its four-byte trailer; accepting it unchecked
