@@ -133,7 +133,7 @@ concrete netlist, footprint, model, and rule-integration gaps. Fabrication expor
 now fails on missing boards or failed KiCad commands; draft notes require the
 explicit `--notes-only` option and cannot be packaged as a Gerber archive.
 
-Validated locally on 2026-10-24:
+Validated locally on 2026-10-25:
 
 - `python3 tools/check_internal_links.py` → no broken inline or reference-definition link paths
 - `python3 tools/validate_dts.py` → existing selected DTS cross-reference checks passed
@@ -141,7 +141,7 @@ Validated locally on 2026-10-24:
 - `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)
 - `make -C software/dts all validate` → eight overlays compiled and syntax-checked
 - `python3 tests/test_dts_build.py -v` → three build-coverage regression tests passed
-- `python3 tests/test_doc_links.py -v` → 16 link-path regression tests passed
+- `python3 tests/test_doc_links.py -v` → 24 link-path regression tests passed; top-level fenced examples are excluded
 - `make -C tests run` → host-side unit test suite passed
 
 The base DTB was skipped because the required `rk3576.dtsi` is not included.

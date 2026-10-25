@@ -5,6 +5,37 @@
 
 Author: jayis1
 
+## Fenced-code examples in documentation checks
+
+Author: jayis1
+
+The link-path checker now excludes top-level backtick and tilde fenced code
+blocks before extracting inline links and reference definitions. Example paths
+inside those blocks are not rendered links and no longer cause false failures.
+Eight new regression tests exercise both command entry points, covering marker
+kinds and lengths, up to three leading spaces, longer closing markers, invalid
+closers, unclosed blocks, invalid backtick info strings, and real missing links
+after a block. The expanded 24-test suite passes; the new fixtures reproduced
+failures before the filter was added.
+
+The filter is deliberately limited: it is not a Markdown renderer and does not
+parse container fences inside blockquotes/lists, inline code spans, or general
+indented code blocks. Heading anchors and undefined reference labels remain
+outside the path check's scope. External URLs are not fetched.
+
+The full `make -C tests run` host suite also passes. Local commands:
+`python3 tests/test_doc_links.py -v`, `make docs-check`,
+`make validate-dts validate-netlist`, and `make -C software/dts all validate`.
+The selected DTS checks pass; exact net-name coverage remains 20/34 with the
+same 14 warnings. All eight overlays compile and syntax-check; the base remains
+skipped without `rk3576.dtsi`. Cross-build prerequisite checks fail because the
+cross-compilers, CMake, Pico SDK, and target kernel build tree are absent.
+`kicad-cli` is unavailable, and editable schematic/PCB sources are not tracked;
+no electrical assignments, power timing, flashing procedures, or design-rule
+settings were changed. Build hygiene also now ignores DTS `.pp` intermediates
+and the GhostWisp I2C test executable, and repairs a concatenated `modules.order`
+ignore entry discovered after running the checks.
+
 ## Exact manifest net-name coverage
 
 Author: jayis1
@@ -82,9 +113,10 @@ firmware cross-build; no hardware assignments or flashing procedures changed.
 
 This is a path checker, not a Markdown renderer. Undefined reference labels,
 multiline definitions, heading anchors, HTML links, and reference precedence are
-not validated. Four-space-indented definitions are ignored; fenced-code examples
-are not filtered. Same-line definitions containing parentheses in filenames are
-supported, but nested-parenthesis inline destinations remain outside its scope.
+not validated. Four-space-indented definitions are ignored. Top-level fenced-code
+examples are now filtered as described above. Same-line definitions containing
+parentheses in filenames are supported, but nested-parenthesis inline destinations
+remain outside its scope.
 
 ## Cross-build prerequisite exit status and target checks
 

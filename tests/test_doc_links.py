@@ -109,6 +109,39 @@ class DocLinksTest(unittest.TestCase):
     def test_reference_definitions_allow_parentheses_in_paths(self):
         self.check_document('[ref]: part(1).md\n', 0, ('docs/part(1).md',))
 
+    def test_fenced_examples_are_not_live_links(self):
+        for fence in ('```', '~~~', '````', '~~~~'):
+            with self.subTest(fence=fence):
+                self.check_document(
+                    f'{fence}markdown\n[example](absent.md)\n'
+                    f'[ref]: absent.png\n{fence}\n[real](../README.md)\n',
+                    0, ('README.md',))
+
+    def test_indented_fences_and_longer_closers(self):
+        self.check_document('   ```markdown\n[example](absent.md)\n'
+                            '  `````  \n[real](../README.md)\n', 0, ('README.md',))
+
+    def test_short_or_wrong_marker_does_not_close_fence(self):
+        self.check_document('````markdown\n```\n~~~\n[example](absent.md)\n'
+                            '````\n[real](../README.md)\n', 0, ('README.md',))
+
+    def test_closing_fence_cannot_have_info_text(self):
+        self.check_document('```\n```not-a-closer\n[example](absent.md)\n```\n', 0)
+
+    def test_unclosed_fence_extends_to_end_of_document(self):
+        self.check_document('~~~markdown\n[example](absent.md)\n[ref]: absent.png\n', 0)
+
+    def test_live_missing_links_after_fence_still_fail(self):
+        for live in ('[missing](absent.md)', '[ref]: absent.md'):
+            with self.subTest(live=live):
+                self.check_document(f'```\n[example](not-live.md)\n```\n{live}\n', 1)
+
+    def test_backtick_in_info_string_is_not_a_fence(self):
+        self.check_document('```bad`info\n[missing](absent.md)\n', 1)
+
+    def test_four_space_fence_is_not_a_top_level_fence(self):
+        self.check_document('    ```\n[missing](absent.md)\n', 1)
+
     def test_missing_root_fails_instead_of_false_success(self):
         with tempfile.TemporaryDirectory(prefix='ghostblade-links-') as directory:
             result = subprocess.run(

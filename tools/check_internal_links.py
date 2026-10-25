@@ -28,13 +28,38 @@ REFERENCE_DEFINITION = re.compile(
 )
 
 
+def without_fenced_code(content):
+    """Exclude top-level backtick/tilde fences, preserving line boundaries.
+
+    This is intentionally not a full Markdown parser: container fences inside
+    blockquotes/lists and inline/indented code are outside this filter's scope.
+    """
+    lines = []
+    fence = None
+    for line in content.splitlines(keepends=True):
+        candidate = re.match(r'^ {0,3}(`{3,}|~{3,})([^\r\n]*)', line)
+        if fence is not None:
+            if candidate:
+                marker, suffix = candidate.groups()
+                if (marker[0] == fence[0] and len(marker) >= len(fence)
+                        and not suffix.strip(' \t')):
+                    fence = None
+            lines.append('\n')
+        elif candidate and not (candidate[1][0] == '`' and '`' in candidate[2]):
+            fence = candidate[1]
+            lines.append('\n')
+        else:
+            lines.append(line)
+    return ''.join(lines)
+
+
 def check_links(root):
     """Return (source, destination, resolved target) tuples for missing paths."""
     broken = []
     for source in sorted(root.rglob('*.md')):
         if '.git' in source.relative_to(root).parts:
             continue
-        content = source.read_text(encoding='utf-8')
+        content = without_fenced_code(source.read_text(encoding='utf-8'))
         matches = list(INLINE_LINK.finditer(content))
         matches.extend(REFERENCE_DEFINITION.finditer(content))
         for match in matches:

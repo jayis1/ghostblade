@@ -20,6 +20,8 @@ test_crc_validation
 test_es8388_audio
 test_ghostwisp_boot
 test_ghostwisp_peripherals
+# Author: jayis1
+test_ghostwisp_i2c_addresses
 
 # Build artifacts
 *.o
@@ -29,4 +31,4 @@ test_ghostwisp_peripherals
 .*.cmd
 .tmp_versions/
 Module.symvers
-modules.ordertest_ghostwisp_peripherals
+modules.order

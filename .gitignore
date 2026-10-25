@@ -66,6 +66,8 @@ dist/
 # Device tree build
 *.dtb
 *.dtbo
+# Author: jayis1 — preprocessed DTS intermediates
+/software/dts/*.pp
 
 # Logs
 *.log
