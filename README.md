@@ -151,7 +151,7 @@ Validated locally on 2026-10-25:
 - `make -C software/dts all validate` → eight overlays compiled and syntax-checked
 - `python3 tests/test_dts_build.py -v` → seven regression tests passed, including transitive include rebuilds, unchanged-build stability, failure recovery, default-goal preservation, and cleanup without the external base include
 - `python3 tests/test_libapex_build.py -v` → six native C-library build regressions passed; header dependency tracking and parallel incremental top-level builds are covered (no device access)
-- `python3 tests/test_doc_links.py -v` → 24 link-path regression tests passed; top-level fenced examples are excluded
+- `python3 tests/test_doc_links.py -v` → 34 link-path regression tests passed; balanced/escaped inline parentheses are checked without truncation, and top-level fenced examples are excluded (see [path-check scope](docs/build-instructions.md#documentation-path-diagnostics))
 - `make -C tests run` → host-side unit test suite passed
 
 The base DTB was skipped because the required `rk3576.dtsi` is not included.

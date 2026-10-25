@@ -5,6 +5,44 @@
 
 Author: jayis1
 
+## Complete inline link destinations (2026-10-25)
+
+Author: jayis1
+
+The inline path regex stopped at the first closing parenthesis, so a valid
+`part(1).md` was checked as `part(1`. This rejected valid filenames and could
+hide a missing full destination when the truncated prefix existed. A bounded
+character scan now tracks balanced parentheses and skips Markdown punctuation
+escapes. Angle destinations and reference definitions retain their existing
+coverage; punctuation escapes are decoded before percent-encoded URL paths.
+Malformed/unclosed inline destinations are ignored, not certified as valid
+Markdown. See [path diagnostics](build-instructions.md#documentation-path-diagnostics)
+for the supported subset and exclusions.
+
+Verification:
+
+- New tests reproduced 11 failing assertions against the original checker.
+- `python3 tests/test_doc_links.py -v` passes 34 tests via both real Python
+  entry points, plus a production Make target failure-propagation fixture.
+  Coverage includes nested/escaped parentheses, encoded paths, titles and
+  fragments, complete-path diagnostics, existing-prefix false success, and
+  unclosed destinations. Fixtures contain no real hardware evidence.
+- `make -C tests run` passes the complete host suite, including these tests.
+- `make docs-check validate-dts validate-netlist` passes available checks;
+  netlist validation retains 14 existing exact-name warnings (20/34 coverage).
+- `make validate-netlist-strict` still exits nonzero for those existing names.
+- `make -C software/dts all validate` passes checks for eight overlay outputs;
+  the base remains skipped without the external `rk3576.dtsi`.
+
+Existing setup, contribution, build, flashing, FAQ and diagram guides were
+retained rather than duplicated. No electrical assignments, CAD libraries,
+power timing, or flashing procedures were invented. Editable schematic/PCB
+sources and `kicad-cli` remain unavailable; ERC/DRC, target builds and physical
+board operation are not verified by this run. The
+[hardware readiness review](hardware-export-readiness.md) remains applicable.
+No workflow files were added or changed. Unrelated local changes in the
+separate `/root/ghostblade` checkout were left untouched.
+
 ## Reject successful export commands without artifacts (2026-10-25)
 
 Author: jayis1

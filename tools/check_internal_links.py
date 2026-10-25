@@ -13,11 +13,49 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
-# Deliberately limited to inline destinations without nested parentheses.
-INLINE_LINK = re.compile(
-    r'\[[^\]]*\]\(\s*(?:<([^>\n]*)>|([^\s)]+))'
-    r'(?:\s+(?:"[^"\n]*"|\'[^\'\n]*\'))?\s*\)'
+INLINE_START = re.compile(r'\[[^\]\n]*\]\([ \t]*')
+INLINE_END = re.compile(
+    r'(?:[ \t]+(?:"[^"\n]*"|\'[^\'\n]*\'))?[ \t]*\)'
 )
+# Markdown backslash escapes apply only to ASCII punctuation, before URL decoding.
+MARKDOWN_ESCAPE = re.compile(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])')
+
+
+def inline_destinations(content):
+    """Yield inline destinations without truncating balanced/escaped parentheses.
+
+    This is a path-checking subset, not a complete Markdown syntax validator.
+    Malformed/unclosed destinations are ignored rather than checked as prefixes.
+    """
+    for match in INLINE_START.finditer(content):
+        start = position = match.end()
+        if position < len(content) and content[position] == '<':
+            end = content.find('>', position + 1)
+            if (end != -1 and '\n' not in content[position:end]
+                    and INLINE_END.match(content, end + 1)):
+                yield content[position + 1:end]
+            continue
+        depth = 0
+        while position < len(content):
+            char = content[position]
+            if (char == '\\' and position + 1 < len(content)
+                    and MARKDOWN_ESCAPE.match(content, position)):
+                position += 2
+                continue
+            if char.isspace():
+                break
+            if char == '(':
+                depth += 1
+            elif char == ')':
+                if depth == 0:
+                    break
+                depth -= 1
+            position += 1
+        if (position > start and depth == 0
+                and INLINE_END.match(content, position)):
+            yield content[start:position]
+
+
 # Same-line definitions with at most three leading spaces. Check every
 # destination, including unused definitions; resolving reference uses is outside
 # this path check's scope. Multiline definitions are deliberately not parsed.
@@ -60,10 +98,11 @@ def check_links(root):
         if '.git' in source.relative_to(root).parts:
             continue
         content = without_fenced_code(source.read_text(encoding='utf-8'))
-        matches = list(INLINE_LINK.finditer(content))
-        matches.extend(REFERENCE_DEFINITION.finditer(content))
-        for match in matches:
-            destination = match.group(1) or match.group(2) or ''
+        destinations = list(inline_destinations(content))
+        destinations.extend(match.group(1) or match.group(2) or ''
+                            for match in REFERENCE_DEFINITION.finditer(content))
+        for destination in destinations:
+            destination = MARKDOWN_ESCAPE.sub(r'\1', destination)
             try:
                 url = urlsplit(destination)
             except ValueError:

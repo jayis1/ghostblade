@@ -142,6 +142,55 @@ class DocLinksTest(unittest.TestCase):
     def test_four_space_fence_is_not_a_top_level_fence(self):
         self.check_document('    ```\n[missing](absent.md)\n', 1)
 
+    def test_balanced_parentheses_in_inline_paths(self):
+        self.check_document('[guide](part(1).md) ![image](images/a(b(c)).png)', 0,
+                            ('docs/part(1).md', 'docs/images/a(b(c)).png'))
+
+    def test_missing_parenthesized_paths_fail(self):
+        for link in ('[guide](absent(1).md)', '![image](a(b(c)).png)'):
+            with self.subTest(link=link):
+                self.check_document(link, 1)
+
+    def test_parenthesized_path_with_title_query_and_fragment(self):
+        self.check_document('[guide](part(1).md?raw=1#intro "Read (this)")', 0,
+                            ('docs/part(1).md',))
+
+    def test_escaped_parentheses_are_literal_path_characters(self):
+        self.check_document(r'[one](part\(1\).md) [two](part\).md)', 0,
+                            ('docs/part(1).md', 'docs/part).md'))
+
+    def test_angle_and_reference_destinations_unescape_punctuation(self):
+        self.check_document(r'[one](<part\(1\).md>)' + '\n' +
+                            r'[ref]: part\(1\).md' + '\n', 0,
+                            ('docs/part(1).md',))
+
+    def test_encoded_parentheses_are_decoded_after_markdown_parsing(self):
+        self.check_document('[one](part%281%29.md) [two](part%29.md)', 0,
+                            ('docs/part(1).md', 'docs/part).md'))
+
+    def test_multiple_links_are_checked_independently(self):
+        self.check_document('[ok](part(1).md) [missing](absent(2).md)', 1,
+                            ('docs/part(1).md',))
+
+    def test_existing_prefix_cannot_hide_missing_full_path(self):
+        self.check_document('[guide](part(1).md)', 1, ('docs/part(1',))
+
+    def test_unbalanced_destination_is_not_a_markdown_link(self):
+        self.check_document('[not a link](absent(1).md', 0)
+
+    def test_make_docs_check_propagates_parenthesized_missing_path(self):
+        with tempfile.TemporaryDirectory(prefix='ghostblade-links-make-') as directory:
+            root = Path(directory)
+            (root / 'tools').mkdir()
+            for name in ('check_internal_links.py', 'check_links.py'):
+                shutil.copy2(TOOLS / name, root / 'tools' / name)
+            shutil.copy2(TOOLS.parent / 'Makefile', root / 'Makefile')
+            (root / 'README.md').write_text('[guide](absent(1).md)', encoding='utf-8')
+            result = subprocess.run(['make', 'docs-check'], cwd=root,
+                                    capture_output=True, text=True, check=False)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('absent(1).md', result.stdout)
+
     def test_missing_root_fails_instead_of_false_success(self):
         with tempfile.TemporaryDirectory(prefix='ghostblade-links-') as directory:
             result = subprocess.run(

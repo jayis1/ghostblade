@@ -299,6 +299,25 @@ python3 tools/validate_dts.py
 python3 tools/validate_netlist.py
 ```
 
+### Documentation path diagnostics
+
+Author: jayis1
+
+`make docs-check` checks local inline links/images and same-line reference
+definitions. Bare inline destinations may contain balanced nested parentheses;
+backslash-escaped ASCII punctuation is decoded before URL percent escapes.
+For example, `part(1).md`, `part\(1\).md`, and `part%281%29.md` refer to the same
+filename. Diagnostics report the complete destination, not the prefix before
+its first closing parenthesis. Missing paths fail both Python entry points and
+the Make target; restore the file or correct the destination's spelling/case.
+
+Run `python3 tests/test_doc_links.py -v` for disposable-fixture regressions,
+also included in `make tests`. Top-level fenced code examples are excluded.
+This remains a limited path checker: anchors, external URL availability,
+undefined reference uses, inline/indented code, container fences, and complete
+Markdown syntax validation are outside its scope. Unclosed inline destinations
+are not treated as links; a passing result does not certify valid Markdown.
+
 ### Handshake assignment diagnostics
 
 Author: jayis1
