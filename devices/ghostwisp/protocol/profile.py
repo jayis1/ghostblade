@@ -32,6 +32,7 @@ module.  All deserialization is struct.unpack from validated byte buffers.
 
 from __future__ import annotations
 
+import binascii
 import dataclasses
 import struct
 from typing import Optional
@@ -260,4 +261,35 @@ class ProfileValidator:
                 "profile_id is all zeros; unset identity is not a valid profile"
             )
 
+        return ProfileValidationResult.accept()
+
+    @staticmethod
+    def validate_body(
+        header: ProfileHeader,
+        body: bytes | bytearray,
+        now_utc_ms: int = 0,
+    ) -> ProfileValidationResult:
+        """Check a complete body against a decoded header. Author: jayis1.
+
+        Header constraints and exact length are checked before checksum work.
+        No body copy, allocation, persistence, or execution is performed.
+        Callers must bound transport buffering and prevent concurrent mutation
+        of mutable buffers during validation and subsequent use. CRC is not
+        authentication; signatures and atomic storage remain caller duties.
+        Time handling is identical to validate(): zero skips expiry checking.
+        """
+        result = ProfileValidator.validate(header, now_utc_ms=now_utc_ms)
+        if not result.ok:
+            return result
+        if len(body) != header.body_length:
+            return ProfileValidationResult.reject(
+                f"profile body length mismatch: got {len(body)}, "
+                f"expected {header.body_length}"
+            )
+        crc = binascii.crc32(body) & 0xFFFFFFFF
+        if crc != header.body_crc32:
+            return ProfileValidationResult.reject(
+                f"profile body CRC mismatch: got 0x{crc:08x}, "
+                f"expected 0x{header.body_crc32:08x}"
+            )
         return ProfileValidationResult.accept()

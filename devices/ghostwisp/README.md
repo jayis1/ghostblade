@@ -175,6 +175,36 @@ buffers, all truncated header prefixes, CRC-valid malformed profile envelopes,
 and conforming headers with following body bytes. They do not verify physical
 hardware, signature enforcement, or a complete profile-transfer service.
 
+### Complete profile body integrity
+
+Author: jayis1
+
+After decoding and validating the header, callers can now use
+`ProfileValidator.validate_body(header, body, now_utc_ms=...)` to check the
+complete reassembled body. It returns a `ProfileValidationResult`: reject
+`ok=False` without storing or using a partial profile. Header validation runs
+first, then the exact declared length, then CRC-32/ISO-HDLC against the existing
+`body_crc32` field. The 50 KiB header limit therefore applies before checksum
+work. Empty bodies are valid when declared length and CRC are both zero.
+Existing header validation and wire encodings are unchanged.
+
+The checksum covers only the body, not its header. Its standard check value is
+`0xCBF43926` for ASCII `123456789`; parameters are polynomial `0x04C11DB7`,
+initial value `0xFFFFFFFF`, reflected input/output, and final XOR `0xFFFFFFFF`.
+Callers must still bound receive buffers, authenticate the header and body,
+verify signatures, and commit storage atomically. Do not mutate a `bytearray`
+during validation or between validation and use. Supply synchronized UTC time
+for expiry checking; the existing `now_utc_ms=0` convention skips that check.
+This helper neither receives transfers nor authenticates, executes, or installs
+a profile.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_profile_body -v` from the
+repository root, or run `make -C devices/ghostwisp check` for the full host suite.
+Regressions include the independent checksum check value, empty and 50 KiB
+bodies, every truncated prefix and single-bit corruption of the check string,
+trailing data, wrong CRCs, expiry boundaries, and rejection before checksum
+work for invalid headers or mismatched lengths. No hardware is accessed.
+
 Build the RP2350B image with Pico SDK 2.0 or newer. The committed `ghostwisp`
 board definition selects RP2350B, 16 MiB QSPI, and UART1 on GPIO36/GPIO37:
 
