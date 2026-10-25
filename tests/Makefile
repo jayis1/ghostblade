@@ -264,6 +264,7 @@ run: $(USERSPACE_TARGETS)
 	@python3 test_kernel_pm_production.py -v
 	@python3 test_kernel_gpio_production.py -v
 	@python3 test_spi_stream_production.py -v
+	@python3 test_spi_rejected_payload.py -v
 	@echo ""
 	@echo "=== Running Production Python Extension Lifecycle Tests ==="
 	@python3 test_pyapex_lifecycle.py -v

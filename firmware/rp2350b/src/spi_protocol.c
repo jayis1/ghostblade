@@ -1316,6 +1316,10 @@ int spi_protocol_process(void) {
                     /* Frame valid — dispatch */
                     dispatch_frame();
                     frames_processed++;
+                } else {
+                    /* Rejected NFC/config data must not persist until another
+                     * command overwrites it. Dispatch wipes accepted payloads. */
+                    secure_wipe(rx_ctx.payload_buf, rx_ctx.expected_payload_len);
                 }
                 /* Reset for next frame */
                 rx_ctx.state = RX_STATE_IDLE;
