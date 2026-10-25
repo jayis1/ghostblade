@@ -125,11 +125,12 @@ class ProfileHeader:
         )
 
     @classmethod
-    def decode(cls, data: bytes) -> "ProfileHeader":
+    def decode(cls, data: bytes | bytearray) -> "ProfileHeader":
         """Decode raw bytes into a ProfileHeader.
 
-        Raises ProtocolError if the buffer is too short.  Does NOT perform
-        semantic validation — call ProfileValidator.validate() for that.
+        Raises ProtocolError for a short buffer or nonzero reserved fields.
+        Does NOT perform semantic validation — call ProfileValidator.validate()
+        for that. Trailing profile body bytes remain the caller's responsibility.
         """
         if len(data) < _PROFILE_STRUCT_SIZE:
             raise ProtocolError(
@@ -147,6 +148,12 @@ class ProfileHeader:
             body_length,
             body_crc32,
         ) = struct.unpack_from(_PROFILE_STRUCT_FMT, data)
+        # Author: jayis1 — reject undefined wire data before it is discarded.
+        # CRC integrity at the enclosing frame layer does not relax this rule.
+        if _reserved != 0:
+            raise ProtocolError("ProfileHeader: reserved byte must be zero")
+        if _reserved2 != 0:
+            raise ProtocolError("ProfileHeader: reserved word must be zero")
         return cls(
             profile_id=profile_id.rstrip(b"\x00"),
             schema_version=schema_version,

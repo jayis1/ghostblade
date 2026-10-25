@@ -155,6 +155,26 @@ establish pairing, authenticated integrity, stream reassembly, or physical
 confirmation enforcement.
 See [boot-contract.md](docs/boot-contract.md) for what requires physical-board HIL verification.
 
+### Profile header validation
+
+Author: jayis1
+
+The existing profile wire format in `protocol/profile.py` requires its reserved
+byte and reserved 16-bit word to be zero. `ProfileHeader.decode()` rejects
+nonzero values with `ProtocolError` before returning a parsed header, even when
+the enclosing frame has a valid CRC. Conforming encodings and unknown profile
+flag preservation are unchanged. Header decoding still permits following body
+bytes; callers must validate the header with `ProfileValidator.validate()`
+before accepting the body and separately verify body integrity and signatures.
+CRC is not authentication.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_profile_reserved -v` from
+the repository root. These host regressions cover every nonzero reserved-byte
+value, every reserved-word bit and the all-bits-set value, immutable and mutable
+buffers, all truncated header prefixes, CRC-valid malformed profile envelopes,
+and conforming headers with following body bytes. They do not verify physical
+hardware, signature enforcement, or a complete profile-transfer service.
+
 Build the RP2350B image with Pico SDK 2.0 or newer. The committed `ghostwisp`
 board definition selects RP2350B, 16 MiB QSPI, and UART1 on GPIO36/GPIO37:
 
