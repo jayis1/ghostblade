@@ -2,6 +2,7 @@
  * spi0_isr.c — SPI0 Slave Interrupt Service Routine for RP2350B
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements the SPI0 slave interrupt handler and frame
@@ -116,6 +117,7 @@ static struct {
     uint32_t frames_validated;
     uint32_t frames_rejected_sync;
     uint32_t frames_rejected_hdr_crc;
+    uint32_t frames_rejected_reserved;
     uint32_t frames_rejected_pay_crc;
     uint32_t frames_rejected_len;
     uint32_t rx_overflows;
@@ -236,6 +238,25 @@ static uint16_t extract_payload_length(const uint8_t *buf) {
  * ======================================================================== */
 
 /**
+ * spi0_reject_frame — Wipe assembled bytes before allowing resynchronization
+ *
+ * Called only by the RX parser, never for a frame owned by the main loop.
+ * Bound the wipe even on defensive overflow paths; no untrusted length is used.
+ */
+static void spi0_reject_frame(void) {
+    size_t len = spi0_rx.pos;
+    if (len > sizeof(spi0_rx.buf))
+        len = sizeof(spi0_rx.buf);
+    volatile uint8_t *p = spi0_rx.buf;
+    for (size_t i = 0; i < len; ++i)
+        p[i] = 0;
+    spi0_rx.pos = 0;
+    spi0_rx.payload_len = 0;
+    spi0_rx.frame_ready = false;
+    spi0_rx.state = FRAME_STATE_ERROR;
+}
+
+/**
  * spi0_process_byte — Process one received byte through the state machine
  *
  * This function implements the frame assembly state machine. It is called
@@ -276,8 +297,16 @@ static void spi0_process_byte(uint8_t byte) {
                 /* Header complete — validate CRC-64 */
                 if (!validate_header_crc64(spi0_rx.buf)) {
                     spi0_stats.frames_rejected_hdr_crc++;
-                    /* Try to resync: look for sync byte in current buffer */
-                    spi0_rx.state = FRAME_STATE_ERROR;
+                    /* Reject now; resynchronize on the next sync byte. */
+                    spi0_reject_frame();
+                    break;
+                }
+
+                /* Reserved bytes must be zero even with a valid header CRC. */
+                if (spi0_rx.buf[4] || spi0_rx.buf[5] ||
+                    spi0_rx.buf[6] || spi0_rx.buf[7]) {
+                    spi0_stats.frames_rejected_reserved++;
+                    spi0_reject_frame();
                     break;
                 }
 
@@ -287,7 +316,7 @@ static void spi0_process_byte(uint8_t byte) {
                 /* Validate payload length */
                 if (spi0_rx.payload_len > SPI_MAX_PAYLOAD) {
                     spi0_stats.frames_rejected_len++;
-                    spi0_rx.state = FRAME_STATE_ERROR;
+                    spi0_reject_frame();
                     break;
                 }
 
@@ -308,7 +337,7 @@ static void spi0_process_byte(uint8_t byte) {
          * against SPI_MAX_PAYLOAD, but a corrupted payload_len
          * or an ISR race could cause pos to exceed the buffer. */
         if (spi0_rx.pos >= SPI_FRAME_BUF_SIZE) {
-            spi0_rx.state = FRAME_STATE_ERROR;
+            spi0_reject_frame();
             break;
         }
         if (spi0_rx.pos < SPI_HDR_SIZE + spi0_rx.payload_len + SPI_CRC32_SIZE) {
@@ -327,12 +356,12 @@ static void spi0_process_byte(uint8_t byte) {
                     spi0_rx.frame_ready = true;
                 } else {
                     spi0_stats.frames_rejected_pay_crc++;
-                    spi0_rx.state = FRAME_STATE_ERROR;
+                    spi0_reject_frame();
                 }
             }
         } else {
             /* Buffer overflow — should never happen if payload_len is validated */
-            spi0_rx.state = FRAME_STATE_ERROR;
+            spi0_reject_frame();
         }
         break;
 

@@ -5,6 +5,60 @@
 
 Author: jayis1
 
+## SPI0 ISR rejection cleanup and reserved-field validation
+
+Author: jayis1
+
+The secondary SPI0 ISR parser retained assembled NFC/configuration bytes after
+payload CRC rejection and accepted nonzero reserved header bytes with a valid
+CRC. Rejection now wipes the assembled bytes through volatile stores, clamps the
+wipe to buffer capacity even on defensive overflow paths, clears frame metadata,
+and preserves next-sync recovery. Reserved bytes 4–7 must be zero before payload
+acceptance. Complete frames awaiting main-loop consumption are unchanged. A new
+internal reserved-field rejection counter does not change the public statistics
+API. No wire format or hardware assignment was changed.
+
+Verification:
+
+- The new production-source host regression failed before the fix because
+  rejected payload bytes remained in the buffer. It now passes under
+  `-O2 -Wall -Wextra -Werror -fsanitize=undefined,bounds`.
+- Tests cover empty, one-byte, 256-byte and maximum payloads, split trailers,
+  each reserved byte with a recomputed header CRC, bad header CRC, oversized
+  advertised lengths, defensive overflow paths, pending-frame ownership and
+  immediate valid-frame recovery. The harness compiles the complete ISR source,
+  replaces ARM memory barriers only, and supplies independent bitwise CRCs.
+  It does not execute MMIO, emulate IRQ timing or validate concurrency/electrics.
+- `make -C tests run` passes before and after the change; the new test is included.
+  The separate GhostWisp Python suite passes.
+- Cppcheck 2.17.1 passes the 15 main firmware C sources with
+  `--enable=warning,style,performance,portability --check-level=exhaustive
+  --platform=unix32 --inline-suppr --error-exitcode=1
+  -Ifirmware/rp2350b/include firmware/rp2350b/src`.
+  This width approximation without SDK include coverage is not a target build.
+- The broader initial Cppcheck scan also included seven GhostWisp C sources;
+  it reports existing constant-condition and const-qualification style findings
+  in the boot, I2C and SPI sources. Those findings are not fixed in this patch.
+- Linux v6.12 checkpatch full-file analysis reports 772 errors and 1528 warnings
+  for the unchanged bridge C source, and 1 error and 49 warnings for its unchanged
+  header. Repository-wide warning cleanup is not complete; no kernel code is
+  changed by this patch.
+- `make libapex dtb validate-dts` passes the host library build, overlay compilation
+  and source cross-reference checks. The base DTB remains skipped without the
+  external RK3576 include. `git diff --check` passes. Independent read-only review
+  found no blocking correctness/security issues in the production changes.
+
+The source inventory covers main firmware, the Linux bridge, libapex/native
+Python extension, tools, devicetree and the GhostWisp subdevice; this run does not
+claim an exhaustive manual audit of every source. `make check` fails because the
+Arm/AArch64 cross-compilers, CMake, Pico SDK and configured kernel build tree are
+unavailable. Target firmware/kernel builds and physical hardware checks remain
+unverified. New power-management, DMA, watchdog and sleep/wake features were not
+invented without hardware evidence. The full original audit/warning-cleanup
+scope is therefore incomplete despite the verified bounded parser improvements.
+The unrelated edits in `/root/ghostblade` were preserved; publication uses a
+separate clean checkout on main.
+
 ## Complete inline link destinations (2026-10-25)
 
 Author: jayis1
