@@ -5,6 +5,7 @@
 """Check exact manifest net-name coverage and selected documented assignments.
 
 Missing net names warn by default; --strict-net-names makes them errors.
+The base DTS and firmware pin header are required assignment-check inputs.
 Empty parsed net sets always fail. Regex extraction is not a complete KiCad
 parser, endpoint comparison, footprint validation, or proof of model availability.
 """
@@ -225,6 +226,9 @@ def main(argv=None):
         else:
             ERRORS.append("MCU_RESET GPIO mismatch in DTS vs manifest")
 
+    else:
+        ERRORS.append(f"DTS assignment source not found: {dts_path}")
+
     # Check 7: Verify board_pins.h matches manifest net names
     pins_path = os.path.join(ROOT, "firmware/rp2350b/include/board_pins.h")
     if os.path.exists(pins_path):
@@ -252,6 +256,9 @@ def main(argv=None):
                     ERRORS.append(f"{define}: expected pin {expected_pin}, got {actual_pin}")
             else:
                 ERRORS.append(f"{define} not found in board_pins.h")
+
+    else:
+        ERRORS.append(f"Firmware pin header not found: {pins_path}")
 
     print("\n" + "=" * 50)
     if ERRORS:

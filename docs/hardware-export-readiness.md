@@ -49,6 +49,15 @@ because power rails and other board signals need not appear in the manifest's
 interface definitions. Names are case-sensitive; no alias or prefix matching is
 used. The strict target runs all the same selected checks, not just name coverage.
 
+Both modes also require `software/dts/ghostblade-rk3576.dts` and
+`firmware/rp2350b/include/board_pins.h`. Missing either file is an error, not a
+silently skipped assignment check. Empty files fail the existing required-property
+or pin-definition checks. Restore the source from the same reviewed revision;
+do not create an empty placeholder to get a passing result. These are text-only
+checks against selected documented assignments, not schematic-derived endpoint
+validation, DTS compilation, or a firmware build. Ancillary library/model
+documentation remains warning-only when absent.
+
 Current result: 20 of 34 parsed manifest names occur exactly in the 58 parsed
 netlist names. The strict command exits nonzero for these 14 unmatched names:
 

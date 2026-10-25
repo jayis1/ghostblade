@@ -5,6 +5,33 @@
 
 Author: jayis1
 
+## Required netlist assignment-check inputs
+
+Author: jayis1
+
+The netlist validator previously skipped DTS or firmware assignment checks when
+their source files were absent, while still returning success if the remaining
+checks passed. Both normal and strict modes now report a missing base DTS or
+`board_pins.h` as an error, including the exact missing path. No electrical
+assignment, symbol, footprint, or hardware rule was changed.
+
+The expanded 13-test regression suite uses minimal synthetic assignment inputs
+and exercises the production command from outside its repository directory.
+Before the fix, eight missing-input subcases failed because the validator and
+both Make targets returned success. After the fix all tests pass, including
+empty assignment inputs and the pre-existing name-coverage regressions. The
+suite is already part of `make -C tests run`, which also passed.
+
+Local verification: `python3 tests/test_netlist_validation.py -v`,
+`make docs-check validate-dts validate-netlist`, and
+`make -C software/dts all validate` passed. Exact-name coverage remains 20/34
+with 14 existing warnings; the strict command still correctly rejects these
+unresolved names. Eight overlays compile and syntax-check; the base DTB remains
+skipped because `rk3576.dtsi` is not bundled. No target cross-build, physical
+flashing, KiCad ERC/DRC, or hardware validation is established by these checks.
+See [hardware export readiness](hardware-export-readiness.md) for the required
+inputs, troubleshooting guidance, and remaining engineering gaps.
+
 ## Incremental libapex build dependencies
 
 Author: jayis1

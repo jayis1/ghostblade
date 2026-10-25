@@ -32,6 +32,20 @@ class NetlistNameTests(unittest.TestCase):
         self.manifest = self.root / "GhostBlade.mf"
         self.manifest.write_text('NET_SPI_CLK = "synthetic endpoint"\n')
         self.netlist.write_text('(net (code "1") (name "NET_SPI_CLK"))\n')
+        # Minimal synthetic assignment inputs, not a compilable board design.
+        self.dts = self.root / "software/dts/ghostblade-rk3576.dts"
+        self.dts.parent.mkdir(parents=True)
+        self.dts.write_text(
+            'apex,int-req-gpio = <&gpio1 8 0>;\n'
+            'apex,host-rdy-gpio = <&gpio1 9 0>;\n'
+            'apex,mcu-reset-gpio = <&gpio1 10 0>;\n')
+        self.pins = self.root / "firmware/rp2350b/include/board_pins.h"
+        self.pins.parent.mkdir(parents=True)
+        self.pins.write_text(
+            '#define PIN_SPI0_RX 16\n#define PIN_SPI0_CSN 17\n'
+            '#define PIN_SPI0_SCK 18\n#define PIN_SPI0_TX 19\n'
+            '#define PIN_INT_REQ 20\n#define PIN_HOST_RDY 21\n'
+            '#define PIN_MCU_RUN 24\n')
 
     def run_checker(self, *args):
         return subprocess.run([sys.executable, str(self.root / "tools/validate_netlist.py"), *args],
@@ -98,6 +112,42 @@ class NetlistNameTests(unittest.TestCase):
                     result = self.run_checker(*args)
                     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                     self.assertIn("not found", result.stdout)
+            path.write_text(original)
+
+    def test_missing_assignment_inputs_fail_in_both_modes(self):
+        for path in (self.dts, self.pins):
+            original = path.read_text()
+            path.unlink()
+            for args in ((), ("--strict-net-names",)):
+                with self.subTest(path=path.name, args=args):
+                    result = self.run_checker(*args)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(f"not found: {path}", result.stdout)
+                    self.assertNotIn("All netlist cross-reference checks passed", result.stdout)
+            path.write_text(original)
+
+    def test_empty_assignment_inputs_fail_in_both_modes(self):
+        for path in (self.dts, self.pins):
+            original = path.read_text()
+            path.write_text("")
+            for args in ((), ("--strict-net-names",)):
+                with self.subTest(path=path.name, args=args):
+                    result = self.run_checker(*args)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("ERRORS", result.stdout)
+            path.write_text(original)
+
+    @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
+    def test_make_targets_reject_missing_assignment_inputs(self):
+        for path in (self.dts, self.pins):
+            original = path.read_text()
+            path.unlink()
+            for target in ("validate-netlist", "validate-netlist-strict"):
+                with self.subTest(path=path.name, target=target):
+                    result = subprocess.run(["make", target], cwd=self.root,
+                                            capture_output=True, text=True, timeout=10)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn(f"not found: {path}", result.stdout)
             path.write_text(original)
 
     def test_missing_names_are_sorted_and_not_aliased(self):
