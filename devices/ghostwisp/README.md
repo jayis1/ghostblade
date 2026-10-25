@@ -155,6 +155,23 @@ establish pairing, authenticated integrity, stream reassembly, or physical
 confirmation enforcement.
 See [boot-contract.md](docs/boot-contract.md) for what requires physical-board HIL verification.
 
+### Safe capability defaults
+
+Author: jayis1
+
+`SessionCapabilities()` starts with no advertised capabilities and both
+`RECEIVE_ONLY` and `RADIO_DISABLED` set, matching the schema's existing power-on
+contract. Supplying capability bits alone does not remove those restrictions.
+Explicit safety flags, including zero and unknown bits received from a peer,
+retain their existing wire meaning; decoding does not invent peer restrictions.
+The `<HH` payload layout and frame version are unchanged.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_capability_defaults -v`
+from the repository root, or use `make -C devices/ghostwisp check`. Tests cover
+default construction, CRC-checked frame round trips, explicit flag preservation,
+and truncated payload rejection. These are host schema checks, not enforcement
+of pairing, physical consent, or radio-disable pins on real hardware.
+
 ### Profile header validation
 
 Author: jayis1

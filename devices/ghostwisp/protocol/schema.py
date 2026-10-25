@@ -69,6 +69,13 @@ class IdentityPayload:
         )
 
 
+class SafetyBit:
+    RECEIVE_ONLY     = 1 << 0   # default True at power-on
+    RADIO_DISABLED   = 1 << 1   # default True at power-on
+    HID_DISABLED     = 1 << 2
+    NFC_EMULATE_OFF  = 1 << 3
+
+
 @dataclasses.dataclass
 class SessionCapabilities:
     """CAPABILITIES_REQ / CAPABILITIES_RESP payload.
@@ -82,8 +89,10 @@ class SessionCapabilities:
 
     # Capability bitmask (see CapabilityBit below)
     capability_flags: int = 0
-    # Safety bitmask (see SafetyBit below)
-    safety_flags: int = 0
+    # Safety bitmask (see SafetyBit above)
+    # Author: jayis1 — omitted flags must match the documented safe defaults.
+    # Explicit flags (including zero) are preserved by construction and decode.
+    safety_flags: int = SafetyBit.RECEIVE_ONLY | SafetyBit.RADIO_DISABLED
 
     def encode(self) -> bytes:
         return struct.pack(self.STRUCT_FMT, self.capability_flags, self.safety_flags)
@@ -116,13 +125,6 @@ class CapabilityBit:
     BUS_PROBE        = 1 << 8
     FIRMWARE_UPDATE  = 1 << 9
     COMPANION_SYNC   = 1 << 10
-
-
-class SafetyBit:
-    RECEIVE_ONLY     = 1 << 0   # default True at power-on
-    RADIO_DISABLED   = 1 << 1   # default True at power-on
-    HID_DISABLED     = 1 << 2
-    NFC_EMULATE_OFF  = 1 << 3
 
 
 # ---------------------------------------------------------------------------
