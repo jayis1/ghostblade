@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright (C) 2026 GhostBlade Project
-"""Validate GhostBlade device tree GPIO consistency against board_pins.h.
+# Author: jayis1
+"""Run selected GhostBlade DTS and firmware assignment text checks.
 
-Checks that:
-1. SPI0 pin assignments in DTS match board_pins.h
-2. Bridge GPIO assignments (INT_REQ, HOST_RDY, MCU_RESET) are consistent
-3. LED/button GPIO numbers match DTS to schematic netlist
-4. Overlay references target existing nodes
-5. All referenced pinctrl groups are defined in the base DTS
-6. The base DTS memory range matches the 8 GiB LPDDR5 manifest entry
+Checks the existing firmware SPI0 definitions, handshake property tuples,
+base pinctrl reference names, RAM size, and one NFC GPIO conflict pattern.
+The DTS SPI0 check currently recognizes GPIO1_A0-A3 text (including comments),
+not per-signal pinmux tuples. Overlay targets are listed, not resolved.
+This is not a C/DTS parser, binding validator, or schematic connectivity check.
 """
 
 import re
@@ -22,7 +21,7 @@ WARNINGS = []
 
 
 def check_dts_spi_pins():
-    """Verify SPI0 pin assignments in DTS match board_pins.h."""
+    """Check DTS SPI0 pin-name text and each existing firmware SPI0 literal."""
     dts_path = os.path.join(ROOT, "software/dts/ghostblade-rk3576.dts")
     pins_path = os.path.join(ROOT, "firmware/rp2350b/include/board_pins.h")
 
@@ -39,13 +38,24 @@ def check_dts_spi_pins():
     else:
         print("✓ SPI0 pins in DTS: GPIO1_A0-A3 (correct)")
 
-    # board_pins.h defines SPI0 on RP2350B pins 16-19
-    spi_pins = re.findall(r'#define PIN_SPI0_(?:RX|CSN|SCK|TX)\s+(\d+)', pins)
-    expected_pins = ["16", "17", "18", "19"]
-    if sorted(spi_pins) != sorted(expected_pins):
-        ERRORS.append(f"board_pins.h SPI0 pins {spi_pins} don't match expected 16-19")
-    else:
-        print("✓ SPI0 pins in board_pins.h: pins 16-19 (correct)")
+    # Author: jayis1
+    # Preserve the existing per-signal declarations, not merely the pin set.
+    # This intentionally accepts only the current decimal-literal header form;
+    # it is not a C preprocessor, pinmux check, or schematic endpoint check.
+    pins = re.sub(r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*',
+                  lambda match: match[0] if match[0].startswith('"') else
+                  re.sub(r'[^\n]', ' ', match[0]), pins, flags=re.DOTALL)
+    for signal, expected in (("RX", "16"), ("CSN", "17"),
+                             ("SCK", "18"), ("TX", "19")):
+        name = f"PIN_SPI0_{signal}"
+        values = re.findall(r'^[ \t]*#[ \t]*define[ \t]+' + re.escape(name)
+                            + r'\b([^\n]*)', pins, flags=re.MULTILINE)
+        if len(values) != 1:
+            ERRORS.append(f"{name}: expected exactly one definition; found {len(values)}")
+        elif values[0].strip() != expected:
+            ERRORS.append(f"{name}: {values[0].strip()!r}; expected decimal {expected}")
+        else:
+            print(f"✓ {name}: {expected} (documented assignment)")
 
 
 # Author: jayis1

@@ -144,7 +144,7 @@ Validated locally on 2026-10-25:
 
 - `python3 tools/check_internal_links.py` → no broken inline or reference-definition link paths
 - `python3 tools/validate_dts.py` → selected DTS text checks passed; handshake properties are checked individually for controller, pin, and polarity, not just the set of pin numbers
-- `python3 tests/test_dts_validation.py -v` → nine regression tests passed, including swapped assignments rejected by the production CLI and Make target
+- `python3 tests/test_dts_validation.py -v` → 16 regression tests passed, including swapped handshake assignments and all six pairwise firmware SPI0 swaps rejected by the production CLI and Make target; see [SPI0 check scope](docs/build-instructions.md#firmware-spi0-assignment-diagnostics)
 - `python3 tools/validate_netlist.py` → selected assignment checks passed; exact-name coverage is 20/34, with 14 warnings
 - `python3 tests/test_netlist_validation.py -v` → 17 regressions passed; both validation modes and Make targets reject missing required U1-U9 records and duplicate parsed component references, as well as missing DTS or firmware pin-header inputs
 - `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)

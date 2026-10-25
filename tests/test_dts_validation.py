@@ -105,5 +105,83 @@ class BridgeGPIOTest(unittest.TestCase):
                             self.assertIn('apex,int-req-gpio', result.stdout)
 
 
+# Author: jayis1
+class SPI0PinTest(unittest.TestCase):
+    def run_fixture(self, content, fails, diagnostic='PIN_SPI0_'):
+        with tempfile.TemporaryDirectory(prefix='ghostblade-spi-pins-') as directory:
+            root = Path(directory)
+            for name in ('tools/validate_dts.py', 'Makefile', 'GhostBlade.mf'):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / name, target)
+            shutil.copytree(ROOT / 'software/dts', root / 'software/dts')
+            pins = root / 'firmware/rp2350b/include/board_pins.h'
+            pins.parent.mkdir(parents=True)
+            pins.write_text(content, encoding='utf-8')
+            for command in ([sys.executable, str(root / 'tools/validate_dts.py')],
+                            ['make', '-C', str(root), 'validate-dts']):
+                result = subprocess.run(command, cwd=root.parent, capture_output=True,
+                                        text=True, check=False, timeout=30)
+                self.assertEqual(result.returncode != 0, fails,
+                                 result.stdout + result.stderr)
+                if fails:
+                    self.assertIn(diagnostic, result.stdout)
+
+    def setUp(self):
+        self.pins = (ROOT / 'firmware/rp2350b/include/board_pins.h').read_text()
+        self.lines = {name: next(line for line in self.pins.splitlines(keepends=True)
+                                if line.startswith('#define ' + name + ' '))
+                      for name in ('PIN_SPI0_RX', 'PIN_SPI0_CSN',
+                                   'PIN_SPI0_SCK', 'PIN_SPI0_TX')}
+
+    def test_current_source(self):
+        self.run_fixture(self.pins, False)
+
+    def test_each_pair_swap_is_rejected(self):
+        import itertools
+        import re
+        for first, second in itertools.combinations(self.lines, 2):
+            with self.subTest(first=first, second=second):
+                a, b = self.lines[first], self.lines[second]
+                am = re.search(r'\s(\d+)\s', a)
+                bm = re.search(r'\s(\d+)\s', b)
+                assert am is not None and bm is not None
+                av, bv = am[1], bm[1]
+                changed = self.pins.replace(a, a.replace(av, bv, 1)).replace(
+                    b, b.replace(bv, av, 1))
+                self.run_fixture(changed, True)
+
+    def test_each_missing_definition_and_comment_only_definition(self):
+        for name, line in self.lines.items():
+            for replacement in ('', '// ' + line, '/* ' + line.strip() + ' */\n'):
+                with self.subTest(name=name, replacement=replacement):
+                    self.run_fixture(self.pins.replace(line, replacement), True, name)
+
+    def test_duplicate_definitions_in_either_order(self):
+        for value in ('16', '19'):
+            duplicate = f'#define PIN_SPI0_RX {value}\n'
+            for content in (duplicate + self.pins, self.pins + '\n' + duplicate):
+                with self.subTest(value=value, content=content[:40]):
+                    self.run_fixture(content, True, 'PIN_SPI0_RX')
+
+    def test_whitespace_and_comments(self):
+        changed = self.pins
+        for line in self.lines.values():
+            changed = changed.replace(line, line.replace('#define ',
+                                      '  # /* directive */ define\t').replace(
+                                      '        ', ' /* value */ ', 1))
+        self.run_fixture(changed, False)
+
+    def test_empty_header(self):
+        self.run_fixture('', True)
+
+    def test_unsupported_value_expression_fails_closed(self):
+        line = self.lines['PIN_SPI0_RX']
+        for value in ('(16)', '0x10', '16 + 1', 'OTHER_PIN'):
+            with self.subTest(value=value):
+                self.run_fixture(self.pins.replace(line, line.replace('16', value, 1)),
+                                 True, 'PIN_SPI0_RX')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -5,6 +5,46 @@
 
 Author: jayis1
 
+## Named firmware SPI0 validation (2026-10-25)
+
+Author: jayis1
+
+The DTS validator compared firmware SPI0 definitions as an unordered set, so
+all six pairwise signal swaps passed. It now checks each existing macro by name
+(RX 16, CSN 17, SCK 18, TX 19), requires exactly one definition, strips comments,
+and accepts ordinary directive whitespace. Missing, duplicate, commented-only,
+or unsupported expression definitions fail with a named diagnostic. These
+numbers preserve the existing header; they are not newly verified wiring.
+
+Verification performed:
+
+- The new pairwise-swap regression failed for all six swaps before the fix.
+- `python3 tests/test_dts_validation.py -v` passes all 16 tests. The seven new
+  test methods exercise production Python and Make entry points using disposable
+  copies of real repository sources; no target hardware is accessed.
+- `make -C tests run` passes the host suite, including these regressions.
+- `make docs-check validate-dts validate-netlist` passes with the existing 14
+  exact-net-name warnings (20/34 coverage). `make validate-netlist-strict` still
+  fails on those 14 discrepancies; no nets were renamed to hide the findings.
+- A clean `make -C software/dts all validate` builds and syntax-checks eight
+  overlays. The base DTB remains skipped without the external `rk3576.dtsi`.
+- `git diff --check` passes.
+
+README evidence and [build diagnostics](build-instructions.md#firmware-spi0-assignment-diagnostics)
+now describe the stronger check and its limits. The validator's module summary
+no longer claims overlay target resolution or schematic/LED checks it does not
+perform. Its separate DTS SPI0 scan still recognizes comment text; this patch
+does not establish pinmux tuples, host/MCU signal direction, or electrical safety.
+
+The repository already has setup, contribution, build, flashing, FAQ, and timing
+and power diagrams; no duplicate guides or invented timing values were added.
+Editable schematics, a routed PCB, and STEP models remain absent. KiCad is not
+available for ERC/DRC. `make check` fails because Arm/AArch64 compilers, CMake,
+Pico SDK, and the configured kernel tree are missing. Target builds, binding
+validation, actual overlay application, flashing, RF operation, and physical
+verification were not performed. Hardware and devicetree assignments, licensing,
+and fabrication constraints were left unchanged pending authoritative evidence.
+
 ## SPI0 ISR rejection cleanup and reserved-field validation
 
 Author: jayis1

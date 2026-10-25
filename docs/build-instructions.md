@@ -338,6 +338,33 @@ informational, not symbol-resolution validation. See the
 [maintenance log](maintenance-log.md#bridge-gpio-assignment-checks) for evidence
 and the [hardware readiness review](hardware-export-readiness.md) for release gaps.
 
+### Firmware SPI0 assignment diagnostics
+
+Author: jayis1
+
+`make validate-dts` also requires exactly one definition of each existing
+`PIN_SPI0_RX = 16`, `PIN_SPI0_CSN = 17`, `PIN_SPI0_SCK = 18`, and
+`PIN_SPI0_TX = 19` macro in `firmware/rp2350b/include/board_pins.h` (the `=` here
+is descriptive; the header uses `#define`). Swapping two names fails even though
+the set of numbers remains 16–19. Missing and duplicate definitions fail,
+including identical duplicates; commented definitions do not count. Diagnostics
+name the macro to review, not just the aggregate pin set.
+
+The checker accepts decimal literals with normal directive whitespace and
+comments. It intentionally rejects aliases, hexadecimal values, parenthesized
+values, and expressions rather than guessing their meaning. It does not run a
+C preprocessor or evaluate conditional compilation; review such header changes
+and extend the checker deliberately. The separate DTS SPI0 check still searches
+for GPIO1_A0-A3 text, including comments; it does not verify the live pinctrl
+mapping or signal directions. No firmware pin, net, or DTS assignment is changed
+by this validation improvement.
+
+`python3 tests/test_dts_validation.py -v` exercises all six pairwise SPI0 swaps,
+missing/comment-only definitions, duplicates in either order, empty headers,
+unsupported expressions, and accepted whitespace/comments through both the
+production command and top-level Make target. These are disposable source
+fixtures, not a firmware cross-build or electrical verification.
+
 ## Top-Level Convenience Targets
 
 From the repository root:
