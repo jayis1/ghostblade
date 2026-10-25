@@ -5,6 +5,60 @@
 
 Author: jayis1
 
+## Preserve GPIO provider probe errors
+
+Author: jayis1
+
+The bridge GPIO initialization helper converted all negative device-tree GPIO
+lookup results into `-EINVAL`. In particular, an unavailable GPIO provider's
+`-EPROBE_DEFER` was lost, preventing normal deferred probing. Each mandatory
+GPIO lookup now returns its negative error immediately, before looking up the
+next GPIO or requesting any pins. Positive invalid GPIO numbers still fail
+validation, GPIO zero remains valid, and existing managed request failures and
+reset-state ordering are unchanged. No pin assignment or electrical behavior
+was changed.
+
+`python3 tests/test_kernel_gpio_production.py -v` failed against the original
+helper and passes after the fix. It extracts the production helper, compiles it
+with `-Wall -Wextra -Werror -fsanitize=undefined,bounds`, and injects lookup and
+request failures at every position. It checks deferred probe, missing-property,
+invalid-argument and I/O errors, successful fresh-probe retry, GPIO zero,
+positive invalid numbers, request ordering, and reset-state updates. This test
+now runs under `make -C tests run`; the full host suite passes before and after
+the change. Host stubs do not test devres cleanup, kernel integration, provider
+registration, concurrent removal, or physical GPIO operation.
+
+Analysis and verification:
+
+- Linux checkpatch reports zero errors and warnings on the changed driver patch.
+  Full-file results remain 772 errors and 1528 warnings (baseline: 772 errors and
+  1531 warnings). The requested repository-wide warning cleanup is not complete.
+- Cppcheck 2.17.1 passes all 15 main firmware C sources with
+  `--enable=warning,performance,portability --check-level=exhaustive
+  --platform=unix32 --std=c11 --error-exitcode=1 '-Dbi_decl(x)='
+  -Ifirmware/rp2350b/include firmware/rp2350b/src`. The annotation definition is
+  for analysis only; missing SDK context and the Unix-width approximation do not
+  establish a target build. Enabling `style` additionally reports existing
+  constant-return conditions in `adc_calibration.c` and `main.c` and unused
+  timestamp members in `main.c`; those findings were not silently suppressed.
+- The same warning/performance/portability analysis passes the GhostWisp
+  firmware with its own include directory and without the annotation override.
+- Source-pattern scans found no literal credential assignments or Python
+  `os.system`, `shell=True`, `pickle.load(s)`, or `yaml.load` calls. Pattern scans
+  are not a complete security audit or a secret-history investigation.
+- `make validate-dts` and `make -C software/dts all validate` pass their available
+  checks; the base board tree is skipped because `rk3576.dtsi` is unavailable.
+- `make check` fails because the AArch64 and Arm bare-metal cross-compilers,
+  CMake, Pico SDK, and target kernel build tree are unavailable. A direct driver
+  build also fails for the missing kernel build tree. Firmware/kernel builds,
+  board behavior and hardware-dependent feature changes remain unverified.
+
+This is a focused, regression-backed hardening change, not an exhaustive manual
+review of every source file or completion of the task's feature wishlist. Broad
+DMA, PM, watchdog and sleep/wake changes were not added without target evidence.
+The original `/root/ghostblade` checkout had unrelated modifications and was
+left intact; work used the clean `/root/ghostblade-maintenance` checkout on main.
+
 ## Bridge GPIO assignment checks
 
 Author: jayis1

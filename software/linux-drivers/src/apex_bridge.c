@@ -413,10 +413,18 @@ static int apex_gpio_init(struct apex_bridge_dev *dev)
     struct device_node *np = dev->spi->dev.of_node;
     int ret;
 
-    /* Get GPIO numbers from device tree */
-    dev->gpio_int_req = of_get_named_gpio(np, "apex,int-req-gpio", 0);
-    dev->gpio_host_rdy = of_get_named_gpio(np, "apex,host-rdy-gpio", 0);
-    dev->gpio_mcu_reset = of_get_named_gpio(np, "apex,mcu-reset-gpio", 0);
+	/* Preserve provider errors so unavailable GPIO controllers defer probe. */
+	dev->gpio_int_req = of_get_named_gpio(np, "apex,int-req-gpio", 0);
+	if (dev->gpio_int_req < 0)
+		return dev->gpio_int_req;
+
+	dev->gpio_host_rdy = of_get_named_gpio(np, "apex,host-rdy-gpio", 0);
+	if (dev->gpio_host_rdy < 0)
+		return dev->gpio_host_rdy;
+
+	dev->gpio_mcu_reset = of_get_named_gpio(np, "apex,mcu-reset-gpio", 0);
+	if (dev->gpio_mcu_reset < 0)
+		return dev->gpio_mcu_reset;
 
     if (!gpio_is_valid(dev->gpio_int_req) ||
         !gpio_is_valid(dev->gpio_host_rdy) ||

@@ -262,6 +262,7 @@ run: $(USERSPACE_TARGETS)
 	@python3 test_kernel_read_production.py -v
 	@python3 test_kernel_soft_reset.py -v
 	@python3 test_kernel_pm_production.py -v
+	@python3 test_kernel_gpio_production.py -v
 	@python3 test_spi_stream_production.py -v
 	@echo ""
 	@echo "=== Running Production Python Extension Lifecycle Tests ==="
