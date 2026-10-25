@@ -299,6 +299,26 @@ python3 tools/validate_dts.py
 python3 tools/validate_netlist.py
 ```
 
+### Handshake assignment diagnostics
+
+Author: jayis1
+
+`make validate-dts` checks each existing `apex,int-req-gpio`,
+`apex,host-rdy-gpio`, and `apex,mcu-reset-gpio` declaration against the documented
+`gpio1` pins 8, 9, and 10, respectively, with `GPIO_ACTIVE_LOW`. A missing
+property or any conflicting occurrence fails, even when another copy is correct;
+commented-out declarations do not count. Restore/review the intended revision
+rather than swapping names or changing wiring just to satisfy the checker.
+
+Run `python3 tests/test_dts_validation.py -v` for the regression suite, also
+included in `make tests`. These are selected text checks of the current symbolic,
+decimal-pin representation, not a DTS parser or a schematic-derived comparison.
+They do not resolve equivalent expressions, enforce node ownership, validate
+bindings, or prove overlay compatibility. The overlay-target listing is
+informational, not symbol-resolution validation. See the
+[maintenance log](maintenance-log.md#bridge-gpio-assignment-checks) for evidence
+and the [hardware readiness review](hardware-export-readiness.md) for release gaps.
+
 ## Top-Level Convenience Targets
 
 From the repository root:

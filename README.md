@@ -141,7 +141,8 @@ explicit `--notes-only` option and cannot be packaged as a Gerber archive.
 Validated locally on 2026-10-25:
 
 - `python3 tools/check_internal_links.py` → no broken inline or reference-definition link paths
-- `python3 tools/validate_dts.py` → existing selected DTS cross-reference checks passed
+- `python3 tools/validate_dts.py` → selected DTS text checks passed; handshake properties are checked individually for controller, pin, and polarity, not just the set of pin numbers
+- `python3 tests/test_dts_validation.py -v` → nine regression tests passed, including swapped assignments rejected by the production CLI and Make target
 - `python3 tools/validate_netlist.py` → selected assignment checks passed; exact-name coverage is 20/34, with 14 warnings
 - `python3 tests/test_netlist_validation.py -v` → 17 regressions passed; both validation modes and Make targets reject missing required U1-U9 records and duplicate parsed component references, as well as missing DTS or firmware pin-header inputs
 - `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)
@@ -637,11 +638,17 @@ See `apex_bridge_regs.h` for full opcode definitions.
 
 ### Building the Linux Driver
 
-```bash
-cd software/linux-drivers
-make -C /path/to/kernel/src M=$(pwd) modules
-sudo insmod apex_bridge.ko
+<!-- Author: jayis1 -->
+Build only, from the repository root, against the configured target kernel:
+
+```sh
+make driver KDIR=/path/to/target/kernel/build ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 ```
+
+This does not install or load a module. Before deployment, follow the
+[flashing and recovery guide](docs/flashing-guide.md), verify the exact target
+kernel release, and review the board revision and recovery path. A host build
+is not evidence that the driver works on the board.
 
 ### Building RP2350B Firmware
 

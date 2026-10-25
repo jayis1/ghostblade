@@ -5,6 +5,47 @@
 
 Author: jayis1
 
+## Bridge GPIO assignment checks
+
+Author: jayis1
+
+The DTS checker previously compared a set of handshake pin numbers. Swapping
+INT_REQ and HOST_RDY therefore passed, as did conflicting declarations hidden by
+correct copies and assignments found only in comments. It now checks each
+occurrence of the three existing property names against its documented
+controller, pin, and `GPIO_ACTIVE_LOW` flag. Repeated consistent declarations
+remain allowed because the base source currently contains two sets. No DTS,
+firmware pin, netlist, footprint, model, or electrical rule was changed.
+
+`python3 tests/test_dts_validation.py -v` reproduced 15 failing subcases before
+the fix; all nine test methods pass afterward. Coverage includes swapped pins,
+each missing signal, wrong controllers/polarity, malformed values, conflicting
+copies in either order, comment-only input, empty input, and whitespace. The
+production CLI and `make validate-dts` reject swapped copies of the real source.
+These tests now run in `make -C tests run`, which passed in full.
+
+This remains a selected text check, not a DTS parser: it expects the current
+symbolic decimal-pin form and does not resolve numeric aliases, expressions,
+node ownership, bindings, overlay application, or schematic connectivity. Its
+other checks retain their prior limitations; printing overlay target references
+does not validate that the referenced symbols exist in the target kernel.
+
+Verification also passed `make docs-check validate-dts validate-netlist` and
+`make -C software/dts all validate`. Netlist validation retains 14 exact-name
+warnings; `make validate-netlist-strict` still fails on those known discrepancies.
+All eight overlays compile/syntax-check, but the base is skipped without
+`rk3576.dtsi`. `make check` fails for missing cross-compilers, CMake, Pico SDK,
+and target kernel build tree. No target build, physical flashing, ERC/DRC,
+reproducibility comparison, or hardware operation is claimed. The README driver
+example now builds only and directs deployment to the guarded flashing guide.
+
+Existing getting-started, contributor, build, flashing, FAQ, diagram, toolchain,
+library-manifest, optional-overlay, and draft-rule assets were inventoried;
+duplicate guides or guessed electrical artifacts were not added. The
+[hardware readiness review](hardware-export-readiness.md) remains the release-gap
+reference for missing editable schematics/PCB, incomplete footprints/models, and
+unverified rule integration.
+
 ## Runtime PM SPI configuration failures
 
 Author: jayis1

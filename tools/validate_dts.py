@@ -48,24 +48,37 @@ def check_dts_spi_pins():
         print("✓ SPI0 pins in board_pins.h: pins 16-19 (correct)")
 
 
+# Author: jayis1
 def check_bridge_gpios():
-    """Verify bridge GPIO assignments in DTS."""
+    """Check each documented handshake tuple, not merely the set of pins.
+
+    This is a text sanity check of existing assignments, not a DTS parser,
+    binding validation, or evidence of schematic/physical connectivity.
+    """
     dts_path = os.path.join(ROOT, "software/dts/ghostblade-rk3576.dts")
     with open(dts_path) as f:
         dts = f.read()
 
-    # INT_REQ = GPIO1_B0 = gpio1 pin 8
-    # HOST_RDY = GPIO1_B1 = gpio1 pin 9
-    # MCU_RESET = GPIO1_B2 = gpio1 pin 10
-    bridge_pins = sorted(set(re.findall(
-        r'apex,(?:int-req|host-rdy|mcu-reset)-gpio\s*=\s*<&gpio1\s+(\d+)\s+GPIO_\w+>',
-        dts
-    )))
-    expected = ["8", "9", "10"]
-    if bridge_pins != sorted(expected):
-        ERRORS.append(f"Bridge GPIO pins {bridge_pins} don't match expected [8, 9, 10]")
-    else:
-        print("✓ Bridge GPIOs: INT_REQ=gpio1.8, HOST_RDY=gpio1.9, MCU_RESET=gpio1.10 (correct)")
+    # Preserve quoted strings while removing comments; comment examples must not
+    # satisfy a required property. Replace comments with whitespace, not nothing.
+    dts = re.sub(r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*',
+                 lambda match: match[0] if match[0].startswith('"') else ' ',
+                 dts, flags=re.DOTALL)
+    for signal, pin in (("int-req", "8"), ("host-rdy", "9"), ("mcu-reset", "10")):
+        name = f"apex,{signal}-gpio"
+        values = re.findall(r'(?<![\w,-])' + re.escape(name) + r'\s*=\s*([^;]*);', dts)
+        expected = f"<&gpio1 {pin} GPIO_ACTIVE_LOW>"
+        if not values:
+            ERRORS.append(f"Missing bridge GPIO property {name}")
+            continue
+        for value in values:
+            # Check every occurrence: a correct copy cannot hide a conflicting
+            # declaration elsewhere. Current source repeats these in two nodes.
+            if not re.fullmatch(r'<\s*&gpio1\s+' + pin + r'\s+GPIO_ACTIVE_LOW\s*>',
+                                value.strip()):
+                ERRORS.append(f"{name}: {' '.join(value.split())!r}; expected {expected}")
+            else:
+                print(f"✓ {name}: {expected} (documented assignment)")
 
 
 def check_memory_size():
