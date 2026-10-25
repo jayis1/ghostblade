@@ -1,177 +1,204 @@
 <!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
-<!-- Copyright (C) 2026 GhostBlade Project -->
+<!-- Copyright (C) 2026 jayis1 -->
+<!-- Author: jayis1 -->
 
-# Flashing Guide
+# Flashing and target deployment
 
-This guide covers RP2350B firmware flashing, RK3576 driver bring-up, and DTB/overlay deployment.
+Author: jayis1
 
-## Required Artifacts
+These are deployment templates, not a verified board procedure. No editable
+schematic or routed PCB is tracked; host tests do not prove that USB BOOTSEL,
+SWD, reset routing, target boot configuration, or peripheral power works.
+See [hardware readiness](hardware-export-readiness.md) before using a prototype.
+Do not run target commands on the workstation.
 
-Build these first:
+## Preflight: do not write until these are known
 
-- `firmware/rp2350b/build/ghostblade.uf2` or `ghostblade.elf`
-- `software/linux-drivers/apex_bridge.ko`
-- optional `.dtb` / `.dtbo` outputs from `software/dts/`
+1. Identify the exact board revision and target processor. Review its schematic,
+   flash configuration, power/reset requirements, and debug connection.
+2. Select reviewed firmware/kernel/SDK revisions and record tool versions. Build
+   artifacts from those sources; the repository does not supply a validated
+   whole-device operating-system image.
+3. Back up the current firmware where readable, boot configuration, installed
+   DTB/overlays, and module. Verify a recovery path independent of the image
+   being replaced. Stop if no recovery path is available.
+4. Record SHA-256 hashes of artifacts before transfer and compare them on the
+   target. Hash equality detects transfer changes, not authenticity or hardware
+   suitability; trust must come from the reviewed source/release.
+5. Confirm which USB device or SSH host is the prototype. Disconnect other debug
+   targets when tool selection is ambiguous. Do not guess a block-device name,
+   UF2 mountpoint, or flash offset.
 
-## RP2350B Flashing
+Build instructions and prerequisite checks are in
+[Build Instructions](build-instructions.md). RP2350B firmware and the RK3576
+Linux module are separate targets, not interchangeable images.
 
-### Method 1: BOOTSEL mass-storage mode
+## RP2350B firmware
 
-1. Power down the board or hold the RP2350B in reset.
-2. Hold **BOOTSEL**.
-3. Connect the RP2350B USB port to the host.
-4. Release **BOOTSEL** once the `RPI-RP2` volume appears.
-5. Copy the UF2 image:
+Expected build artifacts are `firmware/rp2350b/build/ghostblade.uf2` and
+`ghostblade.elf`. These names come from the CMake target; their presence alone
+is not a completed validation. On the workstation, record the selected image:
 
-```bash
-cp firmware/rp2350b/build/ghostblade.uf2 /media/$USER/RPI-RP2/
+```sh
+sha256sum firmware/rp2350b/build/ghostblade.uf2
 ```
 
-The RP2350B reboots automatically after the copy completes.
+### BOOTSEL or picotool
 
-### Method 2: OpenOCD / SWD
+Use the reviewed board procedure to enter the RP2350 boot ROM's USB mode.
+Check enumeration with `picotool info` and the host's USB/mount tools before
+writing. The volume name and mountpoint must be discovered locally; do not
+assume the RP2040 `RPI-RP2` path applies to an RP2350 board.
 
-```bash
+After confirming the selected device, the write template is:
+
+```sh
+picotool load -v firmware/rp2350b/build/ghostblade.uf2 &&
+  picotool reboot
+```
+
+Use a version supporting RP2350 and check `picotool help load` for its verify
+option. `-v` requests verification; do not reboot after a failed load/verify.
+Alternatively, copy the UF2 to the confirmed boot-ROM volume using its actual
+mountpoint. This overwrites firmware and may reboot the MCU automatically.
+Neither method validates board configuration or runtime behavior.
+
+### OpenOCD / SWD
+
+Only after checking probe voltage, ground, SWD wiring, reset behavior, and target
+selection against the reviewed revision:
+
+```sh
 openocd -f interface/cmsis-dap.cfg -f target/rp2350.cfg \
   -c "program firmware/rp2350b/build/ghostblade.elf verify reset exit"
 ```
 
-### Method 3: picotool
+This template assumes a CMSIS-DAP probe and an RP2350-capable OpenOCD installation.
+Use the correct probe configuration for the actual setup. Programming overwrites
+flash; `verify` checks written data, not electrical safety or correct behavior.
 
-```bash
-picotool load -x firmware/rp2350b/build/ghostblade.uf2
+After a successful write, inspect serial logs and the documented handshake/reset
+signals with appropriate instruments. Keep RF transmit paths disabled until
+power, clocks, pin assignments, and frontend configuration have been reviewed.
+
+## Device-tree deployment
+
+A normal local build without `rk3576.dtsi` produces optional overlays only and
+explicitly skips the base DTB:
+
+```sh
+make -C software/dts all validate
 ```
 
-## RP2350B Post-Flash Checks
+For a base build, supply the reviewed kernel's SoC include and include roots as
+shown in [Device Tree build instructions](build-instructions.md#device-tree).
+Before deployment, verify the actual base output exists and record its hash:
 
-Recommended checks after flashing:
-
-- serial console shows firmware boot output
-- RK3576-side reset line can release the MCU cleanly
-- `INT_REQ` and `HOST_RDY` behavior matches the timing docs
-
-## Device Tree Deployment
-
-### Build the base DTB and overlays
-
-```bash
-make -C software/dts all
+```sh
+test -s software/dts/ghostblade-rk3576.dtb
+sha256sum software/dts/ghostblade-rk3576.dtb
 ```
 
-### Install the base DTB
+Do not treat an old file left in the build directory as a current build. Clean
+before switching kernel/include/tool selections. Validate bindings, exported
+symbols, overlay application, and mutually compatible optional configurations
+against the exact intended base tree; overlay syntax compilation alone is not
+sufficient.
 
-```bash
-sudo cp software/dts/ghostblade-rk3576.dtb /boot/dtbs/$(uname -r)/rockchip/
+There is no universal `/boot/dtbs/` install path or configfs overlay interface.
+Choose the target bootloader/distribution's documented selection mechanism,
+back up its files/configuration, and preserve a bootable recovery entry. Merely
+copying a DTB into `/boot` does not select it. Runtime overlay support is
+kernel-dependent and must not be assumed. No automatic DTB/overlay installation
+command is supplied until that target configuration is established.
+
+## RK3576 kernel module
+
+Build `software/linux-drivers/apex_bridge.ko` against the configured target kernel
+build tree, architecture, and module settings, not the workstation kernel.
+For a cross-built module, configure an SSH host alias `ghostblade-target` for the
+prototype and transfer the artifact as the target user:
+
+```sh
+sha256sum software/linux-drivers/apex_bridge.ko
+scp software/linux-drivers/apex_bridge.ko ghostblade-target:apex_bridge.ko
+ssh ghostblade-target 'sha256sum "$HOME/apex_bridge.ko"; uname -r; modinfo -F vermagic "$HOME/apex_bridge.ko"'
 ```
 
-### Install overlays for runtime use
+Compare hashes and kernel versions before installation. This transfer overwrites
+`$HOME/apex_bridge.ko`; choose another staging filename if it already holds a
+backup. The release check below is necessary but not sufficient: matching
+vermagic does not prove symbol-version, signing-policy, or driver compatibility.
+After backup and review, install on the target:
 
-```bash
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/sdr
-sudo cp software/dts/ghostblade-sdr-overlay.dtbo /sys/kernel/config/device-tree/overlays/sdr/dtbo
-
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/nfc
-sudo cp software/dts/ghostblade-nfc-overlay.dtbo /sys/kernel/config/device-tree/overlays/nfc/dtbo
-
-sudo mkdir -p /sys/kernel/config/device-tree/overlays/wifi
-sudo cp software/dts/ghostblade-wifi-overlay.dtbo /sys/kernel/config/device-tree/overlays/wifi/dtbo
+```sh
+ssh ghostblade-target 'set -eu
+module="$HOME/apex_bridge.ko"
+release=$(uname -r)
+test -s "$module"
+vermagic=$(modinfo -F vermagic "$module")
+test "${vermagic%% *}" = "$release"
+sudo install -d "/lib/modules/$release/extra"
+sudo install -m 0644 "$module" "/lib/modules/$release/extra/apex_bridge.ko"
+sudo depmod -a "$release"
+'
 ```
 
-If your kernel requires external include paths during compile, use `DTS_INCLUDE_PATHS` as documented in [Build Instructions](build-instructions.md).
+The single-quoted SSH command evaluates `uname -r` on the target, not on the
+workstation. `set -eu` stops before installation on missing inputs or a release
+mismatch. Installation replaces an existing module at that path; it does not
+unload a running driver. Load only after the device tree and wiring are reviewed,
+and stop userspace clients before unloading or replacing a loaded driver.
 
-## RK3576 Driver Bring-Up
+On the target, loading changes kernel state:
 
-### Load the module
-
-```bash
-sudo insmod software/linux-drivers/apex_bridge.ko
-```
-
-### Verify probe success
-
-```bash
-dmesg | tail -50
-ls -l /dev/apex_bridge0
-ls -l /sys/class/apex/apex_bridge0
-```
-
-Expected results:
-
-- the driver probes without SPI or GPIO errors
-- `/dev/apex_bridge0` exists
-- sysfs entries are present under `/sys/class/apex/apex_bridge0/`
-
-### Unload the module
-
-```bash
-sudo rmmod apex_bridge
-```
-
-## Cross-Built Driver Installation
-
-If you built on a workstation:
-
-```bash
-scp software/linux-drivers/apex_bridge.ko root@target:/tmp/
-ssh root@target 'install -m 0644 /tmp/apex_bridge.ko /lib/modules/'"$(uname -r)"'/extra/apex_bridge.ko && depmod -a'
-```
-
-Then on target:
-
-```bash
+```sh
 sudo modprobe apex_bridge
+dmesg | tail -50
+ls -l /dev/apex_bridge0 /sys/class/apex/apex_bridge0
 ```
 
-## Bridge Validation
+A successful load is not proof of a successful probe; inspect logs and device
+nodes. If kernel module signing is enforced, use the target's trusted signing
+process rather than disabling it. Restore the backup and run `depmod` for the
+target release if rollback is needed.
 
-### Repository-level validation
+## Troubleshooting and verification limits
 
-```bash
-python3 tools/validate_dts.py
-python3 tools/validate_netlist.py
+- No USB boot device: check the reviewed reset/BOOTSEL procedure, a data-capable
+  cable, supply rails, and debug access. Do not short undocumented pins.
+- No base DTB: the external SoC include was not selected or the build failed;
+  do not deploy an unrelated or stale output.
+- Overlay application fails: check base symbols, bindings, and supported overlay
+  mechanisms/combinations. Do not repeatedly apply guessed fragments.
+- Invalid module format: compare the target release, architecture, vermagic,
+  symbol versions, and signing policy. Rebuild for that target rather than
+  copying into the workstation's kernel directory.
+- Missing bridge device: inspect probe errors, enabled SPI nodes, selected DTB,
+  and reviewed GPIO polarity/reset/firmware. Do not infer correct wiring from
+  a passing text validator.
+
+Host-side checks such as `make -C tests run`, `validate_dts.py`, and
+`validate_netlist.py` do not flash or exercise the prototype. Physical USB/SWD,
+module loading, boot selection, and RF operation remain unverified by this guide.
+
+For local documentation regressions:
+
+```sh
+python3 tests/test_deployment_docs.py -v
 ```
 
-### Host-side tests
+The five tests syntax-check the shell blocks in this guide and the getting-started
+page, then execute this guide's exact SSH installation block with mocked tools.
+They check target-side release selection and rejection before installation when
+the module is missing, its release differs, or inspection fails. No SSH connection,
+privileged command, real module installation, or physical flashing occurs in those
+tests. They are also included in `make -C tests run`.
 
-```bash
-make -C tests run
-```
+The [upstream picotool documentation](https://github.com/raspberrypi/picotool#load)
+describes load verification; check the installed version's help before use.
 
-### On-target smoke checks
-
-```bash
-cat /sys/class/apex/apex_bridge0/status 2>/dev/null || true
-ls /sys/class/apex/apex_bridge0
-```
-
-## Recovery Paths
-
-### RP2350B does not enumerate in BOOTSEL mode
-
-- try a known-good data cable
-- remove hubs/adapters
-- verify 3V3 is present on the MCU side
-- fall back to SWD with OpenOCD
-
-### Driver does not probe
-
-- verify the installed DTB contains the `apex,apex-bridge` node on `&spi0`
-- confirm GPIO polarity matches `ghostblade-rk3576.dts`
-- confirm the SPI controller is enabled in the kernel
-
-### Overlay application fails
-
-- ensure configfs overlay support is enabled
-- confirm the target nodes exist in the running base tree
-- rebuild the overlay with any required include paths
-
-### `/dev/apex_bridge0` is missing
-
-- check `dmesg` for probe failures
-- confirm the module is loaded with `lsmod | grep apex_bridge`
-- confirm the MCU firmware is running and bridge GPIOs are wired as documented
-
-## Related Docs
+## Related docs
 
 - [Getting Started](getting-started.md)
 - [Build Instructions](build-instructions.md)

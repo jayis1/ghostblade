@@ -126,7 +126,12 @@ libraries, firmware/driver sources, and host tests. It does not currently track
 editable `.kicad_sch` or routed `.kicad_pcb` files. The capabilities and diagrams
 above and below describe design targets, not verified board performance or a
 manufacturing-ready release. Power and flashing procedures require board-specific
-review before use.
+review before use. The [host-first getting-started guide](docs/getting-started.md)
+separates local checks from target cross-builds. The
+[deployment guide](docs/flashing-guide.md) now requires board/recovery review,
+distinguishes overlay-only builds from the base DTB, and checks the target's
+kernel release before module installation. Its shell examples are syntax-checked;
+module-install guards are tested with mocked tools, not a physical target.
 
 The [hardware export readiness review](docs/hardware-export-readiness.md) records
 concrete netlist, footprint, model, and rule-integration gaps. Fabrication export
