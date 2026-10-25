@@ -68,6 +68,7 @@ dist/
 *.dtbo
 # Author: jayis1 — preprocessed DTS intermediates
 /software/dts/*.pp
+/software/dts/*.pp.d
 
 # Logs
 *.log

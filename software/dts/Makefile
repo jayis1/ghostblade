@@ -14,7 +14,7 @@ LOCAL_INCLUDE_DIR := $(CUR_DIR)/include
 RK3576_DTSI ?=
 
 # Set external include flags as needed, for example:
-#   make DTS_INCLUDE_PATHS="-I/path/to/linux/include/dt-bindings -I/path/to/linux/arch/arm64/boot/dts/rockchip"
+#   make DTS_INCLUDE_PATHS="-I/path/to/linux/include -I/path/to/linux/arch/arm64/boot/dts/rockchip"
 DTS_INCLUDE_PATHS ?=
 
 CPP_DTS_FLAGS := -nostdinc -undef -x assembler-with-cpp \
@@ -41,6 +41,13 @@ DTO_OUTPUTS = $(DTO_SOURCES:.dts=.dtbo)
 ALL_OUTPUTS = $(DTB_OUTPUTS) $(DTO_OUTPUTS)
 PREPROCESSED = $(BASE_DTS:.dts=.pp) $(DTO_SOURCES:.dts=.pp)
 
+# Author: jayis1 — retain intermediates and track transitive #include inputs.
+# Explicit goal prevents an included dependency rule from becoming the default.
+.DEFAULT_GOAL := all
+.DELETE_ON_ERROR:
+.SECONDARY: $(PREPROCESSED)
+-include $(PREPROCESSED:%=%.d)
+
 .PHONY: all validate clean help
 
 all: $(ALL_OUTPUTS)
@@ -63,10 +70,10 @@ help:
 	@echo "Examples:"
 	@echo "  make validate"
 	@echo "  make RK3576_DTSI=/path/to/rk3576.dtsi"
-	@echo "  make DTS_INCLUDE_PATHS=\"-I/path/to/linux/include/dt-bindings\""
+	@echo "  make DTS_INCLUDE_PATHS=\"-I/path/to/linux/include\""
 
 %.pp: %.dts
-	$(CPP) $(CPP_DTS_FLAGS) $< > $@
+	$(CPP) $(CPP_DTS_FLAGS) -MMD -MP -MF $@.d -MT $@ $< > $@
 
 %.dtb: %.pp
 	$(DTC) $(DTC_FLAGS) -I dts -O dtb -o $@ $<
@@ -85,5 +92,7 @@ validate: $(PREPROCESSED)
 	done
 	@echo "Available DTS files validated successfully."
 
+# Clean known outputs even when the external base include is no longer present.
+CLEAN_STEMS = ghostblade-rk3576 $(DTO_SOURCES:.dts=)
 clean:
-	rm -f $(ALL_OUTPUTS) $(PREPROCESSED)
+	rm -f $(foreach stem,$(CLEAN_STEMS),$(stem).dtb $(stem).dtbo $(stem).pp $(stem).pp.d)

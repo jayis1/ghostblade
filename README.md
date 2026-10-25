@@ -140,7 +140,7 @@ Validated locally on 2026-10-25:
 - `python3 tools/validate_netlist.py` → selected assignment checks passed; exact-name coverage is 20/34, with 14 warnings
 - `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)
 - `make -C software/dts all validate` → eight overlays compiled and syntax-checked
-- `python3 tests/test_dts_build.py -v` → three build-coverage regression tests passed
+- `python3 tests/test_dts_build.py -v` → seven regression tests passed, including transitive include rebuilds, unchanged-build stability, failure recovery, default-goal preservation, and cleanup without the external base include
 - `python3 tests/test_doc_links.py -v` → 24 link-path regression tests passed; top-level fenced examples are excluded
 - `make -C tests run` → host-side unit test suite passed
 

@@ -87,24 +87,56 @@ source software/toolchain.conf
 
 ## Device Tree
 
-Validate syntax:
+Author: jayis1
 
-```bash
-make -C software/dts validate
+Compile and syntax-check the available sources with GNU Make, a GCC-compatible
+C preprocessor, and `dtc`:
+
+```sh
+make -C software/dts all validate
+python3 tests/test_dts_build.py -v
 ```
 
-Compile all DTB/DTBO outputs:
+Without the external `rk3576.dtsi`, these commands build/check the eight optional
+overlays and explicitly skip the base board. This is not a complete board build,
+binding check, or proof that the overlays apply to a particular kernel.
 
-```bash
-make -C software/dts all
+To request the base as well, select a reviewed kernel tree and supply both the
+SoC include and the kernel's top-level include directory:
+
+```sh
+make -C software/dts all validate \
+  RK3576_DTSI=/path/to/linux/arch/arm64/boot/dts/rockchip/rk3576.dtsi \
+  DTS_INCLUDE_PATHS="-I/path/to/linux/include -I/path/to/linux/arch/arm64/boot/dts/rockchip"
 ```
 
-If kernel include paths are required:
+This external-kernel example has not been built here. The include root must
+contain `dt-bindings/`; pointing only at `include/dt-bindings` does not resolve
+`#include <dt-bindings/...>`. The local compatibility headers are searched first;
+review them against the selected kernel before treating compilation as meaningful.
 
-```bash
-make -C software/dts all \
-  DTS_INCLUDE_PATHS="-I/path/to/linux/include/dt-bindings -I/path/to/linux/arch/arm64/boot/dts/rockchip"
+### Incremental rebuilds and cleanup
+
+The preprocessor writes `.pp.d` dependency files for transitive `#include`
+inputs. Editing an included header or `.dtsi` therefore rebuilds affected `.pp`
+and binary outputs; an unchanged build leaves the binaries untouched. These
+intermediates are ignored by Git. Failed recipes remove their incomplete target
+instead of letting a retry reuse it.
+
+Dependency files track preprocessor includes, not native `dtc` `/include/`
+directives, tool versions, command-line flag changes, or selection of a different
+external kernel. Clean before changing any of those inputs, or when upgrading
+from a checkout that generated outputs without dependency files:
+
+```sh
+make -C software/dts clean
+make -C software/dts all validate
 ```
+
+Cleanup removes known base outputs even if the external SoC include is no longer
+available. None of these commands installs a tree, flashes hardware, or transmits
+RF. See [hardware readiness](hardware-export-readiness.md) for wiring and release
+validation limits.
 
 ## RP2350B Firmware
 
