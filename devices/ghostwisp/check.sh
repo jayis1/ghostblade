@@ -125,15 +125,40 @@ fi
 if [ "$MODE" = "headers" ]; then
     INCLUDE_DIR="${2:?usage: check.sh headers <include_dir>}"
 
-    for hdr in "$INCLUDE_DIR"/*.h; do
-        [ -f "$hdr" ] || continue
-        name=$(basename "$hdr")
+    # Author: jayis1 — no inspection is not evidence of header isolation.
+    if [ ! -d "$INCLUDE_DIR" ]; then
+        fail "header directory not found: $INCLUDE_DIR"
+        exit 1
+    fi
+    if ! command -v grep >/dev/null 2>&1; then
+        fail "required header inspection tool not found: grep"
+        exit 1
+    fi
+    shopt -s nullglob globstar
+    HEADERS=("$INCLUDE_DIR"/**/*.h)
+    if [ ${#HEADERS[@]} -eq 0 ]; then
+        fail "no headers found in $INCLUDE_DIR"
+        exit 1
+    fi
 
-        # Must not include GhostBlade coprocessor headers
+    for hdr in "${HEADERS[@]}"; do
+        if [ ! -f "$hdr" ] || [ ! -r "$hdr" ]; then
+            fail "header is not a readable regular file: $hdr"
+            exit 1
+        fi
+        name=${hdr#"$INCLUDE_DIR"/}
+
+        # Inspect nested board headers too; preserve the forbidden-name rules.
+        # This is a source-text gate, not a C preprocessor/dependency analysis.
         for forbidden in "rk3576" "blade_boot" "blade_spi" "rp2350b_memmap"; do
-            if grep -i "^#include.*$forbidden" "$hdr"; then
+            if grep -i "^[[:space:]]*#[[:space:]]*include[[:space:]]*.*$forbidden" "$hdr"; then
                 fail "$name includes forbidden GhostBlade header '$forbidden'"
             else
+                STATUS=$?
+                if [ "$STATUS" -ne 1 ]; then
+                    fail "grep could not inspect $name for '$forbidden'"
+                    exit 1
+                fi
                 ok "$name: no '$forbidden' include"
             fi
         done

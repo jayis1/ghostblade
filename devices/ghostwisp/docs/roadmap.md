@@ -73,6 +73,31 @@ with controlled tool fixtures, including large symbol output and filter errors.
 These checks establish host-test binary isolation, not electrical correctness,
 physical-board behavior, or a successful target firmware build.
 
+### Header isolation gate
+
+Author: jayis1
+
+The same frozen-baseline requirement applies to the header inspection in
+`check.sh headers`. It rejects missing directories, directories without headers,
+missing `grep`, and inspection errors rather than reporting an empty or failed
+inspection as a pass. All regular `.h` files matched recursively under the
+include directory are checked, including `include/boards/ghostwisp.h`.
+Indented directives and whitespace between `#` and `include` no longer bypass
+the existing case-insensitive forbidden-header-name rules.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_check_headers -v` from the
+repository root, or `make -C devices/ghostwisp check`. The eight host regression
+tests exercise clean headers, missing/empty inputs, missing tools, failed and
+partial-output inspection, nested headers, paths with spaces, directive
+whitespace, and preservation of case-insensitive matching and comment handling.
+The tests demonstrated failures against the previous helper before the fix.
+
+This remains a source-text sanity gate, not complete dependency isolation:
+macro-expanded includes, line-spliced directives, comments inside directives,
+and dependencies outside the scanned tree require compiler/dependency review.
+It does not prove target compilation, electrical correctness, or hardware
+behavior. No GhostBlade source, API, or default behavior is changed.
+
 ## Per-run rule
 
 Scheduled work should choose one incomplete item, inspect the current repository first, make a coherent bounded change, run the relevant local checks, and update this roadmap only with verified progress. GhostBlade is a frozen baseline. Work may add namespaced, backward-compatible companion services, APIs, UI surfaces, schemas, documentation, and tests, but must not redesign or regress existing GhostBlade hardware or behavior. With GhostWisp absent, GhostBlade must continue to behave exactly as before.
