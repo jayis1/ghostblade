@@ -689,56 +689,60 @@ static int apex_bridge_release(struct inode *inode, struct file *filp)
 }
 
 static ssize_t apex_bridge_read(struct file *filp, char __user *buf,
-                                 size_t count, loff_t *f_pos)
+				size_t count, loff_t *f_pos)
 {
-    struct apex_bridge_dev *dev = filp->private_data;
-    unsigned int copied;
-    int ret;
-    unsigned int avail;
-    size_t to_copy;
-    void *kbuf;
+	struct apex_bridge_dev *dev = filp->private_data;
+	unsigned int copied;
+	int ret;
+	unsigned int avail;
+	size_t to_copy;
+	void *kbuf;
 
-    if (!dev || !dev->spi)
-        return -ENODEV;
+	if (!dev || !dev->spi)
+		return -ENODEV;
+	if (!count)
+		return 0;
 
-    /* Use the spinlock-protected check for safety. kfifo_is_empty()
-     * without a lock is racy if another thread is concurrently writing. */
-    spin_lock(&dev->rx_lock);
-    if (kfifo_is_empty(&dev->rx_fifo)) {
-        spin_unlock(&dev->rx_lock);
-        if (filp->f_flags & O_NONBLOCK)
-            return -EAGAIN;
+retry:
+	spin_lock(&dev->rx_lock);
+	if (kfifo_is_empty(&dev->rx_fifo)) {
+		spin_unlock(&dev->rx_lock);
+		if (filp->f_flags & O_NONBLOCK)
+			return -EAGAIN;
 
-        /* Wait for data */
-        ret = wait_event_interruptible(dev->rx_waitq,
-                                        !kfifo_is_empty(&dev->rx_fifo));
-        if (ret)
-            return ret;
-        spin_lock(&dev->rx_lock);
-    }
-    avail = kfifo_len(&dev->rx_fifo);
-    to_copy = min_t(size_t, count, avail);
-    if (to_copy == 0) {
-        spin_unlock(&dev->rx_lock);
-        return 0;
-    }
-    kbuf = kmalloc(to_copy, GFP_KERNEL);
-    if (!kbuf) {
-        spin_unlock(&dev->rx_lock);
-        return -ENOMEM;
-    }
-    copied = kfifo_out(&dev->rx_fifo, kbuf, to_copy);
-    spin_unlock(&dev->rx_lock);
+		ret = wait_event_interruptible(dev->rx_waitq,
+					      !kfifo_is_empty(&dev->rx_fifo));
+		if (ret)
+			return ret;
+		/* Another reader may consume the data before we acquire the lock. */
+		goto retry;
+	}
+	avail = kfifo_len(&dev->rx_fifo);
+	to_copy = min_t(size_t, count, avail);
+	spin_unlock(&dev->rx_lock);
 
-    if (copy_to_user(buf, kbuf, copied)) {
-        /* Zero kernel buffer before freeing to avoid leaking protocol data */
-        kfree_sensitive(kbuf);
-        return -EFAULT;
-    }
+	/* Author: jayis1. GFP_KERNEL may sleep: never allocate under rx_lock. */
+	kbuf = kmalloc(to_copy, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
 
-    /* Wipe kernel buffer that may contain protocol/sensor data */
-    kfree_sensitive(kbuf);
-    return copied;
+	spin_lock(&dev->rx_lock);
+	copied = kfifo_out(&dev->rx_fifo, kbuf, to_copy);
+	spin_unlock(&dev->rx_lock);
+	if (!copied) {
+		/* Allocation dropped the lock; do not report a competing read as EOF. */
+		kfree_sensitive(kbuf);
+		goto retry;
+	}
+
+	if (copy_to_user(buf, kbuf, copied)) {
+		kfree_sensitive(kbuf);
+		return -EFAULT;
+	}
+
+	/* Wipe kernel buffer that may contain protocol/sensor data. */
+	kfree_sensitive(kbuf);
+	return copied;
 }
 
 static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
