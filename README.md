@@ -143,7 +143,7 @@ Validated locally on 2026-10-25:
 - `python3 tools/check_internal_links.py` → no broken inline or reference-definition link paths
 - `python3 tools/validate_dts.py` → existing selected DTS cross-reference checks passed
 - `python3 tools/validate_netlist.py` → selected assignment checks passed; exact-name coverage is 20/34, with 14 warnings
-- `python3 tests/test_netlist_validation.py -v` → 13 regressions passed; missing DTS or firmware pin-header inputs now fail both validation modes and Make targets instead of silently skipping checks
+- `python3 tests/test_netlist_validation.py -v` → 17 regressions passed; both validation modes and Make targets reject missing required U1-U9 records and duplicate parsed component references, as well as missing DTS or firmware pin-header inputs
 - `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)
 - `make -C software/dts all validate` → eight overlays compiled and syntax-checked
 - `python3 tests/test_dts_build.py -v` → seven regression tests passed, including transitive include rebuilds, unchanged-build stability, failure recovery, default-goal preservation, and cleanup without the external base include

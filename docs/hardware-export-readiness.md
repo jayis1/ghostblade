@@ -77,6 +77,29 @@ No electrical sources are changed by either command. Regression tests use
 synthetic text fixtures and exercise the actual command and strict Make target;
 they do not establish KiCad parsing or electrical correctness.
 
+## Required component records
+
+Both validation modes require the existing expected U1-U9 component records:
+RK3576, RP2350B, LMS7002M, CC1101, ST25R3916, PE42422, MT7922, RK817, and
+K3LKBKB0BM-MGCJ, respectively. A missing record is now an error, just like an
+incorrect value; complete net-name coverage cannot compensate for missing ICs.
+Every duplicate component reference recognized by the parser is also an error,
+even if the values agree. The first record is retained for further diagnostics,
+not silently overwritten by a later record.
+
+If a record is missing or duplicated, inspect the exact reference in the source
+netlist and re-export from the reviewed schematic for the intended revision.
+Do not append placeholder records or delete conflicting records merely to make
+the checker pass. These expected identities predate this validation change;
+they are not newly verified package selections or electrical assignments.
+
+Run `python3 tests/test_netlist_validation.py -v` to exercise the production
+command and both Make targets with synthetic fixtures. Coverage includes each
+missing required component, net-only input, identical and conflicting duplicate
+records in either order, and the existing name/assignment checks. Ancillary
+library/model documentation remains warning-only; parsed records do not establish
+valid KiCad syntax or complete connectivity.
+
 ## Safe local export commands
 
 The export command now fails if the board is missing or any KiCad layer, drill,

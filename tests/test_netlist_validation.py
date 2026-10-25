@@ -31,7 +31,15 @@ class NetlistNameTests(unittest.TestCase):
         self.netlist.parent.mkdir(parents=True)
         self.manifest = self.root / "GhostBlade.mf"
         self.manifest.write_text('NET_SPI_CLK = "synthetic endpoint"\n')
-        self.netlist.write_text('(net (code "1") (name "NET_SPI_CLK"))\n')
+        self.components = {
+            "U1": "RK3576", "U2": "RP2350B", "U3": "LMS7002M",
+            "U4": "CC1101", "U5": "ST25R3916", "U6": "PE42422",
+            "U7": "MT7922", "U8": "RK817", "U9": "K3LKBKB0BM-MGCJ",
+        }
+        self.component_text = ''.join(
+            f'(comp (ref "{ref}") (value "{value}"))\n'
+            for ref, value in self.components.items())
+        self.netlist.write_text(self.component_text + '(net (code "1") (name "NET_SPI_CLK"))\n')
         # Minimal synthetic assignment inputs, not a compilable board design.
         self.dts = self.root / "software/dts/ghostblade-rk3576.dts"
         self.dts.parent.mkdir(parents=True)
@@ -60,15 +68,15 @@ class NetlistNameTests(unittest.TestCase):
         self.assertNotIn("Manifest net absent", result.stdout)
 
     def test_same_prefix_is_not_a_match(self):
-        self.netlist.write_text('(net (code "1") (name "NET_SPI_MOSI"))\n')
+        self.netlist.write_text(self.component_text + '(net (code "1") (name "NET_SPI_MOSI"))\n')
         result = self.run_checker("--strict-net-names")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("Manifest net absent by exact name from KiCad netlist: NET_SPI_CLK", result.stdout)
         self.assertIn("coverage: 0/1", result.stdout)
 
     def test_existing_component_error_fails_even_with_exact_names(self):
-        with self.netlist.open("a") as stream:
-            stream.write('(comp (ref "U1") (value "synthetic wrong component"))\n')
+        self.netlist.write_text(self.netlist.read_text().replace(
+            '(value "RK3576")', '(value "synthetic wrong component")'))
         for args in ((), ("--strict-net-names",)):
             with self.subTest(args=args):
                 result = self.run_checker(*args)
@@ -76,15 +84,67 @@ class NetlistNameTests(unittest.TestCase):
                 self.assertIn("coverage: 1/1", result.stdout)
                 self.assertIn("U1: expected 'RK3576', got 'synthetic wrong component'", result.stdout)
 
+    def test_each_required_component_is_mandatory_in_both_modes(self):
+        original = self.netlist.read_text()
+        for ref, value in self.components.items():
+            self.netlist.write_text(original.replace(
+                f'(comp (ref "{ref}") (value "{value}"))\n', ''))
+            for args in ((), ("--strict-net-names",)):
+                with self.subTest(ref=ref, args=args):
+                    result = self.run_checker(*args)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(f"{ref} ({value}) not found in KiCad netlist", result.stdout)
+                    self.assertIn("ERRORS", result.stdout)
+
+    def test_net_names_without_components_do_not_pass(self):
+        self.netlist.write_text('(net (code "1") (name "NET_SPI_CLK"))\n')
+        for args in ((), ("--strict-net-names",)):
+            with self.subTest(args=args):
+                result = self.run_checker(*args)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("coverage: 1/1", result.stdout)
+                self.assertIn("ERRORS (9)", result.stdout)
+
+    def test_duplicate_component_references_fail_in_both_orders(self):
+        original = self.netlist.read_text()
+        for ref, expected in (("U1", "RK3576"), ("R1", "33R")):
+            base = original if ref == "U1" else original + f'(comp (ref "{ref}") (value "{expected}"))\n'
+            for value in (expected, "synthetic wrong component"):
+                duplicate = f'(comp (ref "{ref}") (value "{value}"))\n'
+                for first, content in ((True, duplicate + base), (False, base + duplicate)):
+                    self.netlist.write_text(content)
+                    for args in ((), ("--strict-net-names",)):
+                        with self.subTest(ref=ref, value=value, first=first, args=args):
+                            result = self.run_checker(*args)
+                            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                            self.assertIn(f"Duplicate component reference in KiCad netlist: {ref}", result.stdout)
+                            if ref == "U1":
+                                mismatch = "U1: expected 'RK3576', got 'synthetic wrong component'"
+                                self.assertEqual(mismatch in result.stdout,
+                                                 first and value != expected, result.stdout)
+
+    @unittest.skipUnless(shutil.which("make"), "GNU Make unavailable")
+    def test_make_targets_reject_missing_and_duplicate_components(self):
+        original = self.netlist.read_text()
+        for content in (original.replace(self.component_text, ''),
+                        original + '(comp (ref "U1") (value "RK3576"))\n'):
+            self.netlist.write_text(content)
+            for target in ("validate-netlist", "validate-netlist-strict"):
+                with self.subTest(target=target, content=content):
+                    result = subprocess.run(["make", target], cwd=self.root,
+                                            capture_output=True, text=True, timeout=10)
+                    self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("ERRORS", result.stdout)
+
     def test_case_difference_is_not_a_match(self):
-        self.netlist.write_text('(net (code "1") (name "net_spi_clk"))\n')
+        self.netlist.write_text(self.component_text + '(net (code "1") (name "net_spi_clk"))\n')
         result = self.run_checker("--strict-net-names")
         self.assertEqual(result.returncode, 1)
         self.assertIn("Manifest net absent by exact name from KiCad netlist: NET_SPI_CLK", result.stdout)
 
     def test_default_warns_without_claiming_all_passed(self):
         self.manifest.write_text('NET_HOST_READY = "synthetic endpoint"\n')
-        self.netlist.write_text('(net (code "1") (name "NET_HOST_RDY"))\n')
+        self.netlist.write_text(self.component_text + '(net (code "1") (name "NET_HOST_RDY"))\n')
         result = self.run_checker()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("WARNINGS", result.stdout)

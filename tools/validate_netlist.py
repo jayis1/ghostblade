@@ -6,6 +6,8 @@
 
 Missing net names warn by default; --strict-net-names makes them errors.
 The base DTS and firmware pin header are required assignment-check inputs.
+Required U1-U9 components must be present; duplicate parsed component references
+always fail, including identical values. Ancillary documentation remains advisory.
 Empty parsed net sets always fail. Regex extraction is not a complete KiCad
 parser, endpoint comparison, footprint validation, or proof of model availability.
 """
@@ -56,6 +58,9 @@ def parse_kicad_netlist():
     # Parse components: (comp (ref "U1") (value "RK3576") ...)
     for m in re.finditer(r'\(comp\s+\(ref\s+"([^"]+)"\)\s+\(value\s+"([^"]+)"\)', content):
         ref, value = m.group(1), m.group(2)
+        if ref in components:
+            ERRORS.append(f"Duplicate component reference in KiCad netlist: {ref}")
+            continue  # Preserve the first record; never hide ambiguity by overwriting.
         components[ref] = value
 
     # Parse net names from the nets section
@@ -162,7 +167,7 @@ def main(argv=None):
             else:
                 ERRORS.append(f"{ref}: expected '{expected_value}', got '{actual}'")
         else:
-            WARNINGS.append(f"{ref} ({expected_value}) not found in KiCad netlist")
+            ERRORS.append(f"{ref} ({expected_value}) not found in KiCad netlist")
 
         if library_manifest_refs and ref not in library_manifest_refs:
             WARNINGS.append(f"{ref} missing from hardware/kicad/library-manifest.md")

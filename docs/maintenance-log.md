@@ -5,6 +5,32 @@
 
 Author: jayis1
 
+## Required and unique netlist component records
+
+Author: jayis1
+
+The checker previously returned success with no parsed components if its net
+names and selected assignment strings passed, and silently replaced duplicate
+component references with the last parsed value. Missing expected U1-U9 records
+and duplicate parsed references now fail both modes. No component identity,
+footprint, power timing, rule file, or DTS assignment was changed.
+
+Four new regression methods reproduced 32 failing subcases before the fix.
+The expanded 17-test suite now passes, including every required IC removal,
+net-only input, duplicate ordering/value cases, and both Make targets. Fixtures
+are synthetic text, not CAD exports. Existing name tests now include all nine
+expected component records to keep name-coverage checks independent.
+
+Verification: `python3 tests/test_netlist_validation.py -v`, the full
+`make -C tests run` host suite, `make docs-check validate-dts validate-netlist`,
+and `make -C software/dts all validate` passed. Normal netlist validation retains
+14 existing exact-name warnings (20/34 coverage); strict validation correctly
+fails on those names. The base DTB remains skipped without `rk3576.dtsi`.
+`make check` fails for missing cross-compilers, CMake, Pico SDK, and target kernel
+build tree. No hardware, flashing, full target build, or ERC/DRC result is claimed.
+See [required component records](hardware-export-readiness.md#required-component-records)
+for troubleshooting and the unchanged parser limitations.
+
 ## Required netlist assignment-check inputs
 
 Author: jayis1
