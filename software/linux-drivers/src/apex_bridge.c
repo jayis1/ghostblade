@@ -1126,17 +1126,20 @@ static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
                                          sizeof(reset_payload),
                                          frame,
                                          APEX_SPI_FRAME_SIZE_MAX);
-            if (frame_len < 0) {
-                dev_err(&dev->spi->dev,
-                        "SOFT_RESET: failed to build reset frame\n");
-                ret = -EIO;
-            } else {
-                apex_spi_xfer(dev, frame, frame_len, rx_buf,
-                              APEX_SPI_FRAME_SIZE_MAX);
-                dev_info(&dev->spi->dev,
-                         "SOFT_RESET: MCU soft reset command sent\n");
-                ret = 0;
-            }
+			if (frame_len < 0) {
+				dev_err(&dev->spi->dev,
+					"SOFT_RESET: failed to build reset frame\n");
+				ret = -EIO;
+			} else {
+				/* Report transport failures; submission is not a reset ACK. */
+				ret = apex_spi_xfer(dev, frame, frame_len, rx_buf,
+						    APEX_SPI_FRAME_SIZE_MAX);
+				if (ret >= 0) {
+					dev_info(&dev->spi->dev,
+						 "SOFT_RESET: MCU soft reset command sent\n");
+					ret = 0;
+				}
+			}
         }
         break;
     }
