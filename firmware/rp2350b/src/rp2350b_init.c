@@ -2,6 +2,7 @@
  * rp2350b_init.c — Low-Level Hardware Initialization for RP2350B
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This file implements the hardware initialization sequence for the RP2350B
@@ -342,40 +343,7 @@ static void gpio_set_output_enable(uint8_t pin, bool enable) {
     __asm__ volatile ("dmb" ::: "memory");
 }
 
-/* ========================================================================
- * GPIO Public API (declared in rp2350b_init.h)
- * ======================================================================== */
-
-/**
- * rp2350b_gpio_set — Set a GPIO output pin high or low
- *
- * @pin:   RP2350B pin number (see board_pins.h)
- * @value: true = drive high, false = drive low
- */
-void rp2350b_gpio_set(uint8_t pin, bool value) {
-    volatile uint32_t *out_reg = (volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x0100);
-    volatile uint32_t *out_set = (volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x0104);
-    volatile uint32_t *out_clr = (volatile uint32_t *)(RP2350B_IO_BANK0_BASE + 0x0108);
-
-    if (value) {
-        *out_set = (1UL << pin);
-    } else {
-        *out_clr = (1UL << pin);
-    }
-    __asm__ volatile ("dmb" ::: "memory");
-}
-
-/**
- * rp2350b_gpio_get — Read a GPIO input pin
- *
- * @pin:   RP2350B pin number
- * Returns: true if pin is high, false if low
- */
-bool rp2350b_gpio_get(uint8_t pin) {
-    volatile uint32_t const *in_reg = (volatile uint32_t const *)(RP2350B_IO_BANK0_BASE + 0x010C);
-    __asm__ volatile ("dmb" ::: "memory");
-    return !!(*in_reg & (1UL << pin));
-}
+/* Public GPIO input/output access is implemented in rp2350b_gpio.c. */
 
 /* ========================================================================
  * Peripheral Unreset Helper

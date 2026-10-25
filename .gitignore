@@ -73,6 +73,8 @@ dist/
 *.log
 
 # Test binaries
+# Author: jayis1
+tests/test_rp2350b_gpio_mmio
 tests/test_spi_protocol
 tests/test_battery_monitor
 tests/test_cc1101_config

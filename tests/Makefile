@@ -56,6 +56,7 @@ KMOD_SOURCES = test_apex_bridge.c
 USERSPACE_TARGETS += test_ghostwisp_gpio_mmio
 USERSPACE_TARGETS += test_temperature_production
 USERSPACE_TARGETS += test_ghostwisp_i2c_addresses
+USERSPACE_TARGETS += test_rp2350b_gpio_mmio
 
 all: $(USERSPACE_TARGETS)
 
@@ -90,6 +91,9 @@ help:
 
 test_spi_protocol: test_spi_protocol.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+test_rp2350b_gpio_mmio: test_rp2350b_gpio_mmio.c ../firmware/rp2350b/src/rp2350b_gpio.c ../firmware/rp2350b/include/rp2350b_init.h
+	$(CC) $(CFLAGS) -UNDEBUG -DRP2350B_GPIO_MMIO_TEST -I$(CURDIR)/../firmware/rp2350b/include -o $@ test_rp2350b_gpio_mmio.c ../firmware/rp2350b/src/rp2350b_gpio.c $(LDFLAGS)
 
 test_battery_monitor: test_battery_monitor.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS) -lm
@@ -168,6 +172,7 @@ test_walkie_talkie:
 	@python3 test_walkie_talkie.py
 
 run: $(USERSPACE_TARGETS)
+	@./test_rp2350b_gpio_mmio
 	@./test_ghostwisp_i2c_addresses
 	@./test_temperature_production
 	@./test_ghostwisp_gpio_mmio

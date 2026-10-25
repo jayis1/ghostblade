@@ -2,6 +2,7 @@
  * rp2350b_init.h — Low-Level Hardware Initialization API
  *
  * Copyright (C) 2026 GhostBlade Project
+ * Author: jayis1
  * SPDX-License-Identifier: MIT
  *
  * Provides initialization and GPIO control for the RP2350B coprocessor
@@ -29,7 +30,7 @@ void rp2350b_init(void);
 /**
  * rp2350b_gpio_set — Set a GPIO output pin high or low
  *
- * @pin:   RP2350B pin number (see board_pins.h)
+ * @pin:   RP2350B pin number 0..47 (see board_pins.h); others are ignored
  * @value: true = drive high, false = drive low
  */
 void rp2350b_gpio_set(uint8_t pin, bool value);
@@ -37,8 +38,8 @@ void rp2350b_gpio_set(uint8_t pin, bool value);
 /**
  * rp2350b_gpio_get — Read a GPIO input pin
  *
- * @pin:   RP2350B pin number (see board_pins.h)
- * Returns: true if pin is high, false if low
+ * @pin:   RP2350B pin number 0..47 (see board_pins.h)
+ * Returns: true if pin is high, false if low or pin is invalid
  */
 bool rp2350b_gpio_get(uint8_t pin);
 

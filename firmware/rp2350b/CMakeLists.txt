@@ -1,6 +1,7 @@
 # CMakeLists.txt — GhostBlade RP2350B Firmware Build
 #
 # Copyright (C) 2026 GhostBlade Project
+# Author: jayis1
 # SPDX-License-Identifier: MIT
 #
 # Build with Pico SDK 2.0+:
@@ -42,6 +43,7 @@ set(PICO_STDIO_UART 1)
 set(FW_SOURCES
     src/main.c
     src/rp2350b_init.c
+    src/rp2350b_gpio.c
     src/spi_protocol.c
     src/spi0_isr.c
     src/sdr_dma.c
