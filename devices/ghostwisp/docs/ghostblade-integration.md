@@ -73,6 +73,30 @@ A connected session should perform these steps in order:
 
 Pairing and session authentication details remain to be selected with the secure-storage components. Secrets must never be embedded in repository artifacts or ordinary profiles.
 
+### Device identity serialization bound
+
+Author: jayis1
+
+The stable-identity and identity-change rejection requirements in session
+establishment above depend on preserving the complete device identifier.
+`IdentityPayload.encode()` raises `ProtocolError` when a local `device_id`
+exceeds its existing 16-byte wire field. Previously, distinct oversized IDs
+with the same first 16 bytes silently encoded to the same identity. Callers
+must reject or correct the source identity, not retry with a truncated ID.
+
+The `<16sHH32s` layout, protocol version, decoder, and conforming encodings
+are unchanged. Empty and short IDs retain legacy zero-padding behavior; this
+width check does not establish that an identity is valid or authenticated.
+Firmware-tag truncation remains unchanged. Pairing, identity-change consent,
+and secure storage still require the session security implementation.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_device_identity_width -v`
+from the repository root, or `make -C devices/ghostwisp check`. Host regressions
+cover oversized IDs including zero suffixes, every accepted ID length against
+an independent wire-layout oracle, and all 256 final-byte values in full-width
+IDs through hello and identity request/response frames. No hardware or pairing
+service is exercised.
+
 ## Protocol envelope
 
 The initial logical envelope is:

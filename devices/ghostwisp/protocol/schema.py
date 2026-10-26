@@ -52,8 +52,11 @@ class IdentityPayload:
     fw_tag: bytes          # NUL-padded ASCII git describe tag, max 32 bytes
 
     def encode(self) -> bytes:
+        # Author: jayis1 — never collapse distinct identities by truncation.
+        if len(self.device_id) > _DEVICE_ID_LEN:
+            raise ProtocolError("IdentityPayload: device_id exceeds the 16-byte wire field")
         tag = self.fw_tag[:_VERSION_STR_MAX].ljust(_VERSION_STR_MAX, b"\x00")
-        dev_id = self.device_id[:_DEVICE_ID_LEN].ljust(_DEVICE_ID_LEN, b"\x00")
+        dev_id = self.device_id.ljust(_DEVICE_ID_LEN, b"\x00")
         return struct.pack(self.STRUCT_FMT, dev_id, self.hw_rev, self.fw_version, tag)
 
     @classmethod
