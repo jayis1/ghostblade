@@ -6,7 +6,7 @@
 
 Checks the existing firmware SPI0 definitions, handshake property tuples,
 base pinctrl reference names, RAM size, and one NFC GPIO conflict pattern.
-The DTS SPI0 check currently recognizes GPIO1_A0-A3 text (including comments),
+The DTS SPI0 check requires the current flat pin-list group and function,
 not per-signal pinmux tuples. Overlay targets are listed, not resolved.
 This is not a C/DTS parser, binding validator, or schematic connectivity check.
 """
@@ -30,13 +30,31 @@ def check_dts_spi_pins():
     with open(pins_path) as f:
         pins = f.read()
 
-    # DTS defines SPI0 on GPIO1_A0-A3 (pins 0-3 in bank 1)
-    dts_spi = sorted(set(re.findall(r'GPIO1_A(\d)', dts)))
-    expected = ["0", "1", "2", "3"]  # MOSI, MISO, SCK, CSn
-    if dts_spi != sorted(expected):
-        ERRORS.append(f"DTS SPI0 pins GPIO1_A{dts_spi} don't match expected A0-A3")
+    # Author: jayis1
+    # Check the existing flat group, not GPIO names in descriptive comments.
+    # Preserve strings and line boundaries. This is not Rockchip binding validation.
+    dts = re.sub(r'"(?:\\.|[^"\\])*"|/\*.*?\*/|//[^\n]*',
+                 lambda match: match[0] if match[0].startswith('"') else
+                 re.sub(r'[^\n]', ' ', match[0]), dts, flags=re.DOTALL)
+    groups = re.findall(r'(?<![\w])spi0_pins\s*:\s*spi0-pins\s*\{([^{}]*)\}\s*;', dts)
+    labels = re.findall(r'(?<![\w])spi0_pins\s*:', dts)
+    expected_pins = {f"GPIO1_A{pin}" for pin in range(4)}
+    if len(groups) != 1 or len(labels) != 1:
+        ERRORS.append("DTS SPI0: expected exactly one flat spi0_pins: spi0-pins group")
     else:
-        print("✓ SPI0 pins in DTS: GPIO1_A0-A3 (correct)")
+        body = groups[0]
+        pin_values = re.findall(r'(?<![\w,-])pins\s*=\s*([^;]*);', body)
+        functions = re.findall(r'(?<![\w,-])function\s*=\s*([^;]*);', body)
+        valid_pins = False
+        if len(pin_values) == 1 and re.fullmatch(
+                r'\s*"GPIO1_A[0-3]"(?:\s*,\s*"GPIO1_A[0-3]"){3}\s*', pin_values[0]):
+            valid_pins = set(re.findall(r'"([^"]+)"', pin_values[0])) == expected_pins
+        if not valid_pins:
+            ERRORS.append("DTS SPI0: expected one pins list containing GPIO1_A0-A3 exactly once")
+        if len(functions) != 1 or functions[0].strip() != '"spi0"':
+            ERRORS.append('DTS SPI0: expected exactly one function = "spi0" declaration')
+        if valid_pins and len(functions) == 1 and functions[0].strip() == '"spi0"':
+            print("✓ DTS SPI0: live flat pin list GPIO1_A0-A3 and spi0 function (text check)")
 
     # Author: jayis1
     # Preserve the existing per-signal declarations, not merely the pin set.

@@ -183,5 +183,74 @@ class SPI0PinTest(unittest.TestCase):
                                  True, 'PIN_SPI0_RX')
 
 
+# Author: jayis1
+class DTSSPI0GroupTest(unittest.TestCase):
+    def check_group(self, replacement, fails):
+        with tempfile.TemporaryDirectory(prefix='ghostblade-dts-spi0-') as directory:
+            root = Path(directory)
+            for name in ('tools/validate_dts.py', 'Makefile', 'GhostBlade.mf',
+                         'firmware/rp2350b/include/board_pins.h'):
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / name, target)
+            shutil.copytree(ROOT / 'software/dts', root / 'software/dts')
+            path = root / 'software/dts/ghostblade-rk3576.dts'
+            original = path.read_text(encoding='utf-8')
+            start = original.index('spi0_pins: spi0-pins {')
+            end = original.index('};', start) + 2
+            group = original[start:end]
+            path.write_text(original[:start] + replacement(group) + original[end:],
+                            encoding='utf-8')
+            for command in ([sys.executable, str(root / 'tools/validate_dts.py')],
+                            ['make', '-C', str(root), 'validate-dts']):
+                with self.subTest(command=command):
+                    result = subprocess.run(command, cwd=root.parent, capture_output=True,
+                                            text=True, check=False, timeout=30)
+                    self.assertEqual(result.returncode != 0, fails,
+                                     result.stdout + result.stderr)
+                    if fails:
+                        self.assertIn('DTS SPI0', result.stdout)
+
+    def test_current_live_group(self):
+        self.check_group(lambda group: group, False)
+
+    def test_comment_only_group(self):
+        for wrap in (lambda group: '/* ' + group + ' */',
+                     lambda group: '\n'.join('// ' + line for line in group.splitlines())):
+            self.check_group(wrap, True)
+
+    def test_each_pin_missing_despite_header_comment(self):
+        for pin in range(4):
+            with self.subTest(pin=pin):
+                self.check_group(lambda group: group.replace(f'GPIO1_A{pin}', 'GPIO2_A0'), True)
+
+    def test_duplicate_groups_in_either_order(self):
+        for bad in (False, True):
+            for reverse in (False, True):
+                def duplicate(group):
+                    extra = group.replace('GPIO1_A0', 'GPIO2_A0') if bad else group
+                    return (extra + '\n' + group) if reverse else (group + '\n' + extra)
+                self.check_group(duplicate, True)
+
+    def test_wrong_or_missing_function(self):
+        for value in ('function = "gpio";', '', '/* function = "spi0"; */'):
+            self.check_group(lambda group: group.replace('function = "spi0";', value), True)
+
+    def test_duplicate_or_extra_pins(self):
+        for extra in ('GPIO1_A0', 'GPIO2_A0'):
+            self.check_group(lambda group: group.replace('"GPIO1_A3";',
+                             f'"GPIO1_A3", "{extra}";'), True)
+
+    def test_whitespace_comments_and_reordered_pin_set(self):
+        self.check_group(lambda group: group.replace('"GPIO1_A0", "GPIO1_A1"',
+                         '"GPIO1_A1", /* pin list */\n "GPIO1_A0"').replace(
+                         'function =', 'function\n=\t'), False)
+
+    def test_duplicate_properties(self):
+        for declaration in ('function = "spi0";',
+                            'pins = "GPIO1_A0", "GPIO1_A1", "GPIO1_A2", "GPIO1_A3";'):
+            self.check_group(lambda group: group.replace('bias-pull-up;', declaration), True)
+
+
 if __name__ == '__main__':
     unittest.main()

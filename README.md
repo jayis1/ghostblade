@@ -140,11 +140,11 @@ success without new nonempty export files. File-presence checks do not validate
 fabrication geometry or electrical safety. Draft notes require the explicit
 `--notes-only` option and cannot be packaged as a Gerber archive.
 
-Validated locally on 2026-10-25:
+Validated locally on 2026-10-25 (SPI0 text checks extended on 2026-10-26):
 
 - `python3 tools/check_internal_links.py` → no broken inline or reference-definition link paths
 - `python3 tools/validate_dts.py` → selected DTS text checks passed; handshake properties are checked individually for controller, pin, and polarity, not just the set of pin numbers
-- `python3 tests/test_dts_validation.py -v` → 16 regression tests passed, including swapped handshake assignments and all six pairwise firmware SPI0 swaps rejected by the production CLI and Make target; see [SPI0 check scope](docs/build-instructions.md#firmware-spi0-assignment-diagnostics)
+- `python3 tests/test_dts_validation.py -v` → 24 regression tests passed, including rejection of comment-only or malformed live SPI0 pin lists, swapped handshake assignments, and all six pairwise firmware SPI0 swaps through the production CLI and Make target; see [SPI0 check scope](docs/build-instructions.md#firmware-spi0-assignment-diagnostics)
 - `python3 tools/validate_netlist.py` → selected assignment checks passed; exact-name coverage is 20/34, with 14 warnings
 - `python3 tests/test_netlist_validation.py -v` → 17 regressions passed; both validation modes and Make targets reject missing required U1-U9 records and duplicate parsed component references, as well as missing DTS or firmware pin-header inputs
 - `make validate-netlist-strict` → intentionally fails on those existing name discrepancies; see the [readiness review](docs/hardware-export-readiness.md)
@@ -197,7 +197,7 @@ and unresolved hardware/audio integration gaps.
 │  │    [J5 SMA 2.4G]  [J6 SMA 5/6G]  [BT]          │     │
 │  └─────────────────────────────────────────────────┘     │
 │                                                          │
-│  ┌──────┐ 16GB LPDDR5  ┌────────┐ 32GB eMMC  ┌──────┐   │
+│  ┌──────┐  8GB LPDDR5  ┌────────┐ 32GB eMMC  ┌──────┐   │
 │  │ DDR5 │◄────────────►│RK3576  │◄──────────►│ M.2  │   │
 │  └──────┘              │        │            │NVMe  │   │
 │                         └────────┘            └──────┘   │

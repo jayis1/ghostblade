@@ -5,6 +5,41 @@
 
 Author: jayis1
 
+## Live DTS SPI0 pin-list checks (2026-10-26)
+
+Author: jayis1
+
+The SPI0 DTS check previously collected GPIO1_A0–A3 anywhere in the file,
+including its descriptive header comment. Removing or changing the actual
+pin-list group could therefore pass. The validator now strips comments and
+requires exactly one flat `spi0_pins: spi0-pins` group, one complete nonduplicated
+pin list, and one `function = "spi0"` declaration. It preserves the existing
+assignments; it does not invent a Rockchip binding or claim electrical validation.
+
+Verification performed:
+
+- Eight new regression methods reproduced 34 failing CLI/Make subcases before
+  the fix. The complete DTS regression suite now passes 24 tests.
+- Disposable real-source fixtures cover block/line-comment-only groups, each
+  missing pin despite the unchanged header comment, duplicate groups in either
+  order, missing/wrong functions, duplicate properties, and extra/repeated pins.
+  Whitespace, intervening comments, and pin-list reordering remain accepted.
+- `make -C tests run` passes the full host suite, including these regressions.
+- `make docs-check validate-dts validate-netlist` passes; net-name coverage
+  remains 20/34 with the existing 14 warnings. No aliases were inferred.
+- `make -C software/dts all validate` succeeds with existing overlay outputs and
+  syntax-checks all eight overlays. It skips the base DTB because the external
+  `rk3576.dtsi` is absent; this run is not a clean overlay rebuild.
+
+This is a restricted text-form check, not a DTS parser: node ownership,
+conditional preprocessing, alternate binding forms, per-signal mux assignments,
+kernel binding compliance, and physical connectivity remain unverified. No
+schematic, footprint, model, power timing, or DTS pin assignment was changed.
+`make check` fails on absent AArch64/Arm cross-compilers, CMake, Pico SDK, and
+configured kernel build tree. KiCad CLI and editable schematic/PCB sources are
+also absent, so target builds, ERC/DRC, flashing, and board testing were not run.
+The existing hardware-readiness report remains the release-gap reference.
+
 ## SPI character-device maximum write boundary
 
 Author: jayis1

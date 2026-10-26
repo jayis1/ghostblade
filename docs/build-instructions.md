@@ -356,10 +356,17 @@ The checker accepts decimal literals with normal directive whitespace and
 comments. It intentionally rejects aliases, hexadecimal values, parenthesized
 values, and expressions rather than guessing their meaning. It does not run a
 C preprocessor or evaluate conditional compilation; review such header changes
-and extend the checker deliberately. The separate DTS SPI0 check still searches
-for GPIO1_A0-A3 text, including comments; it does not verify the live pinctrl
-mapping or signal directions. No firmware pin, net, or DTS assignment is changed
-by this validation improvement.
+and extend the checker deliberately. The separate DTS SPI0 check now requires
+exactly one live, flat `spi0_pins: spi0-pins` group, exactly one `pins` list
+containing GPIO1_A0–A3 once each, and exactly one `function = "spi0"` property.
+Comments cannot satisfy these requirements; duplicate groups/properties and
+missing, repeated, or extra pins fail. Whitespace, comments between tokens, and
+pin-list reordering are accepted because the list does not encode signal roles.
+Nested groups, equivalent expressions, alternate node names, and alternative
+binding representations require deliberate checker changes rather than guesses.
+This text check does not establish node ownership, Rockchip pinmux/binding
+validity, signal directions, or schematic connectivity. No firmware pin, net,
+or DTS assignment is changed by this validation improvement.
 
 `python3 tests/test_dts_validation.py -v` exercises all six pairwise SPI0 swaps,
 missing/comment-only definitions, duplicates in either order, empty headers,
