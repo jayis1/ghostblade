@@ -546,6 +546,8 @@ static int build_response_frame(uint8_t cmd, const uint8_t *payload,
     uint32_t avail = TX_RING_SIZE - used - 1;
     if ((uint32_t)total_len > avail) {
         proto_stats.tx_overruns++;
+        /* A rejected response still contains copied NFC/IQ payload data. */
+        secure_wipe(frame, sizeof(frame));
         return -1;
     }
 
