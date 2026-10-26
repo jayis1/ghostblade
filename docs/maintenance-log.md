@@ -5,6 +5,51 @@
 
 Author: jayis1
 
+## SPI character-device maximum write boundary
+
+Author: jayis1
+
+The production driver's `write()` buffer contains an opcode byte followed by
+payload bytes. The previous count guard incorrectly included the opcode in the
+4092-byte payload allowance, rejecting a valid 4093-byte write. It now allows
+one opcode plus the full payload while rejecting larger counts before allocation
+or user-memory access. The wire format and maximum frame size are unchanged.
+
+Verification performed:
+
+- The new `tests/test_kernel_write_production.py` compiles the actual production
+  write function with host API stubs, warnings as errors, and undefined-behavior
+  and bounds sanitizers. It failed on the old maximum-count guard and passes
+  after the fix.
+- Cases include opcode-only, small, near-maximum and maximum writes, oversized
+  and `SIZE_MAX` counts, zero count, each allocation failure, copy failure,
+  frame-build failure, transport failures, subsequent recovery and absent devices.
+  Allocation accounting checks cleanup; the stub does not verify secure wiping.
+- `make -C tests run` passes before and after the change. The new regression is
+  included in that target. The separate GhostWisp Python suite passes 158 tests.
+- `make libapex` passes. `make -C software/dts all` succeeds with existing overlay
+  outputs; the base DTB is skipped because the external `rk3576.dtsi` is absent.
+- Linux v6.12 checkpatch with `--no-tree --strict` reports no errors, warnings or
+  checks on the driver patch. Full-file checkpatch still reports pre-existing
+  style debt (747 errors and 1471 warnings, versus 772 and 1528 before the fix).
+  Only the modified write function was normalized to kernel indentation, comment
+  layout and equivalent `u8`/`u16` types; a whole-driver reformat was avoided.
+- Cppcheck 2.17.1 with exhaustive checking, `--platform=unix32`, C11 and warning,
+  style, performance and portability checks completes without diagnostics on
+  the 15 main firmware C files. Separate analysis of the seven GhostWisp C files
+  reports existing constant-condition and const-qualification style findings;
+  these remain unresolved. Missing SDK headers and the Unix-width approximation
+  prevent treating this as a complete target analysis.
+- Independent read-only review found no security or logic errors in the patch
+  and regression. `git diff --check` passes.
+
+This is a bounded driver correction, not a completed all-source security audit.
+`make check` fails because the AArch64 and Arm bare-metal compilers, CMake, Pico
+SDK and configured kernel build tree are absent. No target firmware/module build,
+physical SPI transaction, RF transmission or board testing was performed. No new
+protocol handlers, power-state, watchdog, brownout or DMA behavior was invented;
+hardware-dependent feature work and repository-wide warning cleanup remain open.
+
 ## Cross-build marker checks and reproducibility guidance
 
 Author: jayis1

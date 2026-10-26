@@ -260,6 +260,7 @@ run: $(USERSPACE_TARGETS)
 	@echo "=== Running Production Kernel SPI Buffer Tests ==="
 	@python3 test_kernel_spi_buffers.py -v
 	@python3 test_kernel_read_production.py -v
+	@python3 test_kernel_write_production.py -v
 	@python3 test_kernel_soft_reset.py -v
 	@python3 test_kernel_pm_production.py -v
 	@python3 test_kernel_gpio_production.py -v

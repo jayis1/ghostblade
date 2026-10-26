@@ -754,88 +754,91 @@ retry:
 }
 
 static ssize_t apex_bridge_write(struct file *filp, const char __user *buf,
-                                 size_t count, loff_t *f_pos)
+				 size_t count, loff_t *f_pos)
 {
-    struct apex_bridge_dev *dev = filp->private_data;
-    uint8_t *kbuf;
-    uint8_t *frame;
-    uint8_t *rx_buf;
-    int frame_len;
-    int ret;
+	struct apex_bridge_dev *dev = filp->private_data;
+	u8 *kbuf;
+	u8 *frame;
+	u8 *rx_buf;
+	int frame_len;
+	int ret;
 
-    if (!dev || !dev->spi)
-        return -ENODEV;
+	if (!dev || !dev->spi)
+		return -ENODEV;
 
-    /* Reject zero-length and oversized writes */
-    if (count < 1)
-        return -EINVAL;
+	/* Reject zero-length and oversized writes */
+	if (count < 1)
+		return -EINVAL;
 
-    /* Limit write size to max payload */
-    if (count > APEX_SPI_MAX_PAYLOAD)
-        return -EMSGSIZE;
+	/* write() includes one command byte before the protocol payload. */
+	if (count > APEX_SPI_MAX_PAYLOAD + 1)
+		return -EMSGSIZE;
 
-    kbuf = kmalloc(count, GFP_KERNEL);
-    if (!kbuf)
-        return -ENOMEM;
+	kbuf = kmalloc(count, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
 
-    if (copy_from_user(kbuf, buf, count)) {
-        kfree_sensitive(kbuf);
-        return -EFAULT;
-    }
+	if (copy_from_user(kbuf, buf, count)) {
+		kfree_sensitive(kbuf);
+		return -EFAULT;
+	}
 
-    frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
-    if (!frame) {
-        kfree_sensitive(kbuf);
-        return -ENOMEM;
-    }
+	frame = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+	if (!frame) {
+		kfree_sensitive(kbuf);
+		return -ENOMEM;
+	}
 
-    rx_buf = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
-    if (!rx_buf) {
-        kfree_sensitive(kbuf);
-        kfree_sensitive(frame);
-        return -ENOMEM;
-    }
+	rx_buf = kmalloc(APEX_SPI_FRAME_SIZE_MAX, GFP_KERNEL);
+	if (!rx_buf) {
+		kfree_sensitive(kbuf);
+		kfree_sensitive(frame);
+		return -ENOMEM;
+	}
 
-    /* Build frame from user data.
-     * The first byte of user data is treated as the command opcode.
-     * The remaining bytes are the payload.
-     */
-    frame_len = apex_build_frame(kbuf[0], &kbuf[1], count - 1,
-                                  frame, APEX_SPI_FRAME_SIZE_MAX);
-    if (frame_len < 0) {
-        ret = frame_len;
-        goto out;
-    }
+	/*
+	 * Build frame from user data.
+	 * The first byte of user data is treated as the command opcode.
+	 * The remaining bytes are the payload.
+	 */
+	frame_len = apex_build_frame(kbuf[0], &kbuf[1], count - 1,
+				     frame, APEX_SPI_FRAME_SIZE_MAX);
+	if (frame_len < 0) {
+		ret = frame_len;
+		goto out;
+	}
 
-    /* Perform SPI transfer */
-    ret = apex_spi_xfer(dev, frame, frame_len, rx_buf,
-                        APEX_SPI_FRAME_SIZE_MAX);
+	/* Perform SPI transfer */
+	ret = apex_spi_xfer(dev, frame, frame_len, rx_buf,
+			    APEX_SPI_FRAME_SIZE_MAX);
 
-    /* Parse any response and push to RX FIFO */
-    if (ret > 0) {
-        uint8_t resp_cmd;
-        uint16_t resp_len;
-        const uint8_t *resp_payload;
-        int validate_ret;
+	/* Parse any response and push to RX FIFO */
+	if (ret > 0) {
+		u8 resp_cmd;
+		u16 resp_len;
+		const u8 *resp_payload;
+		int validate_ret;
 
-        validate_ret = apex_validate_frame(rx_buf, ret, &resp_cmd,
-                                            &resp_len, &resp_payload);
-        if (validate_ret == 0 && resp_len > 0)
-            apex_rx_fifo_push(dev, resp_payload, resp_len);
-    }
+		validate_ret = apex_validate_frame(rx_buf, ret, &resp_cmd,
+						   &resp_len, &resp_payload);
+		if (validate_ret == 0 && resp_len > 0)
+			apex_rx_fifo_push(dev, resp_payload, resp_len);
+	}
 
-    /* Preserve transfer failures for userspace. Reporting a successful
-     * write after spi_sync() failed silently drops a command and prevents
-     * callers from applying normal retry/error handling. */
-    if (ret >= 0)
-        ret = count;  /* Report full write as consumed */
+	/*
+	 * Preserve transfer failures for userspace. Reporting a successful
+	 * write after spi_sync() failed silently drops a command and prevents
+	 * callers from applying normal retry/error handling.
+	 */
+	if (ret >= 0)
+		ret = count;  /* Report full write as consumed */
 
 out:
-    /* Securely wipe buffers that may contain protocol data before freeing */
-    kfree_sensitive(kbuf);
-    kfree_sensitive(frame);
-    kfree_sensitive(rx_buf);
-    return ret;
+	/* Securely wipe buffers that may contain protocol data before freeing */
+	kfree_sensitive(kbuf);
+	kfree_sensitive(frame);
+	kfree_sensitive(rx_buf);
+	return ret;
 }
 
 static long apex_bridge_ioctl(struct file *filp, unsigned int cmd,
