@@ -204,6 +204,26 @@ buffers, all truncated header prefixes, CRC-valid malformed profile envelopes,
 and conforming headers with following body bytes. They do not verify physical
 hardware, signature enforcement, or a complete profile-transfer service.
 
+### Profile identity width
+
+Author: jayis1
+
+The existing profile schema allocates 16 wire bytes for `profile_id`.
+`ProfileHeader.encode()` now raises `ProtocolError` for longer local IDs rather
+than silently truncating them, and `ProfileValidator.validate()` rejects them.
+`validate_body()` inherits that rejection before checksum work. This prevents
+distinct oversized local IDs from becoming the same wire identity, including
+IDs whose only nonzero byte lies beyond the wire field.
+
+Existing one-to-16-byte IDs retain their zero-padding behavior; decoding still
+strips trailing zero bytes and re-encoding preserves the wire bytes. Empty and
+all-zero IDs remain semantically invalid. No schema version, field layout, or
+conforming golden vector changes. This is a host schema check, not signature
+verification, pairing, or hardware validation.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_profile_identity -v` from
+the repository root, or `make -C devices/ghostwisp check` for the host suite.
+
 ### Complete profile body integrity
 
 Author: jayis1

@@ -110,7 +110,10 @@ class ProfileHeader:
     SIZE: int = dataclasses.field(default=_PROFILE_STRUCT_SIZE, init=False, repr=False, compare=False)
 
     def encode(self) -> bytes:
-        pid = self.profile_id[:16].ljust(16, b"\x00")
+        # Author: jayis1 — never silently serialize a different identity.
+        if len(self.profile_id) > 16:
+            raise ProtocolError("profile_id exceeds the 16-byte wire field")
+        pid = self.profile_id.ljust(16, b"\x00")
         return struct.pack(
             _PROFILE_STRUCT_FMT,
             pid,
@@ -261,7 +264,13 @@ class ProfileValidator:
                     f"now_utc_ms={now_utc_ms}"
                 )
 
-        # 5. profile_id must not be all-zeros (unset identity).
+        # 5. Locally constructed identities must fit the existing wire field.
+        # Otherwise validation could accept bytes that encoding would discard.
+        if len(header.profile_id) > 16:
+            return ProfileValidationResult.reject(
+                "profile_id exceeds the 16-byte wire field"
+            )
+        # profile_id must not be all-zeros (unset identity).
         if not any(header.profile_id):
             return ProfileValidationResult.reject(
                 "profile_id is all zeros; unset identity is not a valid profile"
