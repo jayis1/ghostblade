@@ -147,6 +147,32 @@ and after (150 Python tests after, plus host boot/isolation/header checks).
 modified. Target compilation was skipped because `PICO_SDK_PATH` was unset;
 no physical-board or hardware-in-the-loop validation was performed.
 
+## Companion nonce width validation
+
+Author: jayis1
+
+Phase 5's malformed-input validation and dual-consent nonce-matching contract
+also require local encoders not to discard nonce bytes. `ArmRequestPayload`,
+`ConfirmPhysicalPayload`, and `AbortPayload` now reject nonces longer than their
+existing 16-byte wire field with `ProtocolError`. Previously, distinct oversized
+nonces sharing the first 16 bytes encoded identically. No new protocol field,
+message, or action is introduced.
+
+Existing zero-to-16-byte inputs retain zero-padding, including the all-zero
+ABORT sentinel. Decoding, frame version, and valid golden vectors are unchanged.
+This structural check does not authenticate peers, generate random nonces,
+enforce replay protection, or prove physical confirmation; those remain the
+session/action broker's responsibilities.
+
+Run `python3 -m unittest devices.ghostwisp.tests.test_nonce_width -v` from the
+repository root. Five host tests cover oversized values, colliding prefixes,
+post-construction mutation, all supported lengths through CRC-checked frame
+round trips, and preservation of zero/full-width nonces. The tests reproduced
+21 failing subcases before the correction. Fixtures are synthetic and access no
+hardware. Full host checks use `make -C devices/ghostwisp check` and the existing
+regression suite uses `make -C tests check`. Target compilation and physical
+hardware checks remain separate; this increment changes no GhostBlade files.
+
 ## Per-run rule
 
 Scheduled work should choose one incomplete item, inspect the current repository first, make a coherent bounded change, run the relevant local checks, and update this roadmap only with verified progress. GhostBlade is a frozen baseline. Work may add namespaced, backward-compatible companion services, APIs, UI surfaces, schemas, documentation, and tests, but must not redesign or regress existing GhostBlade hardware or behavior. With GhostWisp absent, GhostBlade must continue to behave exactly as before.

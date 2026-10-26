@@ -226,7 +226,10 @@ class ArmRequestPayload:
     def encode(self) -> bytes:
         op = self.operator_id[:_OPERATOR_ID_LEN].ljust(_OPERATOR_ID_LEN, b"\x00")
         scope = self.auth_scope[:_AUTH_SCOPE_LEN].ljust(_AUTH_SCOPE_LEN, b"\x00")
-        nonce = self.nonce[:_NONCE_LEN].ljust(_NONCE_LEN, b"\x00")
+        # Author: jayis1 — distinct nonces must not collapse on the wire.
+        if len(self.nonce) > _NONCE_LEN:
+            raise ProtocolError("nonce exceeds the 16-byte wire field")
+        nonce = self.nonce.ljust(_NONCE_LEN, b"\x00")
         return struct.pack(
             self.STRUCT_FMT,
             self.mode, 0,
@@ -281,7 +284,10 @@ class ConfirmPhysicalPayload:
     confirm_monotonic_ms: int  # GhostWisp monotonic time at button press
 
     def encode(self) -> bytes:
-        nonce = self.nonce[:_NONCE_LEN].ljust(_NONCE_LEN, b"\x00")
+        # Author: jayis1 — distinct nonces must not collapse on the wire.
+        if len(self.nonce) > _NONCE_LEN:
+            raise ProtocolError("nonce exceeds the 16-byte wire field")
+        nonce = self.nonce.ljust(_NONCE_LEN, b"\x00")
         return struct.pack(self.STRUCT_FMT, nonce, self.confirm_monotonic_ms)
 
     @classmethod
@@ -303,7 +309,10 @@ class AbortPayload:
     reason: int     # AbortReason value
 
     def encode(self) -> bytes:
-        nonce = self.nonce[:_NONCE_LEN].ljust(_NONCE_LEN, b"\x00")
+        # Author: jayis1 — distinct nonces must not collapse on the wire.
+        if len(self.nonce) > _NONCE_LEN:
+            raise ProtocolError("nonce exceeds the 16-byte wire field")
+        nonce = self.nonce.ljust(_NONCE_LEN, b"\x00")
         return struct.pack(self.STRUCT_FMT, nonce, self.reason)
 
     @classmethod
