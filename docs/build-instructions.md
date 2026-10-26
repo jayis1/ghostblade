@@ -31,8 +31,10 @@ make check CHECK_AARCH64_CC=/opt/toolchains/bin/aarch64-linux-gnu-gcc \
 ```
 
 Each compiler/version probe has a ten-second timeout. SDK and kernel checks
-require `pico_sdk_init.cmake` and a kernel `Makefile`, respectively; an empty
-directory is not enough. These marker files do not establish SDK submodule
+require readable, nonempty `pico_sdk_init.cmake` and kernel `Makefile` files,
+respectively; empty files or directories are not enough. The check reads one
+byte, not file syntax. Restore incomplete source trees rather than adding
+placeholder markers. These marker files do not establish SDK submodule
 availability, a configured target kernel, version compatibility, or a successful
 build. No downloads, installation, flashing, or device access occur. Overrides
 must name single executables, not shell command strings or compiler flags.

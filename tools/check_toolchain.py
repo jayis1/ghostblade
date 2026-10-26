@@ -51,8 +51,17 @@ def main():
         ("Pico SDK", args.pico_sdk / "pico_sdk_init.cmake"),
         ("kernel build tree", args.kernel_dir / "Makefile"),
     ):
-        found = marker.is_file()
-        print(f"{'OK  ' if found else 'FAIL'} {label}: {marker}")
+        try:
+            # Open the marker, not just its parent directory. A zero-byte
+            # placeholder cannot be a usable SDK initializer or kernel Makefile.
+            found = False
+            if marker.is_file():
+                with marker.open("rb") as stream:
+                    found = bool(stream.read(1))
+        except OSError:
+            found = False
+        detail = "" if found else " (missing, empty, or unreadable marker)"
+        print(f"{'OK  ' if found else 'FAIL'} {label}: {marker}{detail}")
         checks.append(found)
     print("These probes do not verify SDK submodules, kernel configuration, or builds.")
     return 0 if all(checks) else 1

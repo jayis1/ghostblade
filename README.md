@@ -156,7 +156,9 @@ Validated locally on 2026-10-25:
 
 The base DTB was skipped because the required `rk3576.dtsi` is not included.
 `make check` now rejects a native compiler presented as the AArch64 toolchain
-and returns failure for missing cross-build prerequisites; see the
+and returns failure for missing cross-build prerequisites, including empty or
+unreadable SDK/kernel marker files. These are presence/readability probes, not
+source validation or evidence of a target build; see the
 [build prerequisite guide](docs/build-instructions.md). Host tests do not require
 a complete cross-build environment.
 Overlay compilation does not verify symbol resolution, kernel bindings, or board

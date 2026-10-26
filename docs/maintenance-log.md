@@ -5,6 +5,46 @@
 
 Author: jayis1
 
+## Cross-build marker checks and reproducibility guidance
+
+Author: jayis1
+
+The prerequisite checker accepted zero-byte SDK/kernel marker files. It now
+requires a readable nonempty regular-file target, catches file-access errors,
+and reports the failed marker while continuing other probes. Reading one byte
+is not a syntax or source-tree completeness check; symlinks to usable source
+files remain supported. The existing assignment sources and build targets are
+unchanged.
+
+Verification performed:
+
+- New CLI and Make regressions reproduced empty-marker success before the fix
+  (four failing subcases).
+- `python3 tests/test_toolchain_check.py -v` passes all 10 tests, covering empty
+  files, directory markers, missing sources/tools, wrong compiler triples,
+  nonzero/empty probe output, and paths containing spaces. Successful fixture
+  probes are orchestration evidence, not real target builds.
+- `make -C tests run` passes the full host suite.
+- `make docs-check validate-dts validate-netlist` passes with the existing 14
+  exact-name warnings (20/34 coverage); selected text checks do not certify wiring.
+- `make -C software/dts all validate` builds and syntax-checks eight overlays;
+  the base DTB is skipped because the external `rk3576.dtsi` is absent.
+- Two consecutive clean native libapex builds produce matching SHA-256 sums for
+  `software/libapex/build/libapex.a` and `software/libapex/build/libapex.so`.
+  This is a same-directory, same-host comparison, not target reproducibility.
+- `make reproducible` prints environment exports; `git diff --check` passes.
+
+The reproducibility guide now separates controls from guarantees, requires
+recorded dependency/tool revisions, uses an absolute firmware toolchain-file
+path, and separates cleanup from compilation to avoid parallel-goal races.
+README and build guidance describe the stronger marker checks.
+
+`make check` correctly fails on this host: AArch64 and Arm bare-metal compilers,
+CMake, Pico SDK, and the configured kernel tree are missing. KiCad CLI is also
+unavailable. No target build, ERC/DRC, binding validation, flashing, or physical
+verification was performed. Existing hardware-readiness findings remain open;
+no symbols, footprints, timing values, or pin assignments were invented.
+
 ## Named firmware SPI0 validation (2026-10-25)
 
 Author: jayis1

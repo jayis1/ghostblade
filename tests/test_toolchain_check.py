@@ -24,8 +24,8 @@ class ToolchainCheckTests(unittest.TestCase):
         self.kernel = self.root / "kernel with spaces"
         self.sdk.mkdir()
         self.kernel.mkdir()
-        (self.sdk / "pico_sdk_init.cmake").touch()
-        (self.kernel / "Makefile").touch()
+        (self.sdk / "pico_sdk_init.cmake").write_text("# Synthetic SDK marker\n")
+        (self.kernel / "Makefile").write_text("# Synthetic kernel marker\n")
         self.aarch64 = self.tool("aarch64-linux-gnu-gcc", "aarch64-linux-gnu")
         self.arm = self.tool("arm gcc", "arm-none-eabi")
         self.dtc = self.tool("dtc", "Version: DTC fixture")
@@ -85,6 +85,43 @@ class ToolchainCheckTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("FAIL Pico SDK", result.stdout)
         self.assertIn("FAIL kernel build tree", result.stdout)
+
+    def test_empty_marker_files_fail(self):
+        for marker in (self.sdk / "pico_sdk_init.cmake", self.kernel / "Makefile"):
+            with self.subTest(marker=marker.name):
+                original = marker.read_text()
+                marker.write_text("")
+                result = self.check()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("missing, empty, or unreadable marker", result.stdout)
+                marker.write_text(original)
+
+    def test_directory_markers_fail(self):
+        for marker in (self.sdk / "pico_sdk_init.cmake", self.kernel / "Makefile"):
+            with self.subTest(marker=marker.name):
+                original = marker.read_text()
+                marker.unlink()
+                marker.mkdir()
+                result = self.check()
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                marker.rmdir()
+                marker.write_text(original)
+
+    @unittest.skipUnless(shutil.which("make"), "GNU Make required")
+    def test_make_rejects_empty_markers(self):
+        command = [
+            "make", "--no-print-directory", "-C", str(ROOT), "check",
+            f"CHECK_AARCH64_CC={self.aarch64}", f"CHECK_ARM_CC={self.arm}",
+            f"CHECK_DTC={self.dtc}", f"CHECK_CMAKE={self.cmake}",
+            f"PICO_SDK_PATH={self.sdk}", f"KDIR={self.kernel}",
+        ]
+        for marker in (self.sdk / "pico_sdk_init.cmake", self.kernel / "Makefile"):
+            with self.subTest(marker=marker.name):
+                original = marker.read_text()
+                marker.write_text("")
+                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                marker.write_text(original)
 
     @unittest.skipUnless(shutil.which("make"), "GNU Make required")
     def test_make_defaults_to_cross_compiler_and_propagates_failure(self):
